@@ -1,0 +1,96 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pincer-robot"
+version = "0.1.0"
+description = "Pincer1 robot-side service: presence (lidar/face/voice), speech and motion for the Lamport Robotics hexapod key-holder."
+readme = "README.md"
+# 3.10 = JetPack 6 / Ubuntu 22.04 / ROS2 Humble system Python (NVIDIA's torch/onnxruntime wheels are cp310).
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "websockets>=13",
+    "numpy>=1.26",
+    "pydantic>=2.5",
+    "pydantic-settings>=2.2",
+]
+
+[project.optional-dependencies]
+# ---------------------------------------------------------------------------------------------
+# Target: NVIDIA Jetson Orin Nano Super 8 GB (JetPack 6.x, Ubuntu 22.04, CUDA 12, Python 3.10).
+# The CUDA wheels for aarch64/Tegra are NOT on PyPI. deploy/jetson/robot/install.sh installs them
+# from NVIDIA's Jetson index BEFORE this extra, so pip sees them as already satisfied:
+#   torch, torchaudio        -> https://pypi.jetson-ai-lab.dev/jp6/cu126  (or developer.download.nvidia.com/compute/redist/jp/)
+#   onnxruntime-gpu          -> same index (PyPI's onnxruntime-gpu has no Tegra build; `import onnxruntime`
+#                               from PyPI would silently give you CPU-only providers)
+#   ctranslate2 (CUDA build) -> same index; the PyPI aarch64 ctranslate2 wheel is CPU-only, so
+#                               faster-whisper would fall back to int8 CPU without it.
+# Everything listed here IS on PyPI as pure Python or has an aarch64 wheel.
+jetson = [
+    "opencv-python-headless>=4.9",   # or use the JetPack OpenCV (apt python3-opencv) via --system-site-packages
+    "insightface>=0.7.3",            # builds a small Cython ext on first install (python3-dev present)
+    "faster-whisper>=1.0",           # pulls ctranslate2 from PyPI only if the CUDA one is not already installed
+    "resemblyzer>=0.1.3",            # depends on torch: install NVIDIA's torch first or pip grabs a CPU wheel
+    "sounddevice>=0.4.6",
+    "elevenlabs>=1.5",
+    "anthropic>=0.40",               # PINCER_BRAIN=anthropic (optional at runtime)
+]
+# Raspberry Pi 5 / any CPU-only box (Ubuntu 22.04 + ROS2 Humble): everything from PyPI.
+# onnxruntime (CPU) + buffalo_sc, faster-whisper base int8, resemblyzer on CPU torch (~1 GB wheel).
+pi = [
+    "opencv-python-headless>=4.9",
+    "insightface>=0.7.3",
+    "onnxruntime>=1.17",
+    "faster-whisper>=1.0",
+    "resemblyzer>=0.1.3",
+    "sounddevice>=0.4.6",
+    "elevenlabs>=1.5",
+    "anthropic>=0.40",
+]
+# Finer-grained groups kept for laptops / partial installs.
+# Camera + owner face embedding. insightface (ArcFace) via onnxruntime CPU; buffalo_sc ~16 MB.
+vision = [
+    "opencv-python-headless>=4.9",
+    "insightface>=0.7.3",
+    "onnxruntime>=1.17",
+]
+# STT (faster-whisper), speaker verification (resemblyzer, pulls torch), audio I/O, ElevenLabs TTS.
+voice = [
+    "faster-whisper>=1.0",
+    "resemblyzer>=0.1.3",
+    "sounddevice>=0.4.6",
+    "elevenlabs>=1.5",
+]
+# Companion brain. `anthropic` for PINCER_BRAIN=anthropic; PINCER_BRAIN=local needs nothing
+# (urllib against a llama.cpp / ollama server).
+brain = [
+    "anthropic>=0.40",
+]
+# ROS2: rclpy, sensor_msgs and geometry_msgs come from the ROS2 Humble apt install
+# (`source /opt/ros/humble/setup.bash`), NOT from pip. This group only pins the pure-Python
+# helpers we use next to it; it exists so `pip install -e ".[ros]"` is a meaningful, documented step.
+ros = []
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+pincer-robot = "pincer_robot.main:main"
+pincer-enroll = "pincer_robot.enroll:main"
+
+[tool.setuptools.packages.find]
+include = ["pincer_robot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
