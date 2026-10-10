@@ -1,0 +1,3 @@
+[submodule "firmware/third_party/plug-and-trust"]
+	path = firmware/third_party/plug-and-trust
+	url = https://github.com/NXP/plug-and-trust.git
