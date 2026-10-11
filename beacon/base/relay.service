@@ -1,0 +1,29 @@
+# Pincer1 beacon relay: base station on USB → ntfy / Telegram / webhook.
+#
+#   sudo cp relay.service /etc/systemd/system/pincer-relay.service
+#   sudo install -m 600 /dev/null /etc/pincer-relay.env    # then put RELAY_PORT, NTFY_URL, … in it
+#   sudo useradd -r -G dialout pincer-relay                  # needs the serial port
+#   sudo systemctl enable --now pincer-relay
+#
+# Adjust the path in ExecStart to where this repository lives.
+[Unit]
+Description=Pincer1 beacon relay (LoRa base station to notifications)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pincer-relay
+SupplementaryGroups=dialout
+EnvironmentFile=/etc/pincer-relay.env
+WorkingDirectory=/opt/pincer1/beacon/base
+ExecStart=/usr/bin/python3 /opt/pincer1/beacon/base/relay.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/pincer1/beacon/base
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

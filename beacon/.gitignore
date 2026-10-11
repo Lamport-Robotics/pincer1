@@ -1,0 +1,12 @@
+# PlatformIO
+.pio/
+.vscode/
+# provisioning output: device id, LoRa key, Find My seed. Never committed.
+beacon.env
+*.env
+!beacon.env.example
+keys/
+findmy_keys*.json
+findmy_keys*.jsonl
+relay-state.json
+__pycache__/
