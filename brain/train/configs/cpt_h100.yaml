@@ -1,0 +1,25 @@
+# Continued pretraining, single H100 80 GB. Same recipe, flash attention, bigger micro-batch.
+stage: cpt
+base_model: Qwen/Qwen3-8B
+output_dir: runs/cpt-h100
+data_path: corpus/out/cpt.jsonl
+text_field: text
+hardware: h100_80gb
+seq_len: 4096
+micro_batch: 8
+grad_accum: 4
+lr: 1.0e-4
+warmup_ratio: 0.03
+weight_decay: 0.0
+token_budget: 2000000000
+lora: {r: 64, alpha: 128, dropout: 0.05, targets: all-linear}
+full_parameter: false
+quant: null
+packing: true
+bf16: true
+gradient_checkpointing: true
+attn: flash_attention_2
+save_steps: 500
+logging_steps: 10
+eval_fraction: 0.01
+seed: 7

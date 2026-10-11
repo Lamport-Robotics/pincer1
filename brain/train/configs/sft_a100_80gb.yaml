@@ -1,0 +1,25 @@
+# SFT on the merged CPT model. Completion-only loss over prompt/completion rows.
+stage: sft
+base_model: merged/lamport-8b-cpt
+output_dir: runs/sft-a100
+data_path: sft/data/sft.jsonl
+hardware: a100_80gb
+seq_len: 2048
+micro_batch: 8
+grad_accum: 2
+lr: 1.0e-4
+warmup_ratio: 0.05
+weight_decay: 0.0
+epochs: 2
+lora: {r: 64, alpha: 128, dropout: 0.05, targets: all-linear}
+full_parameter: false
+quant: null
+packing: false
+bf16: true
+gradient_checkpointing: true
+attn: sdpa
+think_tags: true
+save_steps: 100
+logging_steps: 5
+eval_fraction: 0.05
+seed: 7

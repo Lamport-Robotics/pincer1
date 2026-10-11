@@ -1,0 +1,26 @@
+# Continued pretraining, single A100 80 GB. LoRA r=64 on all linear layers, bf16 base.
+# 4 x 8 x 4096 = 131,072 tokens per optimizer step; 2B tokens = ~15k steps.
+stage: cpt
+base_model: Qwen/Qwen3-8B
+output_dir: runs/cpt-a100
+data_path: corpus/out/cpt.jsonl
+text_field: text
+hardware: a100_80gb
+seq_len: 4096
+micro_batch: 4
+grad_accum: 8
+lr: 1.0e-4
+warmup_ratio: 0.03
+weight_decay: 0.0
+token_budget: 2000000000      # 1-5B allowed; raise only when the corpus is big enough
+lora: {r: 64, alpha: 128, dropout: 0.05, targets: all-linear}
+full_parameter: false
+quant: null                   # nf4 fits a 40 GB card; Linux/CUDA only
+packing: true
+bf16: true
+gradient_checkpointing: true
+attn: sdpa
+save_steps: 500
+logging_steps: 10
+eval_fraction: 0.01
+seed: 7

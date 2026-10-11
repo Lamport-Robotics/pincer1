@@ -1,0 +1,138 @@
+# Continued-pretraining sources for Lamport-8B.
+#
+# Every source carries the licence we checked it under (2026-10-11). collect.py refuses
+# anything not in `license_allow`, so a source with the wrong licence is a reported skip,
+# not a silent inclusion. Re-verify before a training run: licences change, pages move.
+#
+# Groups:
+#   1. this repository (MIT): docs and code comments; the robot's own vocabulary
+#   2. Solana core docs and program READMEs (Apache-2.0 / MIT) by raw URL
+#   3. Solana program security write-ups (Apache-2.0) by raw URL
+#   4. scam, phishing and fraud awareness: US federal consumer/security guidance (public
+#      domain, 17 U.S.C. 105). This is what makes the model able to NAME a pattern
+#      (pig butchering, SIM swap, fake support, address poisoning) when the owner describes it.
+#
+# The model is educated about fraud so it can recognise and explain it. It does not decide:
+# the daemon's deterministic filter and the consent controller do.
+
+license_allow:
+  - MIT
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - CC0-1.0
+  - CC-BY-4.0
+  - Unlicense
+  - US-PD        # works of the United States federal government
+
+sources:
+
+  # ── 1. this repository ──────────────────────────────────────────────────────────────────
+  - name: pincer1-docs
+    kind: repo
+    root: ../..                   # the Pincer1 repository root, relative to this file
+    license: MIT
+    extract: text
+    globs:
+      - "README.md"
+      - "docs/*.md"
+      - "daemon/README.md"
+      - "robot/README.md"
+      - "firmware/README.md"
+      - "extension/README.md"
+      - "brain/persona.md"
+
+  - name: pincer1-code-comments
+    kind: repo
+    root: ../..
+    license: MIT
+    extract: comments
+    globs:
+      - "daemon/src/**/*.ts"
+      - "robot/pincer_robot/**/*.py"
+      - "firmware/src/**/*.c"
+      - "firmware/src/**/*.h"
+      - "extension/src/**/*.ts"
+
+  # ── 2. Solana docs and program READMEs ──────────────────────────────────────────────────
+  - name: agave-readme
+    kind: url
+    license: Apache-2.0
+    urls:
+      - https://raw.githubusercontent.com/anza-xyz/agave/master/README.md
+      - https://raw.githubusercontent.com/anza-xyz/agave/master/SECURITY.md
+
+  - name: solana-program-readmes
+    kind: url
+    license: Apache-2.0
+    urls:
+      - https://raw.githubusercontent.com/solana-program/token/main/README.md
+      - https://raw.githubusercontent.com/solana-program/system/main/README.md
+      - https://raw.githubusercontent.com/anza-xyz/wallet-adapter/master/README.md
+      - https://raw.githubusercontent.com/solana-foundation/anchor/master/README.md
+
+  - name: solana-kit-and-examples
+    kind: url
+    license: MIT
+    urls:
+      - https://raw.githubusercontent.com/anza-xyz/kit/main/README.md
+      - https://raw.githubusercontent.com/solana-developers/program-examples/main/README.md
+
+  # solana.com docs are GPL-3.0: listed so the skip is visible, never included.
+  - name: solana-com-docs
+    kind: url
+    license: GPL-3.0
+    urls:
+      - https://raw.githubusercontent.com/solana-foundation/solana-com/main/README.md
+
+  # ── 3. program security write-ups ───────────────────────────────────────────────────────
+  - name: slowmist-solana-security-best-practices
+    kind: url
+    license: Apache-2.0
+    urls:
+      - https://raw.githubusercontent.com/slowmist/solana-smart-contract-security-best-practices/main/README.md
+
+  # No licence file at the time of checking; do not enable without one.
+  - name: sealevel-attacks
+    kind: url
+    enabled: false
+    reason: no licence file in the repository
+    license: unknown
+    urls:
+      - https://raw.githubusercontent.com/coral-xyz/sealevel-attacks/master/README.md
+
+  - name: solsec-collection
+    kind: url
+    enabled: false
+    reason: no licence file in the repository
+    license: unknown
+    urls:
+      - https://raw.githubusercontent.com/0xsanny/solsec/main/README.md
+
+  # ── 4. scam, phishing and fraud awareness (public domain) ───────────────────────────────
+  - name: ftc-consumer-advice-scams
+    kind: url
+    license: US-PD
+    urls:
+      - https://consumer.ftc.gov/articles/how-recognize-and-avoid-phishing-scams
+      - https://consumer.ftc.gov/articles/what-know-about-cryptocurrency-and-scams
+      - https://consumer.ftc.gov/articles/what-know-about-romance-scams
+
+  - name: cisa-phishing-and-social-engineering
+    kind: url
+    license: US-PD
+    urls:
+      - https://www.cisa.gov/news-events/news/avoiding-social-engineering-and-phishing-attacks
+      - https://www.cisa.gov/secure-our-world/recognize-and-report-phishing
+
+  - name: fbi-ic3-psa
+    kind: url
+    license: US-PD
+    urls:
+      - https://www.ic3.gov/PSA/2022/PSA220208      # SIM swapping
+      - https://www.ic3.gov/PSA/2024/PSA240129      # impersonation couriers collecting liquidated assets
+
+  # Candidates we looked at and did not take: the SlowMist dark-forest handbook and
+  # MetaMask's phishing detector list declare no licence in the repository listing; OWASP
+  # cheat sheets are CC-BY-SA (share-alike, not on the allowlist). Add them only with a
+  # licence we can point at.

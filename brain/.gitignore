@@ -1,0 +1,25 @@
+# generated datasets: only the committed examples stay
+sft/data/*
+!sft/data/examples.jsonl
+!sft/data/.gitkeep
+dpo/data/
+corpus/out/
+corpus/cache/
+eval/reports/
+
+# training artefacts
+runs/
+checkpoints/
+merged/
+gguf/
+*.gguf
+*.safetensors
+wandb/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

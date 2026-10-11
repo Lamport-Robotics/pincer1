@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pincer-brain"
+version = "0.1.0"
+description = "Training pipeline for Lamport-8B, the on-device conversational model of Pincer1 (Lamport Robotics)."
+readme = "README.md"
+# 3.10 = the Jetson's system Python; the training box can be newer.
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+# Everything that needs a GPU box. Not installed on a laptop: the tests never import these.
+train = [
+    "datasets>=2.19",
+    "transformers>=4.51",
+    "peft>=0.12",
+    "trl>=0.12",
+    "accelerate>=0.30",
+    "sentencepiece>=0.2",
+    "torch>=2.3",
+]
+# bitsandbytes only builds against CUDA on Linux; QLoRA paths are opt-in (`quant: nf4` in a config).
+cuda = [
+    "bitsandbytes>=0.43; sys_platform == 'linux'",
+]
+# Optional Claude augmentation for sft/generate.py and the optional judge in eval/run.py.
+synth = [
+    "anthropic>=0.40",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+lamport-corpus = "pincer_brain.corpus.collect:main"
+lamport-sft-generate = "pincer_brain.sft.generate:main"
+lamport-sft-validate = "pincer_brain.sft.validate:main"
+lamport-dpo-pairs = "pincer_brain.dpo.pairs:main"
+lamport-train-cpt = "pincer_brain.train.cpt:main"
+lamport-train-sft = "pincer_brain.train.sft:main"
+lamport-train-dpo = "pincer_brain.train.dpo:main"
+lamport-merge = "pincer_brain.train.merge:main"
+lamport-eval = "pincer_brain.eval.run:main"
+
+# The import name is `pincer_brain`; the directory is `brain/` (this project root), so the layout the
+# repo wants (brain/sft/generate.py, brain/eval/run.py, ...) is also the installed package layout.
+[tool.setuptools]
+package-dir = { "pincer_brain" = "." }
+packages = [
+    "pincer_brain",
+    "pincer_brain.corpus",
+    "pincer_brain.sft",
+    "pincer_brain.dpo",
+    "pincer_brain.train",
+    "pincer_brain.eval",
+]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"pincer_brain.sft" = ["scenarios.yaml"]
+"pincer_brain.eval" = ["suite.yaml"]
+"pincer_brain.train" = ["configs/*.yaml"]
+"pincer_brain.corpus" = ["sources.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["sft/data", "corpus/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+# canned model outputs and rendered-template bytes are long literals on purpose
+per-file-ignores = { "tests/*" = ["E501"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["pincer_brain"]

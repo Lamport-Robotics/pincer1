@@ -1,0 +1,31 @@
+# Offline fixture for tests: a tiny source tree next to this file.
+license_allow: [MIT, Apache-2.0, US-PD]
+sources:
+  - name: fixture-docs
+    kind: repo
+    root: .
+    license: MIT
+    extract: text
+    globs: ["docs/*.md"]
+  - name: fixture-code
+    kind: repo
+    root: .
+    license: MIT
+    extract: comments
+    globs: ["src/*.ts", "src/*.py"]
+  - name: fixture-gpl
+    kind: repo
+    root: .
+    license: GPL-3.0
+    extract: text
+    globs: ["gpl/*.md"]
+  - name: fixture-disabled
+    kind: repo
+    enabled: false
+    reason: kept for the test
+    license: MIT
+    globs: ["docs/*.md"]
+  - name: fixture-url
+    kind: url
+    license: US-PD
+    urls: ["https://example.invalid/never-fetched-without-flag"]
