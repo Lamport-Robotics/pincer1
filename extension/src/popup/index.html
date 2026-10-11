@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pincer1</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="/icons/icon48.png" alt="" width="22" height="22" />
+        <span class="brand-name">Pincer1</span>
+      </div>
+      <div class="status" id="status" data-state="idle">
+        <span class="dot"></span>
+        <span class="status-text" id="statusText">idle</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="card" id="pendingCard" hidden>
+        <div class="card-head">
+          <span class="head-left">
+            <span class="chain" id="pendingChain" data-chain="solana">solana</span>
+            <span class="eyebrow" id="pendingKind">signTransaction</span>
+          </span>
+          <span class="risk" id="pendingRisk" data-risk="none">reading…</span>
+        </div>
+        <p class="summary" id="pendingSummary">The robot is reading the transaction…</p>
+        <ul class="reasons" id="pendingReasons"></ul>
+        <ul class="lines mono" id="pendingLines"></ul>
+        <div class="touch">
+          <span class="pulse"></span>
+          <span>waiting for touch on the robot…</span>
+          <span class="mono" id="pendingTimer">0s</span>
+        </div>
+        <div class="origin mono" id="pendingOrigin"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="eyebrow">Robot</span>
+          <button class="ghost" id="reconnect" title="reconnect">↻</button>
+        </div>
+        <form id="hostForm" class="row">
+          <input class="mono" id="host" type="text" spellcheck="false" placeholder="ws://pincer1.local:7401" />
+          <button type="submit">Save</button>
+        </form>
+
+        <div id="pairBlock">
+          <form id="pairForm" class="row">
+            <input
+              class="mono code"
+              id="code"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              placeholder="6-digit code"
+              autocomplete="one-time-code"
+            />
+            <button type="submit" class="accent">Pair</button>
+          </form>
+          <p class="hint">The robot speaks the code. Type it once; the token stays in this browser.</p>
+        </div>
+
+        <div id="pairedBlock" hidden>
+          <div class="kv">
+            <span class="k"><span class="chain" data-chain="solana">solana</span></span>
+            <button class="v mono copy" id="addrSolana" data-chain="solana" title="copy">—</button>
+          </div>
+          <div class="kv">
+            <span class="k"><span class="chain" data-chain="evm">evm</span></span>
+            <button class="v mono copy" id="addrEvm" data-chain="evm" title="copy">—</button>
+          </div>
+          <div class="kv">
+            <span class="k"><span class="chain" data-chain="bitcoin">bitcoin</span></span>
+            <button class="v mono copy" id="addrBitcoin" data-chain="bitcoin" title="copy">—</button>
+          </div>
+          <p class="hint" id="addrHint" hidden>EVM and bitcoin addresses appear after the first dapp connect.</p>
+          <div class="kv">
+            <span class="k">sites</span>
+            <span class="v mono" id="origins">—</span>
+          </div>
+          <button class="ghost danger" id="forget">Forget pairing</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="eyebrow">EVM chain &amp; RPC</span>
+          <span class="hint mono" id="evmChainId"></span>
+        </div>
+        <div class="row">
+          <select id="evmChain" class="mono"></select>
+        </div>
+        <form id="evmRpcForm" class="row">
+          <input class="mono" id="evmRpc" type="text" spellcheck="false" placeholder="https://…" />
+          <button type="submit">Save</button>
+        </form>
+        <p class="hint">Nonce, gas and fees are read from this RPC, never from the dapp's node. Empty = default.</p>
+        <label class="toggle">
+          <input type="checkbox" id="takeover" />
+          <span class="switch"></span>
+          <span class="toggle-text">
+            take over <span class="mono">window.ethereum</span>
+            <span class="hint">off: dapps find Pincer1 via EIP-6963 only. On: legacy dapps that only read window.ethereum see Pincer1 instead of your other wallet. Reload tabs after changing.</span>
+          </span>
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="eyebrow">Solana RPC (mainnet sends)</span>
+        </div>
+        <form id="rpcForm" class="row">
+          <input class="mono" id="rpc" type="text" spellcheck="false" placeholder="https://api.mainnet-beta.solana.com" />
+          <button type="submit">Save</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="eyebrow">Bitcoin API (broadcast)</span>
+        </div>
+        <form id="btcForm" class="row">
+          <input class="mono" id="btcApi" type="text" spellcheck="false" placeholder="https://mempool.space/api" />
+          <button type="submit">Save</button>
+        </form>
+        <p class="hint">Esplora-style: finalized transactions are POSTed to <span class="mono">{url}/tx</span>.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="eyebrow">Last requests</span>
+          <span class="hint" id="logCount"></span>
+        </div>
+        <ol class="log" id="log"></ol>
+        <p class="hint" id="logEmpty">Nothing signed yet.</p>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" hidden></div>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>
