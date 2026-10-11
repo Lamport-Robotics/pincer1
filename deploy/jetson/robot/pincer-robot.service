@@ -1,0 +1,42 @@
+[Unit]
+Description=Pincer1 robot service (presence, speech, motion) on the Jetson
+Documentation=file:///opt/pincer1/robot/README.md
+After=network.target sound.target
+# pincerd (deploy/jetson/daemon) orders itself After= this unit and reconnects on its own,
+# so a restart here never needs a daemon restart.
+
+[Service]
+Type=simple
+User=pincer
+Group=pincer
+# video: CSI/USB camera and the Tegra GPU nodes (/dev/nvhost-*, /dev/nvmap are root:video)
+# audio: USB mic/speaker through ALSA/portaudio   dialout: USB lidar serial (/dev/pincer-lidar)
+# The consent controller (/dev/pincer-consent) is deliberately NOT here: only pincerd talks to it.
+SupplementaryGroups=video audio dialout render
+WorkingDirectory=/opt/pincer1/robot
+EnvironmentFile=/etc/pincer1/robot.env
+# Model caches (~/.insightface, ~/.cache/huggingface) and the enrolment live under /var/lib/pincer1.
+Environment=HOME=/var/lib/pincer1
+Environment=PYTHONUNBUFFERED=1
+# ROS2 Humble must be sourced in the service's own shell; rclpy comes from apt, not the venv.
+ExecStart=/bin/bash -c 'if [ -f /opt/ros/humble/setup.bash ]; then source /opt/ros/humble/setup.bash; fi; exec /opt/pincer1/robot/.venv/bin/pincer-robot'
+Restart=always
+RestartSec=3
+# faster-whisper / insightface model load on first start can take a while on the Orin Nano.
+TimeoutStartSec=180
+TimeoutStopSec=15
+KillSignal=SIGINT
+
+# Containment. Kept lighter than pincerd's: the GPU, camera and audio device nodes must stay
+# reachable, so no DeviceAllow list and no ProtectSystem=strict (CUDA opens files under /usr).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ReadWritePaths=/var/lib/pincer1
+# Jetson GPU memory is shared with the CPU; cap the service so a model-load spike cannot take
+# the daemon down with it (8 GB board). Raise if you move to larger models.
+MemoryMax=4G
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

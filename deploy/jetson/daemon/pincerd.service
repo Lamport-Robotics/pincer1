@@ -1,0 +1,25 @@
+[Unit]
+Description=Pincer1 wallet daemon (pincerd)
+After=network-online.target pincer-robot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pincer
+Group=pincer
+WorkingDirectory=/opt/pincer1/daemon
+EnvironmentFile=/etc/pincer1/daemon.env
+ExecStart=/usr/bin/node /opt/pincer1/daemon/dist/main.js
+Restart=always
+RestartSec=3
+# the daemon is untrusted by design; keep it in its lane
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pincer1
+PrivateTmp=true
+DeviceAllow=/dev/pincer-consent rw
+SupplementaryGroups=dialout
+
+[Install]
+WantedBy=multi-user.target

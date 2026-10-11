@@ -1,0 +1,4 @@
+# Pincer1 consent controller (Raspberry Pi Pico 2 running firmware/, USB CDC)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000a", SYMLINK+="pincer-consent", MODE="0660", GROUP="dialout"
+# examples for the other USB devices, fill in your ids from `lsusb`:
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="pincer-lidar", MODE="0660", GROUP="dialout"
