@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pincer1 product brief</title>
+<style>
+@font-face{font-family:Manrope;src:url(fonts/body-regular.ttf);font-weight:400}
+@font-face{font-family:Manrope;src:url(fonts/display-medium.ttf);font-weight:500}
+@font-face{font-family:"Geist Mono";src:url(fonts/GeistMono-Medium.ttf);font-weight:500}
+@page{size:A4;margin:0}
+:root{--ink:#17201d;--paper:#f4f5f1;--muted:#62706a;--line:#d0d6d0;--sage:#95bba5;--dark:#131715}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font:400 10.5pt/1.55 Manrope,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.page{width:210mm;height:297mm;padding:18mm 18mm 16mm;position:relative;page-break-after:always;overflow:hidden;display:flex;flex-direction:column}
+.page:last-child{page-break-after:auto}
+.foot{position:absolute;left:18mm;right:18mm;bottom:10mm;display:flex;justify-content:space-between;font:500 7.5pt/1 "Geist Mono",monospace;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.label{font:500 7.5pt/1 "Geist Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1,h2,h3,p{margin:0}
+h1,h2,h3{font-weight:400;letter-spacing:-.045em;line-height:1.05}
+h2{font-size:22pt;margin:0 0 6mm}
+h3{font-size:12pt;letter-spacing:-.02em;margin:0 0 1.5mm}
+p{color:#2b3531}
+.muted{color:var(--muted)}
+.rule{border:0;border-top:1px solid var(--line);margin:6mm 0}
+.sq{display:inline-block;width:.22em;height:.22em;background:var(--sage);vertical-align:baseline;margin-left:.08em}
+
+/* cover */
+.cover{background:var(--dark);color:#fff}
+.cover .label,.cover .foot{color:#c8d0cb}
+.cover .mark{width:34px;height:40px;fill:#fff}
+.cover h1{font-size:92pt;letter-spacing:-.06em;line-height:.92;margin:60mm 0 12mm}
+.cover .tag{font-size:19pt;line-height:1.25;letter-spacing:-.025em;max-width:120mm;color:#fff}
+.cover .sub{font-size:11pt;color:#c8d0cb;margin-top:5mm;max-width:110mm}
+.cover .links{position:absolute;left:18mm;bottom:22mm;font:500 8pt/1.8 "Geist Mono",monospace;color:#c8d0cb;letter-spacing:.02em}
+.cover .brand{display:flex;gap:10px;align-items:center;font-size:17pt;letter-spacing:-.06em;line-height:.9}
+.cover .brand span span{display:block}
+
+/* grids */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:6mm 10mm}
+.cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm 8mm}
+.feat{border-top:1px solid var(--line);padding-top:3mm}
+.feat .n{font:500 7.5pt/1 "Geist Mono",monospace;color:var(--muted);margin-bottom:2.5mm;letter-spacing:.06em}
+.feat p{font-size:9.3pt;line-height:1.5}
+.lead{font-size:12.5pt;line-height:1.45;letter-spacing:-.015em;max-width:160mm;color:var(--ink)}
+.lead+.lead{margin-top:3.5mm}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:9.2pt;line-height:1.45}
+th{font:500 7.5pt/1 "Geist Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:0 3mm 2.5mm 0;border-bottom:1px solid var(--ink)}
+td{vertical-align:top;padding:2.1mm 3mm 2.1mm 0;border-bottom:1px solid var(--line)}
+td:first-child{width:30mm;color:var(--ink);font-weight:500}
+td.yes{color:#3f6b52;font-weight:500}td.no{color:#8a4b45;font-weight:500}
+.cmp td:first-child{width:46mm}
+.cmp th:not(:first-child),.cmp td:not(:first-child){width:36mm}
+.cmp td:last-child{background:#eceee8}
+.note{font-size:9pt;color:var(--muted);margin-top:4mm;line-height:1.5}
+.section{margin-top:8mm}
+.section:first-child{margin-top:0}
+</style>
+</head>
+<body>
+
+<!-- 1 cover -->
+<section class="page cover">
+  <div class="brand"><svg class="mark" viewBox="0 0 28 33" aria-hidden="true"><rect x="0" y="0" width="4" height="6"/><rect x="0" y="8" width="5" height="6"/><rect x="0" y="16" width="6" height="6"/><rect x="0" y="24" width="7" height="6"/><rect x="9" y="26" width="3" height="4"/><rect x="13" y="23" width="3" height="7"/><rect x="17" y="20" width="3" height="10"/><rect x="21" y="17" width="3" height="13"/><rect x="25" y="14" width="3" height="16"/><rect x="0" y="31" width="28" height="2"/></svg><span><span>lamport</span><span>robotics</span></span></div>
+  <h1>Pincer1<span class="sq"></span></h1>
+  <p class="tag">A new kind of cold wallet. It's a robot.</p>
+  <p class="sub">Your crypto can't move without you. Six legs, a certified secure element, and a separate controller that reads every transaction on its own display before it asks for your touch.</p>
+  <div class="links">lamportrobotics.com<br>github.com/Lamport-Robotics/pincer1<br>support@lamportrobotics.com</div>
+  <div class="foot"><span>Product brief · October 2026</span><span>Lamport Robotics · Pincer1</span></div>
+</section>
+
+<section class="page">
+
+<div class="section">
+    <h2>What Pincer1 is</h2>
+    <p class="lead">Pincer1 is a hardware wallet with a body. Every wallet today proves one thing: that someone holds the key. A seed phrase phished from a laptop, a signature clicked in a hurry, a drainer hidden in an airdrop, a phone taken from a pocket: none of these require the owner to be present. Hardware wallets fixed key storage, not the human in front of it. Trading bots fixed attention by taking the key into the cloud.</p>
+    <p class="lead">Pincer1 puts the key in a machine that can see, hear and feel. It signs only when it has verified, with its own sensors, that its owner is standing in front of it and wants this exact transaction. It reads every transaction out loud and on a display only its consent controller can write to, refuses the ones that would have robbed you, watches the market while you sleep, and tells you what happened in the morning.</p>
+    <p class="lead muted" style="font-size:11pt">One seed, every major chain: Solana, Ethereum and the EVM networks, Bitcoin. Built for traders, founders and families who hold meaningful crypto at home.</p>
+  </div>
+  <div class="section"><div class="label" style="margin-bottom:4mm">Core features · always on</div><div class="cols"><div class="feat"><div class="n">01</div><h3>Presence-gated signing</h3><p>Lidar confirms a real person in the room, the camera on the arm matches the owner's face with liveness checks from a moving viewpoint, the microphone matches a spoken passphrase against the owner's voice, and the owner touches the robot. The touch is read by a separate microcontroller wired directly to the secure element.</p></div><div class="feat"><div class="n">02</div><h3>Secure element custody</h3><p>Keys are generated and kept inside an NXP SE050 (CC EAL6+): ed25519 for Solana, secp256k1 for EVM and Bitcoin, from one 24-word seed on standard paths. The chip talks only to signed firmware over an encrypted channel. The PIN is a rhythm tapped on the pad and verified inside the chip; five failures wipe the device.</p></div><div class="feat"><div class="n">03</div><h3>Trusted display</h3><p>The consent controller has its own small display that nothing else can write to. It shows the controller's own reading of the transaction, and what you touch to approve is what that display shows. The recovery phrase appears only there, once, and is never sent over the cable to the main computer.</p></div><div class="feat"><div class="n">04</div><h3>Transaction reading</h3><p>The controller parses every transaction on the device before asking for consent; the robot explains it aloud: what leaves, where it goes, what is known about the destination. Hidden instructions, authority changes and unlimited approvals are called out. Daily limits are enforced on the controller and reset on its own clock.</p></div></div></div>
+  
+  <div class="foot"><span>Lamport Robotics · Pincer1 product brief</span><span>02</span></div>
+</section>
+
+<section class="page">
+
+<div class="section"><div class="label" style="margin-bottom:4mm">Core features · continued</div><div class="cols"><div class="feat"><div class="n">05</div><h3>Scam filter</h3><p>Drainer patterns, address poisoning, fake airdrops, malicious delegations, brand-new programs and contracts. "That's a drainer. I'm not signing." Enforced on the consent controller, not on the computer that received the request.</p></div><div class="feat"><div class="n">06</div><h3>Approval device</h3><p>Pincer1 appears as a wallet next to Phantom on Solana apps, next to MetaMask on EVM apps, and as a Bitcoin wallet on PSBT apps, through a browser extension. The extension is untrusted input; the controller re-reads everything it forwards.</p></div><div class="feat"><div class="n">07</div><h3>Duress and decoy</h3><p>A hidden word, or a second tap rhythm used instead of your PIN, opens a decoy wallet with its own 24 words, locks the real one and alerts silently. The duress rhythm is checked inside the chip and never counts as a failed attempt. You fund the decoy at setup with a believable balance.</p></div><div class="feat"><div class="n">08</div><h3>Companion and brain</h3><p>It talks, listens, remembers and walks over when called. The brain is your choice: Lamport-8B, our own crypto-specific model running on the robot, or Claude, ChatGPT or DeepSeek through their APIs. Whichever you pick, it only talks; no security decision comes from it.</p></div></div></div>
+<div class="section">
+    <h2>Security model</h2>
+    <table>
+      <tr><th>Component</th><th style="width:22mm">Trusted?</th><th>Why</th></tr>
+      <tr><td>SE050 secure element</td><td class="yes">yes</td><td>keys generated and used inside a certified chip; cannot be read out</td></tr>
+      <tr><td>Consent controller (RP2350)</td><td class="yes">yes</td><td>only thing that can ask the chip to sign; secure boot, signed firmware; re-parses every transaction; touch on a pin only it can read; owns the trusted display</td></tr>
+      <tr><td>Main computer (Jetson)</td><td class="no">no</td><td>network, RPC, models, agent, the front screen; assumed compromisable</td></tr>
+      <tr><td>Browser extension</td><td class="no">no</td><td>untrusted input</td></tr>
+      <tr><td>The owner</td><td>final authority</td><td>the robot warns; it does not overrule a correctly warned owner</td></tr>
+    </table>
+    <p class="note">What follows: no touch, no signature. The controller refuses when the main computer's claims understate the bytes, and refuses a Solana destination it cannot reconcile with the bytes it parsed. A swapped controller cannot talk to the chip. Physical seizure is covered by secure boot, in-chip PIN and the certified part. Not covered: a stolen recovery phrase, and an owner who approves a correctly warned transaction. Everything is open source so the claims can be read rather than trusted.</p>
+  </div>
+  
+  <div class="foot"><span>Lamport Robotics · Pincer1 product brief</span><span>03</span></div>
+</section>
+
+<section class="page">
+<div class="section">
+    <h2>Optional features <span class="muted" style="font-size:13pt;letter-spacing:-.02em">off until the owner switches them on</span></h2>
+    <table>
+      <tr><th>Feature</th><th>What it does</th></tr>
+      <tr><td>Room lock</td><td>Signs only in its enrolled room (lidar fingerprint or map position); elsewhere it refuses.</td></tr>
+      <tr><td>Two-person rule</td><td>Above an amount you choose, two enrolled people must be in the room.</td></tr>
+      <tr><td>Offline payments</td><td>Signs durable-nonce transactions with no network; QR or deferred broadcast.</td></tr>
+      <tr><td>Air-gap relay</td><td>The radio is physically switched by a relay the robot controls, by presence or an agent window you authorised.</td></tr>
+      <tr><td>Dead-man's switch</td><td>Heir and a number of days; the timer and the signed transaction live on the controller; warns in person and by phone; nothing on the main computer can trigger it early or cancel it.</td></tr>
+      <tr><td>Wake-up alarm</td><td>"If my holdings drop 15%, wake me." Walks to your room and gets louder until you touch it; phones you if you are away. Quiet hours are yours to set.</td></tr>
+      <tr><td>Morning briefing</td><td>What moved overnight in the assets you follow, the news you asked for, what the agent did and what it proposes. Spoken when you come down, with every number read exactly as fetched.</td></tr>
+      <tr><td>Overnight agent</td><td>A budget granted by a long touch on the controller, bounded execution, automatic expiry, and a morning report for anything larger.</td></tr>
+      <tr><td>Modes and swaps</td><td>Offline mode: radio off, Lamport-8B only. Online mode: any brain, the agent, and swaps only through routers on the controller's allowlist, with the minimum output verified before you touch.</td></tr>
+      <tr><td>Mapping and navigation</td><td>Maps the home with lidar; you name rooms; it goes to any of them.</td></tr>
+      <tr><td>Charging dock</td><td>Returns to charge below 20%, leaves at 90% or when needed.</td></tr>
+      <tr><td>Locator beacon</td><td>Own battery, GPS, Find My over BLE and LoRa to your base station; reports where it is if carried off.</td></tr>
+    </table>
+  </div>
+  
+  
+  <div class="foot"><span>Lamport Robotics · Pincer1 product brief</span><span>04</span></div>
+</section>
+
+<section class="page">
+<div class="section">
+    <h2>Hardware</h2>
+    <table>
+      <tr><th>Subsystem</th><th>Part</th></tr>
+      <tr><td>Body</td><td>Hexapod chassis, serial-bus servos with position feedback, aluminium plates</td></tr>
+      <tr><td>Arm and head</td><td>4-axis arm carrying a stereo depth camera (Luxonis OAK-D Lite)</td></tr>
+      <tr><td>Front display</td><td>4.3-inch IPS panel driven by the main computer: conversation, the spoken reading, status. Never the recovery phrase.</td></tr>
+      <tr><td>Consent module</td><td>Raspberry Pi Pico 2 (RP2350) + NXP SE050 + capacitive touch pad + its own OLED display + radio relay</td></tr>
+      <tr><td>Main computer</td><td>NVIDIA Jetson Orin Nano Super 8 GB, encrypted NVMe, secure boot; all models run on the robot</td></tr>
+      <tr><td>Sensors</td><td>360° 2D lidar, IMU, 4-microphone array, speakers</td></tr>
+      <tr><td>Power</td><td>3S Li-ion 21700 pack, about 200 Wh: 4–5 h walking and talking, 10 h+ standing watch</td></tr>
+    </table>
+  </div>
+  
+  
+<div class="section">
+    <h2>How it compares</h2>
+    <table class="cmp">
+      <tr><th></th><th>Phone wallet</th><th>Hardware wallet</th><th>Pincer1</th></tr>
+      <tr><td>Where the key lives</td><td>phone memory</td><td>secure element</td><td>secure element</td></tr>
+      <tr><td>What approves a transaction</td><td>a tap</td><td>a button</td><td>a verified person in the room plus a touch</td></tr>
+      <tr><td>Knows if the owner is present</td><td>no</td><td>no</td><td>yes: lidar, face, voice</td></tr>
+      <tr><td>Reads the transaction to you</td><td>partially</td><td>tiny screen</td><td>aloud, with the counterparty's history, on a display only the controller writes</td></tr>
+      <tr><td>Refuses drainers on its own</td><td>no</td><td>no</td><td>yes</td></tr>
+      <tr><td>Under duress</td><td>nothing</td><td>some: a hidden PIN</td><td>word or rhythm opens a funded decoy and alerts silently</td></tr>
+      <tr><td>Works offline</td><td>no</td><td>signs only</td><td>signs and keeps a valid transaction for later</td></tr>
+      <tr><td>Works while you sleep</td><td>no</td><td>no</td><td>yes, inside a touch-granted budget</td></tr>
+      <tr><td>Inheritance</td><td>no</td><td>no</td><td>built in, enforced on the controller</td></tr>
+      <tr><td>Wakes you when the market moves</td><td>no</td><td>no</td><td>yes</td></tr>
+    </table>
+  </div>
+  
+  
+  <div class="foot"><span>Lamport Robotics · Pincer1 product brief</span><span>05</span></div>
+</section>
+
+<section class="page">
+
+<div class="section">
+    <h2>Status and roadmap</h2>
+    <p class="lead">The whole product is one open-source repository: firmware, daemon, robot software, browser extension, locator beacon and the training pipeline for Lamport-8B. Every component is written and tested in software against simulated hardware. Since the first brief, the consent path has gained its own display, the duress rhythm and the decoy, daily limits that reset on the controller's clock, allowlisted swap routers, offline and online modes, Bitcoin and EVM signing, and the morning briefing.</p>
+    <p class="lead" style="margin-top:5mm">What remains is the hardware on the bench. Next, in order: the consent module running on real parts, the first "no signature unless you're in the room" demo on video, the approval device in a live browser, the overnight agent and morning briefing on the finished body, the optional features tuned on hardware, an independent review of the consent path, then the first production run.</p>
+  </div>
+  <div class="section">
+    <div class="label" style="margin-bottom:4mm">Lamport Robotics</div>
+    <p class="lead muted" style="font-size:11pt">A lamport is the smallest unit of SOL. The name also nods to Leslie Lamport's work on distributed systems. We build physical machines around digital ownership.</p>
+    <hr class="rule">
+    <div class="cols3">
+      <div><div class="label">Site</div><p style="font:500 9pt/1.8 'Geist Mono',monospace">lamportrobotics.com</p></div>
+      <div><div class="label">Source</div><p style="font:500 9pt/1.8 'Geist Mono',monospace">github.com/Lamport-Robotics/pincer1</p></div>
+      <div><div class="label">Contact</div><p style="font:500 9pt/1.8 'Geist Mono',monospace">support@lamportrobotics.com<br>@LamportRobotics</p></div>
+    </div>
+    <p class="note" style="margin-top:8mm">NXP's SE050 component certification is not certification of the complete Pincer1 product. No filter guarantees detection of every harmful transaction. Ordering is not open yet; details will be announced at lamportrobotics.com/presale.</p>
+  </div>
+  
+  
+  <div class="foot"><span>Lamport Robotics · Pincer1 product brief</span><span>06</span></div>
+</section>
+
+</body>
+</html>
