@@ -236,10 +236,12 @@ bool consent_tick(consent_t *c, uint32_t now_ms, consent_action_t *out);
 
 /* ---- requests (host -> controller) ---- */
 consent_result_t consent_begin_init(consent_t *c, const char *id, uint32_t now_ms, consent_reason_t *why);
-/* `programs`/`dangerous` describe the controller's own parse (used for the allowance path).
+/* `programs` is the controller's own parse (used for the allowance path). `touch_only` is set for anything
+ * the allowance must never cover: dangerous instructions, unknown programs, and every token outflow (the
+ * allowance is a SOL budget; tokens have no budget, so moving them always takes a touch).
  * CONSENT_R_DONE means: sign right now without a touch (allowance). */
 consent_result_t consent_begin_sign(consent_t *c, const char *id, uint64_t lamports_out,
-                                    const uint8_t (*programs)[32], uint8_t n_programs, bool dangerous,
+                                    const uint8_t (*programs)[32], uint8_t n_programs, bool touch_only,
                                     uint32_t ttl_ms, uint32_t now_ms, consent_action_t *now, consent_reason_t *why);
 /* EVM (amount in `wei`, `amount` ignored) or Bitcoin (`amount` = sats_out) transaction, or a message of any
  * chain (CONSENT_CHAIN_* with zero amount): always needs a touch, the allowance never applies. Check 6:

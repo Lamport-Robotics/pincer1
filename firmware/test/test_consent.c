@@ -503,6 +503,27 @@ static void grant(consent_t *c, uint32_t ms, uint64_t lamports, uint64_t per_tx,
     CHECK(c->dirty);
 }
 
+/* the allowance is a SOL budget: a token outflow (or anything dangerous) under an active allowance still
+ * takes a touch, so a compromised host cannot drain token balances "for free" overnight */
+static void test_allowance_never_covers_tokens(void)
+{
+    consent_t c;
+    consent_action_t a;
+    consent_reason_t why;
+    uint32_t ms;
+    ready(&c, &ms);
+    grant(&c, ms, SOL, SOL / 5, T0 + 50000);
+    CHECK(consent_allowance_active(&c, ms));
+    /* lamports_out = 0, allowed programs only, but touch_only (a token transfer): pending, not done */
+    CHECK_EQ(consent_begin_sign(&c, "t1", 0, P_SYS, 1, true, 60000, ms, &a, &why), CONSENT_R_PENDING);
+    CHECK_EQ(consent_pending_need(&c), CONSENT_NEED_DISPLAY); /* the screen first, as for any touch */
+    consent_display_shown(&c, 0, 1);
+    CHECK_EQ(consent_pending_need(&c), CONSENT_NEED_TOUCH);
+    CHECK(consent_touch(&c, false, ms, &a)); /* a short touch signs it */
+    CHECK(!a.via_allowance);
+    CHECK_U64(c.p.allowance.spent, 0);
+}
+
 static void test_allowance_signs_without_touch(void)
 {
     consent_t c;
@@ -1123,6 +1144,7 @@ int main(void)
     RUN(test_router_policy);
     RUN(test_duress_rhythm);
     RUN(test_allowance_signs_without_touch);
+    RUN(test_allowance_never_covers_tokens);
     RUN(test_allowance_program_outside_needs_touch);
     RUN(test_allowance_cumulative_exhaustion);
     RUN(test_allowance_expiry);

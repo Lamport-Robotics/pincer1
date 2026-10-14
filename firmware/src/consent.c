@@ -331,7 +331,7 @@ static bool within_daily_limit(consent_t *c, consent_chain_t chain, uint64_t amo
 }
 
 consent_result_t consent_begin_sign(consent_t *c, const char *id, uint64_t lamports_out,
-                                    const uint8_t (*programs)[32], uint8_t n_programs, bool dangerous,
+                                    const uint8_t (*programs)[32], uint8_t n_programs, bool touch_only,
                                     uint32_t ttl_ms, uint32_t now_ms, consent_action_t *now, consent_reason_t *why)
 {
     u256_t zero;
@@ -341,8 +341,8 @@ consent_result_t consent_begin_sign(consent_t *c, const char *id, uint64_t lampo
     u256_zero(&zero);
     if (!within_daily_limit(c, CONSENT_CHAIN_SOL, lamports_out, &zero, now_ms)) return deny(CONSENT_DENY_OVER_DAILY_LIMIT, why);
 
-    /* allowance: pre-authorised, no touch */
-    if (!c->p.duress && consent_allowance_active(c, now_ms) && !dangerous && n_programs > 0 &&
+    /* allowance: pre-authorised, no touch. Only plain SOL spend through the allowed programs qualifies. */
+    if (!c->p.duress && consent_allowance_active(c, now_ms) && !touch_only && n_programs > 0 &&
         programs_subset(programs, n_programs, &c->p.allowance) && lamports_out <= c->p.allowance.max_per_tx &&
         u64_sat_add(c->p.allowance.spent, lamports_out) <= c->p.allowance.lamports) {
         memset(now, 0, sizeof *now);
