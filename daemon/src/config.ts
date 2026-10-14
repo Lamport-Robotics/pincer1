@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+/** "true"/"1" and "false"/"0" only: z.coerce.boolean would read "false" as true */
+const strictBool = z.preprocess((v) => {
+  if (v === undefined || v === "") return false;
+  const t = String(v).trim().toLowerCase();
+  if (t === "true" || t === "1" || t === "yes") return true;
+  if (t === "false" || t === "0" || t === "no") return false;
+  return v; // anything else fails the boolean check below
+}, z.boolean());
+
 const Env = z.object({
   PINCER_MODE: z.enum(["dev", "prod"]).default("dev"),
   CONTROLLER: z.string().default("sim"),
@@ -11,7 +20,7 @@ const Env = z.object({
   ADDRESS_BOOK: z.string().default(""),
   ORIGIN_ALLOWLIST: z.string().default("https://pump.fun,https://jup.ag"),
   DATA_DIR: z.string().default(`${process.env.HOME ?? "."}/.pincer1`),
-  AGENT_ENABLED: z.coerce.boolean().default(false),
+  AGENT_ENABLED: strictBool.default(false),
   AGENT_BUDGET_SOL: z.coerce.number().default(1),
   AGENT_MAX_PER_TRADE_SOL: z.coerce.number().default(0.2),
   AGENT_MAX_OPEN: z.coerce.number().default(3),
