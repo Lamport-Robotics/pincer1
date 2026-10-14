@@ -79,7 +79,10 @@ describe("api: multi-chain status, settings and signTransaction", () => {
     const next = () => new Promise<any>((res) => (queue.length ? res(queue.shift()) : waiters.push(res)));
     await new Promise<void>((r) => ws.on("open", () => r()));
     ws.send(JSON.stringify({ t: "pair", code }));
-    expect((await next()).t).toBe("paired");
+    const paired = await next();
+    expect(paired.t).toBe("paired");
+    // the extension learns every chain's address from this reply; without them connectChain fails later
+    expect(paired.addresses).toEqual({ solana: h.sim.publicKey, evm: h.sim.evmAddress, bitcoin: h.sim.bitcoinAddress });
     const tx = Buffer.from(E.tx1559({ to: E.STRANGER, value: E.ETH / 4n })).toString("base64");
     ws.send(JSON.stringify({ t: "signTransaction", id: "e1", chain: "evm", chainId: 1, tx, origin: "https://app.uniswap.org" }));
     const ex = await next();

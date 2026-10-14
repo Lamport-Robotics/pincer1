@@ -109,13 +109,13 @@ export class ApiServer {
           this.pairing.tokens.push(token); this.savePairing(); this.code = null;
           authed = true;
           await this.d.robot.say("Paired. Your browser can talk to me now.");
-          return send({ t: "paired", token, pubkey: this.d.getOwner() });
+          return send({ t: "paired", token, pubkey: this.d.getOwner(), addresses: this.d.signer.addresses() });
         }
         if (m.t === "connect") {
           if (!this.tokenOk(m.token)) return send({ t: "error", error: "unauthorized" });
           authed = true; origin = typeof m.origin === "string" ? m.origin : undefined;
           log.info("extension connected", { remote, origin });
-          return send({ t: "connected", pubkey: this.d.getOwner() });
+          return send({ t: "connected", pubkey: this.d.getOwner(), addresses: this.d.signer.addresses() });
         }
         if (!authed) return send({ t: "error", error: "unauthorized" });
         if (m.t === "signTransaction") {

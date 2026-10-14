@@ -52,6 +52,7 @@ describe("extension protocol", () => {
     const paired = await c.next();
     expect(paired.t).toBe("paired");
     expect(paired.pubkey).toBe(sim.publicKey);
+    expect(paired.addresses?.solana).toBe(sim.publicKey);
 
     const c2 = client(); await c2.open;
     c2.send({ t: "connect", token: paired.token, origin: "https://pump.fun" });
