@@ -32,8 +32,9 @@ curl -XPOST localhost:7401/pair/new                    # pairing code for the ex
 PINCER_MODE=prod CONTROLLER=/dev/ttyACM0 ROBOT_WS=ws://127.0.0.1:7402 pnpm dev
 ```
 
-`prod` refuses to start against the software signer, refuses signatures when the owner is not verified
-in the room, and locks the controller whenever presence is lost.
+`prod` refuses to start against the software signer, a controller without its SE050 or trusted display,
+or a bench image with compiled-in channel keys; refuses signatures when the owner is not verified in the
+room; and locks the controller whenever presence is lost.
 
 ## Environment
 
@@ -70,7 +71,8 @@ pnpm typecheck
 
 Disabled by default (`AGENT_ENABLED=false`). When enabled, the owner grants a one-night allowance on the
 controller with a long touch (`Agent.arm`); trades that fit the allowance (Jupiter only, per-trade and
-cumulative caps, no dangerous instructions) are signed without a touch. Everything else becomes a morning
+cumulative caps in SOL, no dangerous instructions, no token outflows at the message level) are signed
+without a touch. `AGENT_ENABLED` accepts `true`/`1` and `false`/`0` only. Everything else becomes a morning
 proposal that goes through the normal touch-gated path. Signals come from `SIGNALS_URL` (`/signals`,
 `/prices?mints=`) or a mock provider.
 

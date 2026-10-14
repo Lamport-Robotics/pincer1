@@ -100,6 +100,8 @@ export interface Hello {
   pin_set?: boolean;
   /** true when the SE050 channel keys were compiled in (bench builds), never in production. */
   dev_keys?: boolean;
+  /** the trusted display is present and initialised; prod refuses to run without it */
+  display?: boolean;
   board?: string;
   inheritance?: { armed: boolean; inactivity_days: number; days_since_touch: number } | null;
 }

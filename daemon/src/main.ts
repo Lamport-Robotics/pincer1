@@ -46,7 +46,12 @@ async function main() {
   }
 
   let hello = await controller.hello();
-  if (cfg.PINCER_MODE === "prod" && !hello.se050) throw new Error("controller reports no SE050; refusing to run in prod mode");
+  if (cfg.PINCER_MODE === "prod") {
+    // production means: hardware secure element, a trusted display the owner reads, and no bench keys compiled in
+    if (!hello.se050) throw new Error("controller reports no SE050; refusing to run in prod mode");
+    if (hello.display !== true) throw new Error("controller reports no trusted display; refusing to run in prod mode");
+    if (hello.dev_keys !== false) throw new Error("controller carries development channel keys (or does not say); refusing to run in prod mode");
+  }
   if (!hello.initialized) {
     log.warn("controller has no key yet. Hold the touch pad for 3 s to create one. The 24 words appear ONLY on the robot's display; write them down there. Nothing is printed here.");
     const r = await controller.init();
