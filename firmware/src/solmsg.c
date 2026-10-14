@@ -189,9 +189,13 @@ static void add_lamports(solmsg_summary_t *s, uint64_t v) { s->lamports_out = u6
 static void set_dest(solmsg_summary_t *s, const solmsg_t *m, const solmsg_ix_t *ix, uint8_t pos)
 {
     const uint8_t *k;
-    if (s->has_dest || pos >= ix->n_accounts) return;
+    if (pos >= ix->n_accounts) { s->multi_dest = true; return; } /* a recipient we cannot even name */
     k = key_at(m, ix->account_indexes[pos]);
-    if (!k) return;
+    if (!k) { s->multi_dest = true; return; }
+    if (s->has_dest) {
+        if (memcmp(s->dest, k, 32) != 0) s->multi_dest = true; /* a second recipient: never shown as one */
+        return;
+    }
     memcpy(s->dest, k, 32);
     s->has_dest = true;
 }
@@ -259,7 +263,24 @@ static void analyze_system(const solmsg_t *m, const solmsg_ix_t *ix, const uint8
         }
         break;
     }
+    case 4: /* AdvanceNonceAccount: [nonce, recent_blockhashes, authority]: nothing leaves */
+        break;
+    case 5: /* WithdrawNonceAccount: [nonce, to, recent_blockhashes, rent, authority], tag, u64 lamports */
+        if (ix->data_len >= 4 + 8 && ix_key_is(m, ix, 4, owner)) {
+            add_lamports(s, rd_le64(ix->data + 4));
+            set_dest(s, m, ix, 1);
+        }
+        break;
+    case 6: /* InitializeNonceAccount: [nonce, recent_blockhashes, rent], tag, pubkey authority: nothing leaves */
+        break;
+    case 7: /* AuthorizeNonceAccount: [nonce, current authority], tag, pubkey new authority */
+        if (ix_key_is(m, ix, 1, owner)) s->dangerous |= SOLMSG_DANGER_SET_AUTHORITY; /* the owner hands the nonce over */
+        break;
     case 8: /* Allocate: no lamport movement, not dangerous by itself */
+        break;
+    case 9:  /* AllocateWithSeed: [account, base], ... owner program at the end: the base signs the new owner */
+    case 10: /* AssignWithSeed: [account, base], tag, base, seed, owner */
+        if (ix_key_is(m, ix, 1, owner)) s->dangerous |= SOLMSG_DANGER_ASSIGN;
         break;
     case 11: /* TransferWithSeed: [from(derived), base(signer), to], tag, u64 lamports, seed, owner */
         if (ix->data_len >= 4 + 8 && (ix_key_is(m, ix, 1, owner) || ix_key_is(m, ix, 0, owner))) {
@@ -267,7 +288,12 @@ static void analyze_system(const solmsg_t *m, const solmsg_ix_t *ix, const uint8
             set_dest(s, m, ix, 2);
         }
         break;
+    case 12: /* UpgradeNonceAccount: [nonce]: nothing leaves */
+        break;
     default:
+        /* a System instruction this parser does not know: it may move lamports or authority in a way the
+         * display cannot show, so it is dangerous until the daemon names it and the owner touches */
+        s->dangerous |= SOLMSG_DANGER_UNKNOWN_IX;
         break;
     }
 }
@@ -352,6 +378,7 @@ static const struct {
     {SOLMSG_DANGER_ASSIGN, "assign"},
     {SOLMSG_DANGER_LOOKUP_TABLE, "lookup_table"},
     {SOLMSG_DANGER_UNKNOWN_PROGRAM, "unknown_program"},
+    {SOLMSG_DANGER_UNKNOWN_IX, "unknown_instruction"},
 };
 
 /* Core programs (base58 decoded once). */

@@ -71,7 +71,61 @@ static void test_two_transfers(void)
     solmsg_analyze(&p, OWNER, &s);
     CHECK_U64(s.lamports_out, SOL / 2 + SOL / 4);
     CHECK_MEM(s.dest, DEST, 32); /* first destination */
+    CHECK(s.multi_dest);         /* ...and a second one the display could not show: flagged */
     CHECK_EQ(s.n_programs, 1);   /* deduplicated */
+    /* the same recipient twice is one recipient */
+    mb_begin(&m, -1, 1, 0, 1, keys, 4);
+    mb_n_ix(&m, 2);
+    mb_ix(&m, 3, a1, 2, d1, ix_sys_transfer(d1, SOL / 2));
+    mb_ix(&m, 3, a1, 2, d2, ix_sys_transfer(d2, SOL / 4));
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(!s.multi_dest);
+    CHECK_U64(s.lamports_out, SOL / 2 + SOL / 4);
+}
+
+/* nonce accounts: withdrawing is a spend, handing the authority over is dangerous, an unknown tag is dangerous */
+static void test_nonce_and_unknown_system_ixs(void)
+{
+    mb_t m;
+    uint8_t keys[4][32], d[64], a_auth[2] = {1, 0}, a_wd[5] = {1, 2, 1, 1, 0}, a_adv[3] = {1, 1, 0};
+    solmsg_t p;
+    solmsg_summary_t s;
+    memcpy(keys[0], OWNER, 32); memcpy(keys[1], DEST, 32); memcpy(keys[2], OTHER, 32); memcpy(keys[3], SOLMSG_SYSTEM_PROGRAM, 32);
+    /* AuthorizeNonceAccount (7): [nonce, authority=owner], new authority OTHER */
+    wr_le32(d, 7); memcpy(d + 4, OTHER, 32);
+    mb_begin(&m, -1, 1, 0, 1, keys, 4); mb_n_ix(&m, 1); mb_ix(&m, 3, a_auth, 2, d, 36);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_SET_AUTHORITY);
+    CHECK_U64(s.lamports_out, 0);
+    /* the same instruction with someone else as the authority is not ours to flag */
+    a_auth[1] = 2;
+    mb_begin(&m, -1, 1, 0, 1, keys, 4); mb_n_ix(&m, 1); mb_ix(&m, 3, a_auth, 2, d, 36);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.dangerous, 0);
+    /* WithdrawNonceAccount (5): [nonce, to=OTHER, blockhashes, rent, authority=owner], lamports */
+    wr_le32(d, 5); wr_le64(d + 4, SOL / 3);
+    mb_begin(&m, -1, 1, 0, 1, keys, 4); mb_n_ix(&m, 1); mb_ix(&m, 3, a_wd, 5, d, 12);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.lamports_out, SOL / 3);
+    CHECK(s.has_dest); CHECK_MEM(s.dest, OTHER, 32);
+    /* AdvanceNonceAccount (4) moves nothing */
+    wr_le32(d, 4);
+    mb_begin(&m, -1, 1, 0, 1, keys, 4); mb_n_ix(&m, 1); mb_ix(&m, 3, a_adv, 3, d, 4);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.dangerous, 0); CHECK_U64(s.lamports_out, 0);
+    /* a System tag this parser has never heard of */
+    wr_le32(d, 99);
+    mb_begin(&m, -1, 1, 0, 1, keys, 4); mb_n_ix(&m, 1); mb_ix(&m, 3, a_adv, 3, d, 4);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_UNKNOWN_IX);
+    CHECK_STR(solmsg_danger_name(SOLMSG_DANGER_UNKNOWN_IX), "unknown_instruction");
+    CHECK_EQ(solmsg_danger_from_name("unknown_instruction"), SOLMSG_DANGER_UNKNOWN_IX);
 }
 
 static void test_other_system_ixs(void)
@@ -288,6 +342,7 @@ int main(void)
     init_keys();
     RUN(test_legacy_transfer_half_sol);
     RUN(test_two_transfers);
+    RUN(test_nonce_and_unknown_system_ixs);
     RUN(test_other_system_ixs);
     RUN(test_spl_transfer_checked);
     RUN(test_set_authority_and_friends);

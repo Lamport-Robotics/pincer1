@@ -248,6 +248,7 @@ static void add_sol_dangers(tui_doc_t *doc, uint32_t flags)
     if (flags & SOLMSG_DANGER_APPROVE) add_danger(doc, "APPROVE (delegate)");
     if (flags & SOLMSG_DANGER_CLOSE_ACCOUNT) add_danger(doc, "CLOSE ACCOUNT");
     if (flags & SOLMSG_DANGER_ASSIGN) add_danger(doc, "ASSIGN OWNER");
+    if (flags & SOLMSG_DANGER_UNKNOWN_IX) add_danger(doc, "UNKNOWN INSTRUCTION");
     if (flags & SOLMSG_DANGER_LOOKUP_TABLE) add_danger(doc, "LOOKUP TABLE");
 }
 
@@ -261,6 +262,7 @@ static void build_sol_tx(const tui_sign_t *r, tui_doc_t *doc, const char *head)
         tui_fmt_units(s->lamports_out, 9, amt, sizeof amt);
         add_amount(doc, amt, "SOL");
         if (s->has_dest) { tui_short_b58(s->dest, sh, sizeof sh); tui_addf(doc, TUI_TEXT, "to %s", sh); }
+        if (s->multi_dest) add_danger(doc, "MULTIPLE RECIPIENTS");
     } else if (s->n_token_out == 0) {
         tui_add(doc, TUI_TEXT, "no SOL leaves");
     }

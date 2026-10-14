@@ -48,7 +48,8 @@ typedef struct {
 #define SOLMSG_DANGER_LOOKUP_TABLE (1u << 4)  /* "lookup_table" */
 #define SOLMSG_DANGER_UNKNOWN_PROGRAM (1u << 5) /* "unknown_program": a program that is neither a core program nor an
                                                    allowlisted router (decided by policy.c, needs the router list) */
-#define SOLMSG_DANGER_ALL 0x3fu
+#define SOLMSG_DANGER_UNKNOWN_IX (1u << 6) /* "unknown_instruction": a System instruction this parser cannot classify */
+#define SOLMSG_DANGER_ALL 0x7fu
 
 typedef struct {
     uint8_t source[32];
@@ -70,6 +71,8 @@ typedef struct {
     bool programs_overflow;
     bool has_dest;
     uint8_t dest[32];                 /* destination of the first lamport / token transfer */
+    bool multi_dest;                  /* lamports leave the owner towards more than one recipient: the display
+                                         can only show one, so policy refuses the message */
     bool fee_payer_is_owner;
 } solmsg_summary_t;
 

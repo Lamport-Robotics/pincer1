@@ -147,6 +147,20 @@ static void test_check2_dest(void)
     CHECK_EQ(CHK(&s, &c), POLICY_DEST);
 }
 
+/* two SOL recipients in one message: the display shows one line, so the controller refuses the whole thing,
+ * whatever the daemon claimed */
+static void test_check2_two_recipients(void)
+{
+    solmsg_summary_t s; policy_claims_t c;
+    base_parsed(&s); base_claims(&c);
+    s.multi_dest = true;
+    CHECK_EQ(CHK(&s, &c), POLICY_DEST);
+    c.lamports_out = SOL; /* a generous claim does not help */
+    CHECK_EQ(CHK(&s, &c), POLICY_DEST);
+    s.lamports_out = 0; c.lamports_out = 0; /* even with nothing counted as leaving */
+    CHECK_EQ(CHK(&s, &c), POLICY_DEST);
+}
+
 static void test_check2_token_dest(void)
 {
     solmsg_summary_t s; policy_claims_t c;
@@ -497,6 +511,7 @@ int main(void)
     RUN(test_check2_lamports);
     RUN(test_check2_tokens);
     RUN(test_check2_dest);
+    RUN(test_check2_two_recipients);
     RUN(test_check2_token_dest);
     RUN(test_unknown_program_and_routers);
     RUN(test_check3_programs);
