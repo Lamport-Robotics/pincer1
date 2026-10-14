@@ -179,13 +179,16 @@ Controller-side checks before touch is even requested:
    accounts must be covered by a `claims.token_out` entry: amount ≤ the claimed amount for that mint and
    the recipient token account equal to the entry's `dest` (`transferChecked` names the mint; a plain
    `transfer` is bounded by the claimed total and still needs its recipient named). A recipient the daemon
-   did not name is `claims_mismatch`.
+   did not name is `claims_mismatch`. A message that sends SOL to more than one recipient is refused
+   outright (`claims_mismatch`): the display shows one recipient, so it never signs for two.
 3. Every program id in the message is in `claims.programs`.
 4. If the message contains `SetAuthority`, `Approve`, `CloseAccount` or `Assign` affecting an owner-owned
    account, `claims` must list it under `dangerous:[…]`; otherwise `denied:policy`. A program that is
    neither a core program (System, Token, Token-2022, Associated Token, Compute Budget, Memo) nor in the
    controller's router allowlist is `unknown_program`: it must be declared the same way and is shown as
-   DANGER on the display.
+   DANGER on the display. `AuthorizeNonceAccount` on an owner-held nonce counts as `set_authority`;
+   `AssignWithSeed`/`AllocateWithSeed` with the owner as base count as `assign`; a System instruction the
+   controller does not classify is `unknown_instruction` and must be declared too.
 5. `spent_today + lamports_out ≤ daily_limit`, unless the request was preceded by `elevate`.
 
 The claims mechanism is what stops a compromised daemon from describing "0.5 SOL" out loud while the
@@ -312,6 +315,10 @@ on that chain within the window and is consumed by it; requests on other chains 
    "until_unix":1791650000,"max_per_tx_lamports":"200000000"}
 ← {"t":"pending","id":"a1","need":"long_touch"}
 ← {"t":"allowance","id":"a1","ok":true}
+
+The allowance is a SOL budget and nothing else: a message that moves tokens out of the owner's accounts
+(any Token / Token-2022 outflow the controller sees), carries a dangerous instruction or touches a program
+outside the allowance always takes a touch, allowance or not.
 ```
 
 While an allowance is active, a `sign` request whose parsed `programs` ⊆ allowance programs, whose
