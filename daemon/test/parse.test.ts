@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parseMessage, looksLikeMessage, claimsFor } from "../src/tx/parse.js";
 import { explain } from "../src/tx/explain.js";
 import * as F from "./fixtures.js";
+import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { SYSTEM, TOKEN, U64_MAX } from "../src/tx/known.js";
 
 const own = F.owner.publicKey.toBase58();
@@ -41,6 +42,17 @@ describe("parseMessage", () => {
     expect(kinds).toEqual(["set_authority", "approve", "close_account"]);
     expect(p.dangers[0].to).toBe(F.stranger.toBase58());
     expect(p.dangers[1].amount).toBe(U64_MAX);
+  });
+
+  it("flags handing a nonce account over, and any System instruction it does not know", () => {
+    const nonce = F.friend; // pretend this is the owner's nonce account
+    const authorize = new TransactionInstruction({ programId: new PublicKey(SYSTEM), keys: [{ pubkey: nonce, isSigner: false, isWritable: true }, { pubkey: F.owner.publicKey, isSigner: true, isWritable: false }], data: Buffer.concat([Buffer.from([7, 0, 0, 0]), F.stranger.toBuffer()]) });
+    const p = parseMessage(F.messageOf(F.legacy([authorize])), { owner: own });
+    expect(p.dangers.map((d) => d.kind)).toEqual(["set_authority"]);
+    expect(claimsFor(p).dangerous).toEqual(["set_authority"]);
+    const odd = new TransactionInstruction({ programId: new PublicKey(SYSTEM), keys: [{ pubkey: F.owner.publicKey, isSigner: true, isWritable: true }], data: Buffer.from([99, 0, 0, 0]) });
+    const q = parseMessage(F.messageOf(F.legacy([odd])), { owner: own });
+    expect(q.dangers.map((d) => d.kind)).toEqual(["unknown_instruction"]);
   });
 
   it("parses v0 messages and marks unresolved lookup tables", () => {

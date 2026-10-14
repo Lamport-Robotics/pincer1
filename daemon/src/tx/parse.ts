@@ -16,7 +16,7 @@ export interface TokenMove {
   dest: string; // token account or wallet (for closeAccount: lamport destination)
 }
 
-export type DangerKind = "set_authority" | "approve" | "close_account" | "assign" | "lookup_table" | "nonce" | "burn";
+export type DangerKind = "set_authority" | "approve" | "close_account" | "assign" | "lookup_table" | "unknown_instruction" | "nonce" | "burn";
 
 export interface Danger {
   kind: DangerKind;
@@ -165,8 +165,27 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
           ix.label = "System.advanceNonce";
           out.usesDurableNonce = true;
           break;
+        case 5: // withdrawNonceAccount: [nonce, to, blockhashes, rent, authority] lamports @4
+          ix.label = "System.withdrawNonce";
+          if (ix.accounts[4] === owner) addLamports(ix.accounts[1], u64(d, 4));
+          break;
+        case 6: // initializeNonceAccount
+          ix.label = "System.initializeNonce";
+          break;
+        case 7: // authorizeNonceAccount: [nonce, authority] new authority @4
+          ix.label = "System.authorizeNonce";
+          if (ix.accounts[1] === owner) out.dangers.push({ kind: "set_authority", program: SYSTEM, detail: `hands the nonce account ${ix.accounts[0]} to another authority`, to: new PublicKey(d.subarray(4, 36)).toBase58() });
+          break;
         case 8: // allocate
           ix.label = "System.allocate";
+          break;
+        case 9: // allocateWithSeed: [account, base]
+        case 10: // assignWithSeed: [account, base]
+          ix.label = kind === 9 ? "System.allocateWithSeed" : "System.assignWithSeed";
+          if (ix.accounts[1] === owner) out.dangers.push({ kind: "assign", program: SYSTEM, detail: "assigns an account derived from your wallet to another program" });
+          break;
+        case 12: // upgradeNonceAccount
+          ix.label = "System.upgradeNonce";
           break;
         case 11: { // transferWithSeed: [from, base, to] lamports @4
           ix.label = "System.transferWithSeed";
@@ -175,6 +194,8 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
         }
         default:
           ix.label = `System.${kind}`;
+          // the controller refuses System instructions it cannot classify unless they are declared; declare them
+          out.dangers.push({ kind: "unknown_instruction", program: SYSTEM, detail: `System instruction ${kind} is not understood` });
       }
       continue;
     }
