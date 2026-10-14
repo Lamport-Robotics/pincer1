@@ -7,13 +7,14 @@ import { MockRobot } from "../src/presence/client.js";
 import { SettingsStore } from "../src/settings.js";
 import { Briefing, parseFeed } from "../src/briefing/index.js";
 
+const NOW = new Date(2026, 9, 12, 8, 0); // the harness clock; every fixture date is relative to it
 const RSS = `<?xml version="1.0"?><rss><channel><title>Feed</title>
-<item><title><![CDATA[Solana ETF filing lands at the SEC]]></title><link>https://x/1</link><pubDate>${new Date(Date.now() - 3600_000).toUTCString()}</pubDate></item>
-<item><title>Bitcoin miners sell &amp; hedge</title><link>https://x/2</link><pubDate>${new Date(Date.now() - 7200_000).toUTCString()}</pubDate></item>
-<item><title>Old news about Ethereum</title><link>https://x/3</link><pubDate>${new Date(Date.now() - 3 * 86400_000).toUTCString()}</pubDate></item>
-<item><title>Solana ETF filing lands at the SEC</title><link>https://x/dup</link><pubDate>${new Date().toUTCString()}</pubDate></item>
+<item><title><![CDATA[Solana ETF filing lands at the SEC]]></title><link>https://x/1</link><pubDate>${new Date(NOW.getTime() - 3600_000).toUTCString()}</pubDate></item>
+<item><title>Bitcoin miners sell &amp; hedge</title><link>https://x/2</link><pubDate>${new Date(NOW.getTime() - 7200_000).toUTCString()}</pubDate></item>
+<item><title>Old news about Ethereum</title><link>https://x/3</link><pubDate>${new Date(NOW.getTime() - 3 * 86400_000).toUTCString()}</pubDate></item>
+<item><title>Solana ETF filing lands at the SEC</title><link>https://x/dup</link><pubDate>${NOW.toUTCString()}</pubDate></item>
 </channel></rss>`;
-const ATOM = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Jupiter ships <b>v7</b></title><link href="https://y/1"/><updated>${new Date().toISOString()}</updated></entry></feed>`;
+const ATOM = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Jupiter ships <b>v7</b></title><link href="https://y/1"/><updated>${NOW.toISOString()}</updated></entry></feed>`;
 const PRICES = { bitcoin: { usd: 112345.6, usd_24h_change: -2.34 }, solana: { usd: 187.12, usd_24h_change: 4.5 } };
 
 const fetchImpl = (async (url: string | URL | Request) => {
@@ -25,7 +26,7 @@ const fetchImpl = (async (url: string | URL | Request) => {
   throw new Error("unreachable " + u);
 }) as unknown as typeof fetch;
 
-function harness(patch: Record<string, unknown> = {}, now = new Date(2026, 9, 12, 8, 0)) {
+function harness(patch: Record<string, unknown> = {}, now = NOW) {
   const store = new SettingsStore(mkdtempSync(join(tmpdir(), "pincer-brief-")));
   store.update({ briefing: { enabled: true, time: "07:30", coins: ["bitcoin", "solana"], feeds: ["https://rss.test/feed", "https://atom.test/feed"], maxHeadlines: 5, portfolio: false, ...patch } });
   const robot = new MockRobot();
