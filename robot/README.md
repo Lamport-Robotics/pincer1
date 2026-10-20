@@ -39,7 +39,8 @@ pincer_robot/
   duress.py            duress word in STT output, fuzzy, latched, silent
   speech.py            TTS (ElevenLabs stream / espeak-ng / print, urgency for the alarm) + microphone
   motion.py            RobotInterface / MockRobot (ClaudeGO pattern) + attention / idle sway
-  ros_backend.py       HexapodRobot: rclpy for /cmd_vel, /scan, /imu
+  body/                own legs: geometry, IK, gaits, servo bus, simulator (PINCER_BODY_BACKEND=bus)
+  ros_backend.py       HexapodRobot: rclpy for /cmd_vel, /scan, /imu (PINCER_BODY_BACKEND=twist)
   nav.py               slam_toolbox / Nav2 (lazy rclpy + nav2_simple_commander) + MockNav; room registry,
                        goto, find_owner, map-based room lock
   airgap.py            air-gap relay on a Jetson GPIO line (Jetson.GPIO lazy; mock elsewhere): off/strict/night

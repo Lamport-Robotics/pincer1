@@ -25,8 +25,9 @@ What's in here: `firmware/` (pico-sdk, C), `daemon/` (TypeScript), `robot/` (Pyt
 `extension/` (Chrome MV3), `beacon/` (ESP32 locator), `brain/` (Lamport-8B training pipeline, no weights),
 `brand/`, `deploy/jetson/`, `docs/`.
 
-Not in here: the chassis gait controller and the CAD. v1 bodies are built from the parts in
-`docs/HARDWARE.md`.
+The legs are in `robot/pincer_robot/body/`: leg kinematics, tripod / ripple / wave gaits, the serial
+bus driver for the servos and a simulator the tests walk (`docs/BODY.md`). Not in here: the CAD. v1
+bodies are built from the parts in `docs/HARDWARE.md`.
 
 ## features
 
