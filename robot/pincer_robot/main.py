@@ -205,6 +205,24 @@ class RobotApp:
     def _make_robot(self) -> RobotInterface:
         if self.mock:
             return MockRobot()
+        if self.cfg.body_backend == "bus":
+            from .body import (
+                Body,
+                BodyBackend,
+                BodyGeometry,
+                Bus,
+                BusActuator,
+                GaitParams,
+                SerialTransport,
+            )
+
+            bus = Bus(SerialTransport(self.cfg.servo_port, self.cfg.servo_baud))
+            actuator = BusActuator(bus, BodyGeometry())
+            body = Body(gait=GaitParams(name=self.cfg.gait), actuator=actuator)
+            body.actuator.torque(True)  # type: ignore[union-attr]
+            body.stand()
+            log.info("body: own gait (%s) on %s", self.cfg.gait, self.cfg.servo_port)
+            return BodyBackend(body)
         try:
             from .ros_backend import HexapodRobot
 

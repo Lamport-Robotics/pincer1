@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     imu_topic: str = "/imu"
     cmd_vel_topic: str = "/cmd_vel"
 
+    # --- legs ------------------------------------------------------------------------
+    # twist: hand velocity commands to an external gait controller on cmd_vel_topic (demo chassis).
+    # bus:   drive the leg servos directly with the gait in pincer_robot.body (the v1 body).
+    body_backend: Literal["twist", "bus"] = "twist"
+    servo_port: str = "/dev/ttyUSB0"
+    servo_baud: int = 1_000_000
+    gait: Literal["tripod", "ripple", "wave"] = "tripod"
+
     # --- compute backend ---------------------------------------------------------
     # auto: CUDA when onnxruntime / torch / ctranslate2 see a GPU (Jetson Orin Nano),
     # else CPU (Pi 5, laptop). Per-device defaults for the model names below live in
