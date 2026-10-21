@@ -7,9 +7,9 @@ Wants=network-online.target
 Type=simple
 User=pincer
 Group=pincer
-WorkingDirectory=/opt/pincer1/daemon
+WorkingDirectory=/opt/pincer1/current/daemon
 EnvironmentFile=/etc/pincer1/daemon.env
-ExecStart=/usr/bin/node /opt/pincer1/daemon/dist/main.js
+ExecStart=/usr/bin/node /opt/pincer1/current/daemon/dist/main.js
 Restart=always
 RestartSec=3
 # the daemon is untrusted by design; keep it in its lane
