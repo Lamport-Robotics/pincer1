@@ -22,6 +22,11 @@
 #include "pico/stdio.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#if PICO_RP2350
+#include "boot/picobin.h"
+#include "boot/picoboot_constants.h"
+#include "pico/bootrom.h"
+#endif
 #if PICO_RP2040
 #include "hardware/structs/vreg_and_chip_reset.h"
 #elif PICO_RP2350
@@ -45,6 +50,7 @@
 #include "storage.h"
 #include "touch.h"
 #include "trusted_ui.h"
+#include "update.h"
 #include "util.h"
 
 #define PIN_TOUCH 15
@@ -182,6 +188,184 @@ static int fi_erase(uint32_t off) { return region_erase(STORAGE_INH_BASE, STORAG
 static int fi_program(uint32_t off, const void *buf, size_t len) { return region_program(STORAGE_INH_BASE, STORAGE_INH_REGION_SIZE, off, buf, len); }
 static const storage_flash_t g_flash_ops = {fl_read, fl_erase, fl_program};
 static const storage_flash_t g_inh_flash_ops = {fi_read, fi_erase, fi_program};
+
+/* ---- firmware update: the spare A/B partition and the trial ledger -------------------------------
+ * The ledger is one sector below the inheritance region. The spare partition is found through the
+ * bootrom's partition table on the RP2350; without a table (bench boards, RP2040) updates are refused. */
+#define LEDGER_BASE (STORAGE_INH_BASE - FLASH_SECTOR_SIZE)
+static int lg_read(uint32_t off, void *buf, size_t len) { return region_read(LEDGER_BASE, FLASH_SECTOR_SIZE, off, buf, len); }
+static int lg_erase(uint32_t off) { return region_erase(LEDGER_BASE, FLASH_SECTOR_SIZE, off); }
+static int lg_program(uint32_t off, const void *buf, size_t len) { return region_program(LEDGER_BASE, FLASH_SECTOR_SIZE, off, buf, len); }
+static const update_flash_t g_ledger_fl = {FLASH_SECTOR_SIZE, lg_erase, lg_program, lg_read};
+
+static int8_t g_boot_partition = -1;  /* partition this image runs from */
+static uint32_t g_my_base;            /* its flash offset */
+static int8_t g_spare_partition = -1; /* the other half of the A/B pair */
+static uint32_t g_spare_base, g_spare_size;
+static bool g_trial;                  /* this image booted under an armed ledger */
+static int up_read(uint32_t off, void *buf, size_t len) { return region_read(g_spare_base, g_spare_size, off, buf, len); }
+static int up_erase(uint32_t off) { return region_erase(g_spare_base, g_spare_size, off); }
+static int up_program(uint32_t off, const void *buf, size_t len) { return region_program(g_spare_base, g_spare_size, off, buf, len); }
+static update_flash_t g_update_fl = {0, up_erase, up_program, up_read};
+static update_t g_update;
+
+#if PICO_RP2350
+/* Reads the resident partition table: words[0] echoes the flags, words[1] is the PT info (partition count
+ * in the low byte), then two words for the unpartitioned space, then two per partition: location
+ * (first/last sector) and flags (link type/value). Finds the partition we booted from and its A/B twin. */
+static void find_ab_partitions(void)
+{
+    static uint32_t words[2 + 2 + 2 * PARTITION_TABLE_MAX_PARTITIONS];
+    boot_info_t bi;
+    int n, count, i;
+    uint32_t my_flags;
+    if (!rom_get_boot_info(&bi) || bi.partition < 0 || bi.partition >= PARTITION_TABLE_MAX_PARTITIONS) return;
+    n = rom_get_partition_table_info(words, sizeof words / sizeof words[0], PT_INFO_PT_INFO | PT_INFO_PARTITION_LOCATION_AND_FLAGS);
+    if (n < 4) return;
+    count = (int)(words[1] & 0xff);
+    if (bi.partition >= count) return;
+    g_boot_partition = (int8_t)bi.partition;
+    g_my_base = ((words[4 + 2 * bi.partition] & PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_BITS) >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) * FLASH_SECTOR_SIZE;
+    my_flags = words[4 + 2 * bi.partition + 1];
+    if (((my_flags & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) >> PICOBIN_PARTITION_FLAGS_LINK_TYPE_LSB) == PICOBIN_PARTITION_FLAGS_LINK_TYPE_A_PARTITION) {
+        /* we are a B partition: our twin is the A we link to */
+        g_spare_partition = (int8_t)((my_flags & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS) >> PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB);
+    } else {
+        for (i = 0; i < count; i++) {
+            uint32_t fl = words[4 + 2 * i + 1];
+            if (i != bi.partition &&
+                ((fl & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) >> PICOBIN_PARTITION_FLAGS_LINK_TYPE_LSB) == PICOBIN_PARTITION_FLAGS_LINK_TYPE_A_PARTITION &&
+                (int)((fl & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS) >> PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB) == bi.partition) {
+                g_spare_partition = (int8_t)i;
+                break;
+            }
+        }
+    }
+    if (g_spare_partition < 0 || g_spare_partition >= count) { g_spare_partition = -1; return; }
+    {
+        uint32_t loc = words[4 + 2 * g_spare_partition];
+        uint32_t first = (loc & PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_BITS) >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB;
+        uint32_t last = (loc & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS) >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
+        g_spare_base = first * FLASH_SECTOR_SIZE;
+        g_spare_size = (last - first + 1) * FLASH_SECTOR_SIZE;
+        g_update_fl.size = g_spare_size;
+    }
+    g_trial = bi.tbyb_and_update_info & BOOT_TBYB_AND_UPDATE_FLAG_BUY_PENDING;
+}
+#endif
+
+/* Erases our own first sector (vector table + IMAGE_DEF) so the bootrom no longer sees this image, then
+ * lets the watchdog armed by the caller reboot the chip. Runs from RAM: once the sector is gone nothing in
+ * this partition's first 4 KiB may be executed, and the erase itself takes tens of milliseconds. */
+static void __no_inline_not_in_flash_func(self_invalidate)(uint32_t my_base)
+{
+    watchdog_reboot(0, 0, 800); /* fires after the erase (sector erase ≤ 400 ms), from flash code, before the erase */
+    save_and_disable_interrupts();
+    flash_range_erase(my_base, FLASH_SECTOR_SIZE);
+    while (1) tight_loop_contents();
+}
+
+/* On every boot: an armed ledger for OUR partition means we are the image on trial. Count the boot; past
+ * the limit the daemon never confirmed us, so we erase our own first sector (the IMAGE_DEF lives there)
+ * and reboot: the bootrom then finds only the previous image and boots that. */
+static void update_boot_check(void)
+{
+    update_ledger_t l;
+#if PICO_RP2350
+    find_ab_partitions();
+#endif
+    update_init(&g_update, &g_update_fl);
+    update_ledger_read(&g_ledger_fl, &l);
+    if (!l.armed || g_boot_partition < 0 || l.partition != (uint8_t)g_boot_partition) return;
+    g_trial = true;
+    if (update_ledger_boot(&g_ledger_fl) <= UPDATE_TRIAL_BOOTS) return;
+    /* trial over, never committed: step aside */
+    update_ledger_clear(&g_ledger_fl);
+    self_invalidate(g_my_base);
+}
+
+static void handle_update(void)
+{
+    update_rc_t rc;
+    consent_result_t res;
+    consent_reason_t why;
+    if (g_spare_partition < 0 && g_req.type != PROTO_REQ_UPDATE_COMMIT && g_req.type != PROTO_REQ_UPDATE_ABORT) {
+        send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, "not_supported"));
+        return;
+    }
+    switch (g_req.type) {
+    case PROTO_REQ_UPDATE_BEGIN:
+        if (g_update.state == UPDATE_VERIFIED) update_abort(&g_update); /* a fresh begin replaces a staged image */
+        rc = update_begin(&g_update, g_req.update.size, g_req.update.sha256, g_req.update.version);
+        if (rc != UPDATE_OK) { send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, update_rc_str(rc))); return; }
+        send_line(proto_fmt_update_begin(g_out, sizeof g_out, g_req.id, UPDATE_CHUNK_MAX, g_spare_size));
+        return;
+    case PROTO_REQ_UPDATE_CHUNK:
+        rc = update_chunk(&g_update, g_req.update.off, g_req.update.data, g_req.update.len);
+        if (rc != UPDATE_OK) { send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, update_rc_str(rc))); return; }
+        send_line(proto_fmt_ok(g_out, sizeof g_out, "update_chunk", g_req.id));
+        return;
+    case PROTO_REQ_UPDATE_END:
+        rc = update_end(&g_update);
+        if (rc != UPDATE_OK) { send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, update_rc_str(rc))); return; }
+        send_line(proto_fmt_ok(g_out, sizeof g_out, "update_end", g_req.id));
+        return;
+    case PROTO_REQ_UPDATE_APPLY:
+        if (g_update.state != UPDATE_VERIFIED) { send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, "state")); return; }
+        forget_real_pin();
+        res = consent_begin_update_apply(&g_consent, g_req.id, g_update.version, g_update.expect, now_ms(), &why);
+        if (res == CONSENT_R_PENDING) {
+            char line[32];
+            snprintf(line, sizeof line, "v%s  %02x%02x%02x%02x", g_update.version, g_update.expect[0], g_update.expect[1], g_update.expect[2], g_update.expect[3]);
+            ui_notice("FIRMWARE", line, "hold 3s to install", NOTICE_LONG_MS);
+        }
+        reply_pending_or_denied(res, g_req.id, why);
+        return;
+    case PROTO_REQ_UPDATE_COMMIT: {
+        bool was_trial = g_trial, bought = false;
+#if PICO_RP2350
+        boot_info_t bi;
+        if (rom_get_boot_info(&bi) && (bi.tbyb_and_update_info & BOOT_TBYB_AND_UPDATE_FLAG_BUY_PENDING)) {
+            static uint8_t buy_buf[4096] __attribute__((aligned(4)));
+            bought = rom_explicit_buy(buy_buf, sizeof buy_buf) == 0;
+        }
+#endif
+        if (g_trial) { update_ledger_clear(&g_ledger_fl); g_trial = false; }
+        send_line(proto_fmt_update_commit(g_out, sizeof g_out, g_req.id, was_trial, bought));
+        if (was_trial) ui_notice("FIRMWARE", "confirmed", PROTO_FW_VERSION, NOTICE_MS);
+        return;
+    }
+    case PROTO_REQ_UPDATE_ABORT:
+        update_abort(&g_update);
+        send_line(proto_fmt_ok(g_out, sizeof g_out, "update_abort", g_req.id));
+        return;
+    default:
+        return;
+    }
+}
+
+static void do_update_apply(const consent_action_t *a)
+{
+    if (g_update.state != UPDATE_VERIFIED || g_spare_partition < 0) {
+        send_line(proto_fmt_denied(g_out, sizeof g_out, a->id, "state"));
+        return;
+    }
+    if (update_ledger_arm(&g_ledger_fl, (uint8_t)g_spare_partition, g_update.version) != 0) {
+        send_line(proto_fmt_denied(g_out, sizeof g_out, a->id, "flash"));
+        return;
+    }
+    send_line(proto_fmt_ok(g_out, sizeof g_out, "update_apply", a->id));
+    ui_notice("FIRMWARE", "rebooting", a->update_version, NOTICE_MS);
+    persist();
+    stdio_flush();
+    sleep_ms(200);
+#if PICO_RP2350
+    /* a flash-update boot of the spare partition: the bootrom checks the signature against OTP first */
+    rom_reboot(REBOOT2_FLAG_REBOOT_TYPE_FLASH_UPDATE | REBOOT2_FLAG_NO_RETURN_ON_SUCCESS, 50, XIP_BASE + g_spare_base, 0);
+#endif
+    watchdog_reboot(0, 0, 50);
+    while (1) tight_loop_contents();
+}
 
 /* Timer + inheritance record. Written hourly (consent_tick raises ih_dirty), on inheritance changes, and
  * whenever the main record is written anyway. Never written with zeros by the wipe. */
@@ -716,6 +900,7 @@ static void perform(const consent_action_t *a)
         }
         break;
     case CONSENT_OP_ALLOWANCE: send_line(proto_fmt_ok(g_out, sizeof g_out, "allowance", a->id)); persist(); ui_notice("ALLOWANCE", "granted", NULL, NOTICE_MS); break;
+    case CONSENT_OP_UPDATE_APPLY: do_update_apply(a); break;
     case CONSENT_OP_SET_PIN: do_set_pin(a); break;
     case CONSENT_OP_SET_DURESS_PIN: do_set_duress_pin(a); break;
     case CONSENT_OP_DECOY_ADDRESSES: do_decoy_addresses(a); break;
@@ -790,6 +975,9 @@ static void handle_hello(void)
     proto_hello_t h;
     memset(&h, 0, sizeof h);
     h.fw = PROTO_FW_VERSION;
+    h.partition = g_boot_partition;
+    h.update_staged = g_update.state == UPDATE_VERIFIED;
+    h.trial = g_trial;
     h.se050 = signer_is_hardware() && g_signer_ok;
     h.initialized = g_consent.p.initialized;
     h.pubkey = h.initialized ? owner_pubkey() : NULL;
@@ -1178,6 +1366,14 @@ static void handle_line(const char *line)
         forget_real_pin();
         handle_inheritance_set(&g_req, now);
         break;
+    case PROTO_REQ_UPDATE_BEGIN:
+    case PROTO_REQ_UPDATE_CHUNK:
+    case PROTO_REQ_UPDATE_END:
+    case PROTO_REQ_UPDATE_APPLY:
+    case PROTO_REQ_UPDATE_COMMIT:
+    case PROTO_REQ_UPDATE_ABORT:
+        handle_update();
+        break;
     case PROTO_REQ_INHERITANCE_STATUS:
         handle_inheritance_status(g_req.id);
         break;
@@ -1352,6 +1548,7 @@ int main(void)
     gpio_put(PIN_BEACON, 0);
 
     detect_boot_reason();
+    update_boot_check();
     rng_init();
     display_hw_init();
     touch_init(&g_touch);

@@ -382,6 +382,31 @@ Flash layout (`main.c`): `STORAGE_BASE = PICO_FLASH_SIZE_BYTES − 8 KB` holds t
 (`"PCI1"` v1: counter 16 B, arrangement 79 B incl. heir + signer, message length + 860 B, signature 64 B,
 CRC-32; 1035 bytes used). Each region alternates between its two sectors; the newest valid CRC wins.
 
+## Field updates (A/B partitions)
+
+The image carries a partition table (`pt/pincer1.json`: A and B, 1 MiB each, secure Arm only; the
+unpartitioned tail holds the storage regions and the trial ledger). `picotool load` of a build with the
+table writes it along with the image; from then on new firmware arrives over the daemon link
+(`docs/PROTOCOL.md`, "update"): the daemon streams the signed `.bin` into the spare partition, the owner
+holds the pad for 3 s while the display shows the version and hash, the controller reboots into it on
+trial, and the daemon commits it once the new image answers `hello`. Three boots without a commit and the
+new image invalidates itself; the bootrom boots the previous one. The bootrom checks the signature against
+the OTP key hash on every boot, so the update path adds no trust: an image not signed with the board's key
+is refused before it runs, whatever the daemon sent.
+
+```bash
+# on the workstation, after a signed build
+scp build/pincer1_consent.bin pincer1.local:/tmp/
+# on the robot
+scripts/fw-update.sh /tmp/pincer1_consent.bin 0.5.1        # → POST /firmware/update on the daemon
+curl localhost:7401/firmware                                 # fw, partition, staged, trial
+```
+
+`pico_set_binary_version` stamps the major.minor from `PROTO_FW_VERSION` into the image; the daemon
+refuses a file whose stamp disagrees with the version named on the command line. `src/update.c` is the
+engine (pure logic over a flash interface, tested on the host); `main.c` owns the partition discovery via
+the bootrom, the ledger sector and the reboot.
+
 ## Host tests
 
 All logic that does not need hardware is compiled with the host compiler and tested:
@@ -432,6 +457,8 @@ src/bip32.c          BIP32 CKDpriv / CKDpub                                     
 src/chainaddr.c      EVM EIP-55 and Bitcoin bech32 / base58check addresses           (pure logic)
 src/u256.c, keccak.c, ripemd160.c   256-bit integers, Keccak-256, RIPEMD-160          (pure logic)
 src/storage.c        flash persistence: main record + inheritance record, double slot + CRC  (pure logic + flash port)
+src/update.c         field updates: staged image in the spare A/B partition, hash + image checks, trial ledger  (pure logic + flash port)
+pt/pincer1.json      partition table embedded in the image (A/B 1 MiB, secure Arm; storage + ledger in the unpartitioned tail)
 src/touch.c          debounce / long-touch / PIN tap rhythm                            (pure logic)
 src/scp03.c          GlobalPlatform SCP03 secure channel                               (pure logic)
 src/aes128.c         AES-128 ECB/CBC/CMAC                                              (pure logic)

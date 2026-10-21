@@ -33,6 +33,7 @@ set(PINCER_CORE_SOURCES
     src/policy.c
     src/consent.c
     src/storage.c
+    src/update.c
     src/touch.c
     src/proto.c
     src/aes128.c
@@ -99,7 +100,7 @@ if(BUILD_HOST_TESTS)
     set_source_files_properties(third_party/micro-ecc/uECC.c third_party/bech32/segwit_addr.c
                                 PROPERTIES COMPILE_OPTIONS "-w") # vendored as-is
 
-    foreach(t util proto touch storage solmsg policy consent keygen scp03 inheritance secp256k1 evmtx btcpsbt display trusted_ui)
+    foreach(t util proto touch storage update solmsg policy consent keygen scp03 inheritance secp256k1 evmtx btcpsbt display trusted_ui)
         add_executable(test_${t} test/test_${t}.c)
         target_link_libraries(test_${t} pincer_core)
         target_include_directories(test_${t} PRIVATE test)
@@ -129,6 +130,9 @@ else()
         message(FATAL_ERROR "pico-sdk ${PICO_SDK_VERSION_STRING} is too old: RP2350 needs a 2.x SDK")
     endif()
 
+    file(STRINGS src/proto.h PINCER_FW_VERSION_LINE REGEX "define PROTO_FW_VERSION")
+    string(REGEX REPLACE ".*\"([0-9]+)\\.([0-9]+)\\.[0-9]+\".*" "\\1" PINCER_FW_MAJOR "${PINCER_FW_VERSION_LINE}")
+    string(REGEX REPLACE ".*\"[0-9]+\\.([0-9]+)\\.[0-9]+\".*" "\\1" PINCER_FW_MINOR "${PINCER_FW_VERSION_LINE}")
     project(pincer1_consent C CXX ASM)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_CXX_STANDARD 17)
@@ -225,6 +229,7 @@ else()
         hardware_adc
         hardware_spi
         hardware_watchdog
+        pico_bootrom
     )
     pico_enable_stdio_usb(pincer1_consent 1)
     pico_enable_stdio_uart(pincer1_consent 0)
@@ -246,6 +251,15 @@ else()
         message(STATUS "pincer1_consent: image will be signed with ${PINCER_SIGN_KEY}; OTP rows -> ${CMAKE_BINARY_DIR}/pincer1_consent.otp.json")
     elseif(PICO_RP2350)
         message(STATUS "pincer1_consent: UNSIGNED image (set -DPINCER_SIGN_KEY=firmware/keys/pincer1-boot.pem for secure boot)")
+    endif()
+
+    # ---- A/B partitions + image version (field updates, docs/PROTOCOL.md "update_*"): the partition table
+    # is embedded in the image and written with it; the bootrom boots the newer valid image of the pair and
+    # the firmware stages the next one into the spare partition. Storage and the trial ledger live in the
+    # unpartitioned tail. ----
+    if(PICO_RP2350)
+        pico_embed_pt_in_binary(pincer1_consent ${CMAKE_CURRENT_SOURCE_DIR}/pt/pincer1.json)
+        pico_set_binary_version(pincer1_consent MAJOR ${PINCER_FW_MAJOR} MINOR ${PINCER_FW_MINOR})
     endif()
 
     pico_add_extra_outputs(pincer1_consent)
