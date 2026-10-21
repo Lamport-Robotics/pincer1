@@ -93,7 +93,7 @@ still cannot sign, because it cannot touch the pad or talk to the SE050 without 
 | Coercion ("sign this or else") | Duress word or duress rhythm opens the decoy wallet, which the owner funded at setup with a small, believable balance. The real wallet refuses everything until the real rhythm is tapped. |
 | Owner approves a correctly warned bad transaction | Not prevented. Pincer1 makes the truth audible; it does not override the owner. |
 | Replay of a recorded voice passphrase | Voice alone never authorises anything; face + lidar + touch are still required. |
-| Modified controller firmware | Does not boot: RP2350 secure boot, key hash in OTP (one-way). Remaining: nothing proves to the daemon *which* signed firmware is running (no attestation); a leaked signing key signs anything. |
+| Modified controller firmware | Does not boot: RP2350 secure boot, key hash in OTP (one-way). Field updates land in the spare A/B partition, need the owner's long touch, boot on trial and roll back by themselves unless the daemon confirms the new image (`docs/PROTOCOL.md`, "update"). Remaining: nothing proves to the daemon *which* signed firmware is running (no attestation); a leaked signing key signs anything. |
 | Fake robot (different hardware) | Not covered. The daemon pairs with whatever controller answers on USB; attestation is v2 work. |
 
 ## The optional features, and what each one trusts

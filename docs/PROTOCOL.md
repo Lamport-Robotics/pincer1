@@ -31,7 +31,7 @@ messages (`event`) carry no `id`.
 
 ```json
 → {"t":"hello"}
-← {"t":"hello","fw":"0.4.0","se050":true,"initialized":true,"pubkey":"<base58>",
+← {"t":"hello","fw":"0.5.0","se050":true,"initialized":true,"pubkey":"<base58>",
    "addresses":{"solana":"<base58>","evm":"0x…","bitcoin":"bc1q…"},"locked":false,
    "policy":{"daily_limit_lamports":"2000000000","spent_today_lamports":"0","day":20395,
              "daily_limit_wei":"0","spent_today_wei":"0","daily_limit_sats":"0","spent_today_sats":"0"},
@@ -441,6 +441,49 @@ after `init`: nothing leaves on a chain until its limit is set. The spend counte
 together at the day rollover (see `time`). Router changes: up to 8 owner entries beside the built-in set
 (`hello.routers`), persisted in the controller's flash; the display shows the chain and the full address
 while the rhythm is tapped and again after the change; built-in entries cannot be removed.
+
+### update (firmware, A/B partitions, owner's long touch)
+
+```json
+→ {"t":"update_begin","id":"f1","size":393216,"sha256":"<hex64>","version":"0.5.1"}
+← {"t":"update_begin","id":"f1","ok":true,"chunk":1024,"partition_size":1048576}
+   | {"t":"denied","id":"f1","reason":"not_supported"|"state"|"size"|"version"|"flash"}
+→ {"t":"update_chunk","id":"f2","off":0,"data":"<base64, ≤ chunk bytes, page aligned>"}   // sequential
+← {"t":"update_chunk","id":"f2","ok":true} | {"t":"denied","id":"f2","reason":"offset"|"length"|"state"|"flash"}
+→ {"t":"update_end","id":"f3"}
+← {"t":"update_end","id":"f3","ok":true} | {"t":"denied","id":"f3","reason":"size"|"hash"|"image"|"flash"|"state"}
+→ {"t":"update_apply","id":"f4"}
+← {"t":"pending","id":"f4","need":"long_touch"}      // display: FIRMWARE  v0.5.1  <hash prefix>  hold 3s to install
+← {"t":"update_apply","id":"f4","ok":true}            // then the controller reboots; the link drops
+   | {"t":"denied","id":"f4","reason":"state"|"timeout"|"locked"|"pin_not_set"|"duress"|"policy"}
+→ {"t":"update_commit","id":"f5"}   ← {"t":"update_commit","id":"f5","ok":true,"was_trial":true,"bought":true}
+→ {"t":"update_abort","id":"f6"}    ← {"t":"update_abort","id":"f6","ok":true}
+```
+
+The flash holds two image partitions (A and B, 1 MiB each, table embedded in the image) and the controller
+runs from one of them; `hello.update` says which (`partition`), whether a verified image waits in the other
+(`staged`) and whether the running image is still on trial (`trial`). The daemon streams a signed image
+into the spare partition: `begin` erases it and fixes the size, the hash and a version string (≤ 15
+chars); chunks must arrive in order, page aligned (256 B) and at most `chunk` bytes; `end` re-hashes what
+landed in flash, checks that the first 4 KiB carry a picobin block saying *executable, secure, RP2350* with
+a *signature* item, and reads the first page back. Any failure leaves the running image untouched and the
+stage empty. `begin` while a verified image is staged replaces it; `begin` on a board without a partition
+table (bench boards, RP2040) is `not_supported`.
+
+`update_apply` is an owner-authority request: on an initialised controller it needs the PIN set, the
+controller unlocked and not in duress, then a **long touch** while the display shows the version and the
+first four bytes of the hash. On a blank controller (before `init`) the long touch alone suffices. Approval
+arms a **trial ledger** (its own flash sector: partition number, version, boot counter) and reboots with
+the bootrom's flash-update boot pointed at the spare partition. The bootrom verifies the image signature
+against the key hash in OTP before running it; an image that was signed with another key simply never runs.
+
+The new image counts its boots in the ledger. The daemon reconnects, sees `hello.update.trial:true`, runs
+its own start-up checks (se050, display, no dev keys) and sends `update_commit`: the ledger is erased and,
+when the bootrom reports a pending "try before you buy", `rom_explicit_buy` makes the partition the
+preferred one (`bought`). Without a commit after **three boots** the new image erases its own first sector
+and reboots; the bootrom then finds only the previous image and the controller is back where it was. Keys,
+PIN, policy, routers and the inheritance arrangement live in flash regions outside both partitions and
+are never touched by an update; a rolled-back update leaves them as they were.
 
 ### time
 
