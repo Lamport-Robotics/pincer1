@@ -104,7 +104,13 @@ export interface Hello {
   display?: boolean;
   board?: string;
   inheritance?: { armed: boolean; inactivity_days: number; days_since_touch: number } | null;
+  /** Firmware update state (PROTOCOL §1 "update"): which A/B partition runs, whether a verified image waits in the other one, and whether this image is still on trial (boots counted, not yet committed). Absent on firmware before 0.5.0. */
+  update?: { partition: number; staged: boolean; trial: boolean };
 }
+
+export type UpdateReason = "not_supported" | "state" | "size" | "offset" | "length" | "flash" | "hash" | "image" | "version" | DenyReason;
+export type UpdateBegin = { ok: true; chunk: number; partition_size: number } | { ok: false; reason: UpdateReason };
+export type UpdateResult = { ok: true } | { ok: false; reason: UpdateReason };
 
 /**
  * tx / msg: Solana message / arbitrary bytes (ed25519).
@@ -145,6 +151,13 @@ export interface ControllerClient {
   inheritanceStatus(): Promise<InheritanceStatus>;
   inheritanceRelease(): Promise<{ ok: true; tx: Uint8Array } | { ok: false; reason: "not_expired" | "not_armed" }>;
   inheritanceClear(): Promise<boolean>;
+  /** Firmware update, PROTOCOL §1 "update": stream a signed image into the spare partition (`begin` → `chunk`* → `end`), then `apply` (owner's long touch, controller reboots into it on trial), then `commit` from the new image once it answers `hello`. */
+  updateBegin(size: number, sha256Hex: string, version: string): Promise<UpdateBegin>;
+  updateChunk(off: number, data: Uint8Array): Promise<UpdateResult>;
+  updateEnd(): Promise<UpdateResult>;
+  updateApply(onPending?: PendingHook, ttlMs?: number): Promise<UpdateResult>;
+  updateCommit(): Promise<{ ok: true; was_trial: boolean; bought: boolean } | { ok: false; reason: UpdateReason }>;
+  updateAbort(): Promise<void>;
   onEvent(cb: (e: ControllerEvent) => void): void;
   /** For the UI: is a request waiting for a touch, a long touch or the PIN rhythm right now? */
   pending(): { id: string; need: "touch" | "long_touch" | "pin" } | null;

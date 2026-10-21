@@ -17,7 +17,8 @@ import { parseMessage, looksLikeMessage } from "../tx/parse.js";
 import { looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
 import { parseTypedData, typedDataDigest } from "../chains/evm/message.js";
 import { netOf, parsePsbt, type BtcNetwork } from "../chains/bitcoin/psbt.js";
-import type { Addresses, Allowance, AnyClaims, BtcClaims, Claims, ControllerClient, ControllerEvent, DenyReason, EvmClaims, Hello, InheritanceStatus, MsgClaims, PendingHook, Policy, PolicyChain, SignKind } from "./types.js";
+import type { Addresses, Allowance, AnyClaims, BtcClaims, Claims, ControllerClient, ControllerEvent, DenyReason, EvmClaims, Hello, InheritanceStatus, MsgClaims, PendingHook, Policy, PolicyChain, SignKind, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
+import { FW_CHUNK, FW_PAGE, checkImage } from "../firmware.js";
 import { SYSTEM } from "../tx/known.js";
 import { EVM_ROUTERS } from "../swap/routers.js";
 
@@ -179,7 +180,7 @@ export class SimController implements ControllerClient {
 
   async hello(): Promise<Hello> {
     this.rollDay();
-    return { t: "hello", fw: "sim-0.2.0", se050: false, initialized: this.initialized, pubkey: this.initialized ? this.publicKey : null, addresses: this.initialized ? this.addresses : undefined, locked: this.locked, policy: { ...this.policy }, allowance: this.allow ? { ...this.allow } : null, duress_pin_set: this.duressPinSet, pin_set: this.pinSet, pin_failures: 0, dev_keys: false, display: false, board: "sim", inheritance: this.inh ? { armed: true, inactivity_days: this.inh.inactivityDays, days_since_touch: this.daysSinceTouch() } : null };
+    return { t: "hello", fw: this.fw, se050: false, initialized: this.initialized, pubkey: this.initialized ? this.publicKey : null, addresses: this.initialized ? this.addresses : undefined, locked: this.locked, policy: { ...this.policy }, allowance: this.allow ? { ...this.allow } : null, duress_pin_set: this.duressPinSet, pin_set: this.pinSet, pin_failures: 0, dev_keys: false, display: false, board: "sim", inheritance: this.inh ? { armed: true, inactivity_days: this.inh.inactivityDays, days_since_touch: this.daysSinceTouch() } : null, update: { partition: this.partition, staged: this.upd?.state === "verified", trial: this.trial } };
   }
 
   async init() {
@@ -420,6 +421,54 @@ export class SimController implements ControllerClient {
     if (ok) { if (chain === "evm") this.policy.daily_limit_wei = limit.toString(); else this.policy.daily_limit_sats = limit.toString(); }
     return ok;
   }
+  // ── firmware update: same checks as the firmware's update.c, in memory. `apply` "reboots" the sim: the
+  // staged version becomes `fw`, the partition flips, and the image is on trial until `commit`. ──
+  private fw = "sim-0.2.0";
+  private partition = 0;
+  private trial = false;
+  private upd: { state: "receiving" | "verified"; size: number; sha256: string; version: string; buf: Buffer; received: number } | null = null;
+  static readonly PARTITION_SIZE = 1024 * 1024;
+  async updateBegin(size: number, sha256Hex: string, version: string): Promise<UpdateBegin> {
+    if (this.upd?.state === "receiving") return { ok: false, reason: "state" };
+    if (size <= 0 || size > SimController.PARTITION_SIZE || size % FW_PAGE) return { ok: false, reason: "size" };
+    if (!version || version.length >= 16) return { ok: false, reason: "version" };
+    this.upd = { state: "receiving", size, sha256: sha256Hex.toLowerCase(), version, buf: Buffer.alloc(size, 0xff), received: 0 };
+    return { ok: true, chunk: FW_CHUNK, partition_size: SimController.PARTITION_SIZE };
+  }
+  async updateChunk(off: number, data: Uint8Array): Promise<UpdateResult> {
+    const u = this.upd;
+    if (!u || u.state !== "receiving") return { ok: false, reason: "state" };
+    if (off !== u.received) return { ok: false, reason: "offset" };
+    if (!data.length || data.length > FW_CHUNK || data.length % FW_PAGE || off + data.length > u.size) return { ok: false, reason: "length" };
+    u.buf.set(data, off); u.received += data.length;
+    return { ok: true };
+  }
+  async updateEnd(): Promise<UpdateResult> {
+    const u = this.upd;
+    if (!u || u.state !== "receiving") return { ok: false, reason: "state" };
+    this.upd = null;
+    if (u.received !== u.size) return { ok: false, reason: "size" };
+    if (createHash("sha256").update(u.buf).digest("hex") !== u.sha256) return { ok: false, reason: "hash" };
+    const c = checkImage(u.buf);
+    if (!c.ok) return { ok: false, reason: "image" };
+    this.upd = { ...u, state: "verified" };
+    return { ok: true };
+  }
+  async updateApply(onPending?: PendingHook, ttlMs = 60_000): Promise<UpdateResult> {
+    const u = this.upd;
+    if (!u || u.state !== "verified") return { ok: false, reason: "state" };
+    if (this.initialized && !this.pinSet) return { ok: false, reason: "pin_not_set" };
+    if (this.initialized && this.locked) return { ok: false, reason: "locked" };
+    if (this.duressActive) return { ok: false, reason: "duress" };
+    onPending?.({ need: "long_touch", parsed: { version: u.version } });
+    const ok = await this.waitTouch(`fw${Date.now()}`, "long_touch", ttlMs);
+    if (!ok) return { ok: false, reason: "timeout" };
+    this.upd = null; this.fw = u.version; this.partition ^= 1; this.trial = true;
+    return { ok: true };
+  }
+  async updateCommit() { const was = this.trial; this.trial = false; return { ok: true as const, was_trial: was, bought: false }; }
+  async updateAbort() { this.upd = null; }
+
   async close() {}
 }
 

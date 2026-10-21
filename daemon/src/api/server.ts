@@ -27,6 +27,7 @@ import type { ChainId } from "../chains/types.js";
 import { nonceAccountCreateTx } from "../offline/index.js";
 import type { Connection } from "@solana/web3.js";
 import { log } from "../config.js";
+import { flashFirmware, confirmFirmware, checkImage } from "../firmware.js";
 
 export interface ServerDeps {
   signer: Signer;
@@ -196,6 +197,23 @@ export class ApiServer {
     if (req.method === "POST" && url.pathname === "/agent/arm") { if (!this.d.agent) return json(400, { error: "agent_disabled" }); const b = await body(); const hours = Number(b.hours ?? 10); return json(200, { ok: await this.d.agent.arm(Math.floor(Date.now() / 1000) + hours * 3600) }); }
     if (req.method === "POST" && url.pathname === "/agent/morning") { if (!this.d.agent) return json(400, { error: "agent_disabled" }); return json(200, await this.d.agent.morning()); }
     if (req.method === "POST" && url.pathname === "/agent/tick") { if (!this.d.agent) return json(400, { error: "agent_disabled" }); return json(200, await this.d.agent.tick()); }
+    // ── controller firmware (PROTOCOL §1 "update"; local only, the robot's own operator) ──
+    if (url.pathname.startsWith("/firmware")) {
+      if (!local) return json(403, { error: "local_only" });
+      if (req.method === "GET" && url.pathname === "/firmware") { const h = await this.d.controller.hello(); return json(200, { fw: h.fw, update: h.update ?? null, pending: this.d.controller.pending() }); }
+      if (req.method === "POST" && url.pathname === "/firmware/check") { const b = await body(); return json(200, checkImage(new Uint8Array(Buffer.from(String(b.image ?? ""), "base64")))); }
+      if (req.method === "POST" && url.pathname === "/firmware/update") {
+        const b = await body();
+        const image = new Uint8Array(Buffer.from(String(b.image ?? ""), "base64"));
+        if (!image.length) return json(400, { error: "no_image" });
+        const r = await flashFirmware(this.d.controller, image, String(b.version ?? ""), { onProgress: (sent, total) => { if (sent === total || sent % (64 * 1024) === 0) log.info("firmware", { sent, total }); } });
+        if (r.ok) log.warn("firmware update accepted; the controller is rebooting into " + r.version + ", this daemon restarts when the link returns");
+        return json(r.ok ? 200 : 400, r);
+      }
+      if (req.method === "POST" && url.pathname === "/firmware/commit") return json(200, await confirmFirmware(this.d.controller));
+      if (req.method === "POST" && url.pathname === "/firmware/abort") { await this.d.controller.updateAbort(); return json(200, { ok: true }); }
+      return json(404, { error: "not_found" });
+    }
     if (req.method === "POST" && url.pathname === "/lock") { await this.d.controller.lock(); return json(200, { ok: true }); }
     if (req.method === "POST" && url.pathname === "/unlock") return json(200, { ok: await this.d.controller.unlock() });
     // ── decoy wallet: a second rhythm opens it through /unlock; the owner funds it so it looks real ──

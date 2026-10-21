@@ -10,6 +10,7 @@ import { config, log } from "./config.js";
 import { SimController } from "./controller/sim.js";
 import { SerialController } from "./controller/serial.js";
 import type { ControllerClient } from "./controller/types.js";
+import { confirmFirmware } from "./firmware.js";
 import { MockRobot, RobotClient, type RobotLink } from "./presence/client.js";
 import { Signer } from "./sign.js";
 import { ApiServer } from "./api/server.js";
@@ -72,6 +73,12 @@ async function main() {
     const r = await controller.setDuressPin();
     log.info(r.ok ? "duress rhythm set" : `duress rhythm not set (${r.reason}); set it later with POST /duress/set_pin`);
     hello = await controller.hello();
+  }
+  if (hello.update?.trial) {
+    // the image we are talking to is the one staged by the previous daemon run; it booted, answered hello and
+    // passed the checks above, so the trial ends. Left alone, the controller steps back after three boots.
+    const r = await confirmFirmware(controller);
+    log.warn(r.ok ? `firmware ${hello.fw} confirmed on partition ${hello.update.partition}` : `firmware ${hello.fw} NOT confirmed (${r.reason}); the controller will roll back`);
   }
   const owner = () => hello.pubkey!;
   const addresses = () => hello.addresses ?? { solana: hello.pubkey! };

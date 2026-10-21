@@ -3,7 +3,7 @@
  * unsolicited events. See docs/PROTOCOL.md §1.
  */
 import { SerialPort } from "serialport";
-import type { Addresses, Allowance, AnyClaims, Claims, ControllerClient, ControllerEvent, DenyReason, Hello, InheritanceStatus, PolicyChain, SignKind, PendingHook } from "./types.js";
+import type { Addresses, Allowance, AnyClaims, Claims, ControllerClient, ControllerEvent, DenyReason, Hello, InheritanceStatus, PolicyChain, SignKind, PendingHook, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
 
 type Waiter = { resolve: (m: any) => void; reject: (e: Error) => void; onPending?: PendingHook };
 
@@ -125,6 +125,21 @@ export class SerialController implements ControllerClient {
     const m = await this.request<any>(chain === "evm" ? { t: "policy", daily_limit_wei: limit.toString() } : { t: "policy", daily_limit_sats: limit.toString() });
     return !!m.ok;
   }
+  // ── firmware update (PROTOCOL §1 "update") ──
+  private static upd(m: any): UpdateResult { return m.ok ? { ok: true } : { ok: false, reason: (m.reason ?? "state") as UpdateReason }; }
+  async updateBegin(size: number, sha256Hex: string, version: string): Promise<UpdateBegin> {
+    const m = await this.request<any>({ t: "update_begin", size, sha256: sha256Hex, version }, undefined, 30_000); // erases the partition first
+    return m.ok ? { ok: true, chunk: Number(m.chunk), partition_size: Number(m.partition_size) } : { ok: false, reason: (m.reason ?? "state") as UpdateReason };
+  }
+  async updateChunk(off: number, data: Uint8Array) { return SerialController.upd(await this.request<any>({ t: "update_chunk", off, data: Buffer.from(data).toString("base64") }, undefined, 10_000)); }
+  async updateEnd() { return SerialController.upd(await this.request<any>({ t: "update_end" }, undefined, 10_000)); }
+  async updateApply(onPending?: PendingHook, ttlMs = 120_000) { return SerialController.upd(await this.request<any>({ t: "update_apply", ttl_ms: ttlMs }, undefined, ttlMs + 10_000, onPending)); }
+  async updateCommit() {
+    const m = await this.request<any>({ t: "update_commit" }, undefined, 10_000);
+    return m.ok ? { ok: true as const, was_trial: !!m.was_trial, bought: !!m.bought } : { ok: false as const, reason: (m.reason ?? "state") as UpdateReason };
+  }
+  async updateAbort() { await this.request({ t: "update_abort" }, undefined, 10_000); }
+
   async close() { await new Promise<void>((r) => this.port.close(() => r())); }
   get info() { return this.lastHello; }
 }
