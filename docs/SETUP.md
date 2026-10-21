@@ -82,7 +82,27 @@ signed on touch.
   balance and anything the house needs you to know. `GET /briefing` previews it; `POST /briefing/now` reads
   it on demand.
 
-## 7. Recovery
+## 7. Updating
+
+Jetson software ships as signed releases; the robot verifies the signature and every file hash before
+anything runs, switches `/opt/pincer1/current` to the new release, restarts the services and rolls back
+by itself if the daemon does not answer `/status` within 90 s.
+
+```bash
+deploy/jetson/update/release-key.sh ~/.pincer1/release-key.pem   # once; public half → /etc/pincer1/release.pub on the robot
+deploy/jetson/update/make-release.sh 1.2.3 ~/.pincer1/release-key.pem    # → pincer1-1.2.3.tar.gz
+scp pincer1-1.2.3.tar.gz pincer1.local:/tmp/
+ssh pincer1.local sudo pincer-update /tmp/pincer1-1.2.3.tar.gz          # verify, install, switch, health check
+ssh pincer1.local sudo pincer-rollback                                    # back to the previous release by hand
+```
+
+Controller firmware is updated through the daemon: `firmware/scripts/fw-update.sh <image.bin> <version>`
+stages the signed image, the display asks for a 3 s hold, the controller reboots into it on trial, and the
+daemon confirms it on its next start (`docs/PROTOCOL.md` §1 "update"). A trial image that is never
+confirmed steps aside after three boots.
+
+## 8. Recovery
 
 Lost or dead robot: import the 24 words into any Solana wallet (standard `m/44'/501'/0'/0'`). The decoy
-wallet has its own 24 words shown at setup; keep those too, it holds real (small) funds.
+wallet has its own 24 words shown at setup; keep those too, it holds real (small) funds. The long version,
+including theft, duress aftermath, the five-failure wipe and what an heir does, is `docs/RECOVERY.md`.

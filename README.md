@@ -49,7 +49,7 @@ curl -XPOST localhost:7401/dev/touch -d '{}'   # the touch pad, in software
 ```
 
 Each directory has its own README with build and test notes. Docs: `docs/SECURITY.md` (threat model),
-`docs/PROTOCOL.md` (the three interfaces), `docs/HARDWARE.md`, `docs/SETUP.md`.
+`docs/PROTOCOL.md` (the three interfaces), `docs/HARDWARE.md`, `docs/SETUP.md`, `docs/RECOVERY.md`.
 
 ## license
 
