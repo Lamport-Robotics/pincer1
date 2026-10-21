@@ -139,13 +139,14 @@ static void test_format(void)
     h.fw = PROTO_FW_VERSION; h.se050 = true; h.initialized = true; h.pubkey = key; h.daily_limit = 2000000000ull; h.day = 20395; h.pin_set = true;
     n = proto_fmt_hello(out, sizeof out, &h);
     CHECK(n > 0 && out[n - 1] == '\n');
-    CHECK_STR(out, "{\"t\":\"hello\",\"fw\":\"0.4.0\",\"se050\":true,\"initialized\":true,\"pubkey\":\"11111111111111111111111111111111\","
+    CHECK_STR(out, "{\"t\":\"hello\",\"fw\":\"0.5.0\",\"se050\":true,\"initialized\":true,\"pubkey\":\"11111111111111111111111111111111\","
                    "\"addresses\":{\"solana\":\"11111111111111111111111111111111\",\"evm\":null,\"bitcoin\":null},\"locked\":false,"
                    "\"policy\":{\"daily_limit_lamports\":\"2000000000\",\"spent_today_lamports\":\"0\",\"day\":20395,"
                    "\"daily_limit_wei\":\"0\",\"spent_today_wei\":\"0\",\"daily_limit_sats\":\"0\",\"spent_today_sats\":\"0\"},"
                    "\"allowance\":null,\"pin_set\":true,\"duress_pin_set\":false,\"pin_failures\":0,\"inheritance\":{\"armed\":false,\"inactivity_days\":0,\"days_since_touch\":0.0},"
                    "\"display\":false,\"routers\":{\"builtin\":[{\"chain\":\"solana\",\"address\":\"JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4\"},"
-                   "{\"chain\":\"evm\",\"address\":\"0x111111125421cA6dc452d289314280a0f8842A65\"},{\"chain\":\"evm\",\"address\":\"0xDef1C0ded9bec7F1a1670819833240f027b25EfF\"}],\"owner\":[]}}\n");
+                   "{\"chain\":\"evm\",\"address\":\"0x111111125421cA6dc452d289314280a0f8842A65\"},{\"chain\":\"evm\",\"address\":\"0xDef1C0ded9bec7F1a1670819833240f027b25EfF\"}],\"owner\":[]},"
+                   "\"update\":{\"partition\":0,\"staged\":false,\"trial\":false}}\n");
     /* display present + an owner-added router */
     {
         router_list_t rl;
@@ -158,7 +159,7 @@ static void test_format(void)
         {
             char hex[EVM_ADDR_HEX_LEN], want[128];
             evm_address_to_hex(thor, hex);
-            snprintf(want, sizeof want, "\"owner\":[{\"chain\":\"evm\",\"address\":\"%s\"}]}}\n", hex);
+            snprintf(want, sizeof want, "\"owner\":[{\"chain\":\"evm\",\"address\":\"%s\"}]},\"update\":", hex);
             CHECK(strstr(out, want) != NULL);
         }
         h.display = false; h.routers = NULL;
@@ -435,8 +436,41 @@ static void test_format_multichain(void)
     CHECK_STR(out, "{\"t\":\"denied\",\"id\":\"m1\",\"reason\":\"unsupported_typed_data\"}\n");
 }
 
+static void test_update_requests(void)
+{
+    proto_req_t r;
+    char out[256];
+    CHECK_EQ(proto_parse_request("{\"t\":\"update_begin\",\"id\":\"u1\",\"size\":8192,\"sha256\":\"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff\",\"version\":\"0.5.0\"}", &r), PROTO_OK);
+    CHECK_EQ(r.type, PROTO_REQ_UPDATE_BEGIN);
+    CHECK_EQ(r.update.size, 8192);
+    CHECK_EQ(r.update.sha256[0], 0x00);
+    CHECK_EQ(r.update.sha256[31], 0xff);
+    CHECK_STR(r.update.version, "0.5.0");
+    CHECK(proto_parse_request("{\"t\":\"update_begin\",\"id\":\"u1\",\"size\":8192,\"sha256\":\"zz\",\"version\":\"0.5.0\"}", &r) != PROTO_OK);
+    CHECK(proto_parse_request("{\"t\":\"update_begin\",\"id\":\"u1\",\"size\":0,\"sha256\":\"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff\",\"version\":\"0.5.0\"}", &r) != PROTO_OK);
+    CHECK_EQ(proto_parse_request("{\"t\":\"update_chunk\",\"id\":\"u2\",\"off\":1024,\"data\":\"AAECAw==\"}", &r), PROTO_OK);
+    CHECK_EQ(r.type, PROTO_REQ_UPDATE_CHUNK);
+    CHECK_EQ(r.update.off, 1024);
+    CHECK_EQ(r.update.len, 4);
+    CHECK_EQ(r.update.data[3], 3);
+    CHECK(proto_parse_request("{\"t\":\"update_chunk\",\"id\":\"u2\",\"off\":0,\"data\":\"\"}", &r) != PROTO_OK);
+    CHECK_EQ(proto_parse_request("{\"t\":\"update_end\",\"id\":\"u3\"}", &r), PROTO_OK);
+    CHECK_EQ(r.type, PROTO_REQ_UPDATE_END);
+    CHECK_EQ(proto_parse_request("{\"t\":\"update_apply\",\"id\":\"u4\"}", &r), PROTO_OK);
+    CHECK_EQ(r.type, PROTO_REQ_UPDATE_APPLY);
+    CHECK_EQ(proto_parse_request("{\"t\":\"update_commit\",\"id\":\"u5\"}", &r), PROTO_OK);
+    CHECK_EQ(r.type, PROTO_REQ_UPDATE_COMMIT);
+    CHECK_EQ(proto_parse_request("{\"t\":\"update_abort\",\"id\":\"u6\"}", &r), PROTO_OK);
+    CHECK_EQ(r.type, PROTO_REQ_UPDATE_ABORT);
+    CHECK(proto_fmt_update_begin(out, sizeof out, "u1", 1024, 1048576) > 0);
+    CHECK_STR(out, "{\"t\":\"update_begin\",\"id\":\"u1\",\"ok\":true,\"chunk\":1024,\"partition_size\":1048576}\n");
+    CHECK(proto_fmt_update_commit(out, sizeof out, "u5", true, false) > 0);
+    CHECK_STR(out, "{\"t\":\"update_commit\",\"id\":\"u5\",\"ok\":true,\"was_trial\":true,\"bought\":false}\n");
+}
+
 int main(void)
 {
+    RUN(test_update_requests);
     RUN(test_framer);
     RUN(test_parse_requests);
     RUN(test_parse_sign);

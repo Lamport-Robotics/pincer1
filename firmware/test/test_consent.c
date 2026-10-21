@@ -1128,8 +1128,40 @@ static void test_duress_rhythm(void)
     CHECK_EQ(consent_pin_verdict(&c, CONSENT_VERDICT_WRONG, ms, &a), CONSENT_PIN_WIPE);
 }
 
+static void test_update_apply(void)
+{
+    consent_t c;
+    consent_reason_t why;
+    consent_action_t act;
+    const uint8_t hash[4] = {1, 2, 3, 4};
+    memset(&c, 0, sizeof c);
+    consent_init(&c, NULL, 1000);
+    c.locked = false;
+    /* blank controller: a long touch is enough */
+    CHECK_EQ(consent_begin_update_apply(&c, "u1", "0.5.0", hash, 1000, &why), CONSENT_R_PENDING);
+    CHECK_EQ(c.pending.need, CONSENT_NEED_LONG_TOUCH);
+    CHECK(!consent_touch(&c, false, 1100, &act)); /* a tap is not consent */
+    CHECK(consent_touch(&c, true, 1200, &act));
+    CHECK_EQ(act.op, CONSENT_OP_UPDATE_APPLY);
+    CHECK_STR(act.update_version, "0.5.0");
+    CHECK_EQ(act.update_hash[3], 4);
+    /* too long a version string is refused */
+    CHECK_EQ(consent_begin_update_apply(&c, "u2", "0123456789abcdefg", hash, 1300, &why), CONSENT_R_DENIED);
+    /* with a wallet: PIN must exist and the controller must be unlocked */
+    c.p.initialized = true;
+    c.p.pin_set = false;
+    CHECK_EQ(consent_begin_update_apply(&c, "u3", "0.5.0", hash, 1400, &why), CONSENT_R_DENIED);
+    CHECK_EQ(why, CONSENT_DENY_PIN_NOT_SET);
+    c.p.pin_set = true;
+    c.locked = true;
+    CHECK_EQ(consent_begin_update_apply(&c, "u4", "0.5.0", hash, 1500, &why), CONSENT_R_DENIED);
+    c.locked = false;
+    CHECK_EQ(consent_begin_update_apply(&c, "u5", "0.5.0", hash, 1600, &why), CONSENT_R_PENDING);
+}
+
 int main(void)
 {
+    RUN(test_update_apply);
     memset(SYS, 0, 32); memset(JUP, 0x99, 32); memset(TOK, 0x77, 32);
     RUN(test_init_flow);
     RUN(test_sign_touch_and_timeout);

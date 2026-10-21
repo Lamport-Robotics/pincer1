@@ -81,6 +81,24 @@ static bool get_evm_addr(const cJSON *obj, const char *key, uint8_t out[20], boo
     return true;
 }
 
+static int hexval(char ch)
+{
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+    if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+    return -1;
+}
+static bool hex_decode(const char *hex, uint8_t *out, size_t n)
+{
+    size_t i;
+    for (i = 0; i < n; i++) {
+        int hi = hexval(hex[2 * i]), lo = hexval(hex[2 * i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return true;
+}
+
 static bool get_str(const cJSON *obj, const char *key, char *out, size_t cap, bool required)
 {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(obj, key);
@@ -378,6 +396,33 @@ int proto_parse_request(const char *line, proto_req_t *req)
         req->type = PROTO_REQ_LOCK;
     } else if (strcmp(t->valuestring, "unlock") == 0) {
         req->type = PROTO_REQ_UNLOCK;
+    } else if (strcmp(t->valuestring, "update_begin") == 0) {
+        char hex[65];
+        uint64_t size;
+        req->type = PROTO_REQ_UPDATE_BEGIN;
+        if (!get_u64(root, "size", &size, true) || size == 0 || size > 0xffffffffu) { rc = PROTO_E_FIELD; goto out; }
+        req->update.size = (uint32_t)size;
+        if (!get_str(root, "sha256", hex, sizeof hex, true) || strlen(hex) != 64 || !hex_decode(hex, req->update.sha256, 32)) { rc = PROTO_E_FIELD; goto out; }
+        if (!get_str(root, "version", req->update.version, sizeof req->update.version, true)) rc = PROTO_E_FIELD;
+    } else if (strcmp(t->valuestring, "update_chunk") == 0) {
+        uint64_t off;
+        const cJSON *d = cJSON_GetObjectItemCaseSensitive(root, "data");
+        int n;
+        req->type = PROTO_REQ_UPDATE_CHUNK;
+        if (!get_u64(root, "off", &off, true) || off > 0xffffffffu) { rc = PROTO_E_FIELD; goto out; }
+        req->update.off = (uint32_t)off;
+        if (!cJSON_IsString(d)) { rc = PROTO_E_FIELD; goto out; }
+        n = base64_decode(d->valuestring, strlen(d->valuestring), req->update.data, sizeof req->update.data);
+        if (n <= 0) { rc = PROTO_E_FIELD; goto out; }
+        req->update.len = (uint16_t)n;
+    } else if (strcmp(t->valuestring, "update_end") == 0) {
+        req->type = PROTO_REQ_UPDATE_END;
+    } else if (strcmp(t->valuestring, "update_apply") == 0) {
+        req->type = PROTO_REQ_UPDATE_APPLY;
+    } else if (strcmp(t->valuestring, "update_commit") == 0) {
+        req->type = PROTO_REQ_UPDATE_COMMIT;
+    } else if (strcmp(t->valuestring, "update_abort") == 0) {
+        req->type = PROTO_REQ_UPDATE_ABORT;
     } else if (strcmp(t->valuestring, "policy") == 0) {
         /* any subset of the three limits, at least one */
         req->type = PROTO_REQ_POLICY;
@@ -601,6 +646,12 @@ int proto_fmt_hello(char *out, size_t cap, const proto_hello_t *h)
         arr = cJSON_AddArrayToObject(r, "owner");
         for (i = 0; h->routers && i < h->routers->n && i < ROUTERS_MAX_OWNER; i++) add_router_entry(arr, &h->routers->e[i]);
     }
+        {
+        cJSON *up = cJSON_AddObjectToObject(o, "update");
+        cJSON_AddNumberToObject(up, "partition", h->partition);
+        cJSON_AddBoolToObject(up, "staged", h->update_staged);
+        cJSON_AddBoolToObject(up, "trial", h->trial);
+    }
     return finish(o, out, cap);
 }
 
@@ -768,6 +819,24 @@ int proto_fmt_elevated(char *out, size_t cap, const char *id, uint32_t until_ms)
     cJSON *o = begin("elevated", id);
     if (!o) return -1;
     cJSON_AddNumberToObject(o, "until_ms", (double)until_ms);
+    return finish(o, out, cap);
+}
+
+int proto_fmt_update_begin(char *out, size_t cap, const char *id, uint32_t chunk, uint32_t partition_size)
+{
+    cJSON *o = begin("update_begin", id);
+    cJSON_AddBoolToObject(o, "ok", true);
+    cJSON_AddNumberToObject(o, "chunk", chunk);
+    cJSON_AddNumberToObject(o, "partition_size", partition_size);
+    return finish(o, out, cap);
+}
+
+int proto_fmt_update_commit(char *out, size_t cap, const char *id, bool was_trial, bool bought)
+{
+    cJSON *o = begin("update_commit", id);
+    cJSON_AddBoolToObject(o, "ok", true);
+    cJSON_AddBoolToObject(o, "was_trial", was_trial);
+    cJSON_AddBoolToObject(o, "bought", bought);
     return finish(o, out, cap);
 }
 

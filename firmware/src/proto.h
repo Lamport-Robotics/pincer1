@@ -15,7 +15,7 @@
 #define PROTO_LINE_MAX 8192
 #define PROTO_ID_MAX CONSENT_ID_MAX
 #define PROTO_MAX_BYTES 4096 /* >= SOLMSG_MAX_BYTES, EVMTX_MAX_BYTES, BTCPSBT_MAX_BYTES; each parser re-checks its own bound */
-#define PROTO_FW_VERSION "0.4.0"
+#define PROTO_FW_VERSION "0.5.0"
 
 typedef enum {
     PROTO_KIND_TX = 0,   /* Solana message */
@@ -59,6 +59,12 @@ typedef enum {
     PROTO_REQ_REVEAL_SEED,         /* always refused (not_supported): the words never cross the link */
     PROTO_REQ_SET_DURESS_PIN,      /* second rhythm -> decoy slot */
     PROTO_REQ_DECOY_ADDRESSES,     /* PIN-gated read of the decoy addresses */
+    PROTO_REQ_UPDATE_BEGIN,        /* firmware update: size, sha256, version -> erase the spare partition */
+    PROTO_REQ_UPDATE_CHUNK,        /* sequential page-aligned bytes */
+    PROTO_REQ_UPDATE_END,          /* hash + image checks */
+    PROTO_REQ_UPDATE_APPLY,        /* long touch -> arm the trial ledger, reboot into the new image */
+    PROTO_REQ_UPDATE_COMMIT,       /* the new image is up and talking: end its trial */
+    PROTO_REQ_UPDATE_ABORT,        /* drop whatever was staged */
 } proto_req_type_t;
 
 typedef struct {
@@ -90,6 +96,14 @@ typedef struct {
         consent_allowance_t a;
     } allowance;
     consent_inheritance_t inheritance; /* inheritance_set: inactivity_days, warn_days, heir */
+    struct {
+        uint32_t size;        /* update_begin */
+        uint8_t sha256[32];   /* update_begin */
+        char version[16];     /* update_begin */
+        uint32_t off;         /* update_chunk */
+        uint8_t data[1024];   /* update_chunk, decoded */
+        uint16_t len;
+    } update;
 } proto_req_t;
 
 enum {
@@ -131,6 +145,10 @@ typedef struct {
     uint64_t spent_today_sats;
     bool display;                  /* a trusted display is driven by this firmware (false: PINCER_NO_DISPLAY build) */
     const router_list_t *routers;  /* owner-added routers (NULL = none); built-ins are always listed */
+    /* firmware update state (appended) */
+    int8_t partition;              /* A/B partition this image booted from, -1 when there is no table */
+    bool update_staged;            /* a verified image waits for the owner's touch */
+    bool trial;                    /* this image is on trial: `update_commit` or it rolls back */
 } proto_hello_t;
 
 typedef struct {
@@ -169,6 +187,8 @@ int proto_fmt_decoy_addresses(char *out, size_t cap, const char *id, const proto
 int proto_fmt_elevated(char *out, size_t cap, const char *id, uint32_t until_ms);
 int proto_fmt_ok(char *out, size_t cap, const char *t, const char *id); /* {"t":t,"id":id,"ok":true} */
 int proto_fmt_simple(char *out, size_t cap, const char *t, const char *id); /* {"t":t[,"id":id]} */
+int proto_fmt_update_begin(char *out, size_t cap, const char *id, uint32_t chunk, uint32_t partition_size);
+int proto_fmt_update_commit(char *out, size_t cap, const char *id, bool was_trial, bool bought);
 int proto_fmt_event(char *out, size_t cap, const char *ev, const char *what);
 /* {"t":"event","ev":"inheritance_warning","days_left":n} */
 int proto_fmt_event_days_left(char *out, size_t cap, uint32_t days_left);

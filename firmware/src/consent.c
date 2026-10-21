@@ -427,6 +427,22 @@ consent_result_t consent_begin_policy_multi(consent_t *c, const char *id, const 
     return CONSENT_R_PENDING;
 }
 
+consent_result_t consent_begin_update_apply(consent_t *c, const char *id, const char *version, const uint8_t hash[4],
+                                            uint32_t now_ms, consent_reason_t *why)
+{
+    size_t vl = version ? strlen(version) : 0;
+    if (vl == 0 || vl >= sizeof c->pending.update_version) return deny(CONSENT_DENY_POLICY, why);
+    if (c->p.initialized) {
+        /* a wallet is on this controller: the same authority as a policy change */
+        if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
+        if (!gate(c, why, false)) return CONSENT_R_DENIED;
+    }
+    start_pending(c, CONSENT_OP_UPDATE_APPLY, id, CONSENT_NEED_LONG_TOUCH, 0, now_ms);
+    memcpy(c->pending.update_version, version, vl + 1);
+    memcpy(c->pending.update_hash, hash, 4);
+    return CONSENT_R_PENDING;
+}
+
 consent_result_t consent_begin_policy(consent_t *c, const char *id, uint64_t daily_limit, uint32_t now_ms,
                                       consent_reason_t *why)
 {
@@ -579,6 +595,10 @@ static void complete_pending(consent_t *c, uint32_t now_ms, consent_action_t *ou
     case CONSENT_OP_INHERITANCE_CLEAR:
         memset(&c->ih.inh, 0, sizeof c->ih.inh);
         c->ih_dirty = true;
+        break;
+    case CONSENT_OP_UPDATE_APPLY:
+        memcpy(out->update_version, c->pending.update_version, sizeof out->update_version);
+        memcpy(out->update_hash, c->pending.update_hash, sizeof out->update_hash);
         break;
     case CONSENT_OP_INIT:
     case CONSENT_OP_INIT_WORDS:

@@ -80,6 +80,7 @@ typedef enum {
     CONSENT_OP_INIT_WORDS,        /* after INIT: the owner taps through the seed words on the display */
     CONSENT_OP_SET_DURESS_PIN,    /* a second rhythm that unlocks into the decoy slot */
     CONSENT_OP_DECOY_ADDRESSES,   /* PIN-gated read of the decoy slot's addresses */
+    CONSENT_OP_UPDATE_APPLY,      /* reboot into a staged, verified firmware image (long touch) */
 } consent_op_t;
 
 typedef enum {
@@ -165,6 +166,8 @@ typedef struct {
     consent_inheritance_t inh;         /* for INHERITANCE_SET: what to arm once the signature exists */
     uint8_t page;                      /* for CONSENT_TOUCH_PAGE: the page to render next */
     consent_policy_req_t policy;       /* for POLICY: what was applied (router add/remove for the display) */
+    char update_version[16];           /* for UPDATE_APPLY: what the owner approved */
+    uint8_t update_hash[4];
 } consent_action_t;
 
 typedef struct {
@@ -204,6 +207,8 @@ typedef struct {
         uint8_t pin_real[CONSENT_PIN_CODE_LEN]; /* set_duress_pin: the verified real code (must differ) */
         bool have_pin_real;
         consent_inheritance_t inh; /* inheritance_set request */
+        char update_version[16];   /* update_apply: shown on the display */
+        uint8_t update_hash[4];
     } pending;
 
     struct {
@@ -259,6 +264,10 @@ consent_result_t consent_begin_unlock(consent_t *c, const char *id, uint32_t now
 consent_result_t consent_begin_policy(consent_t *c, const char *id, uint64_t daily_limit, uint32_t now_ms,
                                       consent_reason_t *why);
 /* Any subset of the three per-chain limits in one PIN-gated request (denied policy when none is set). */
+/* Reboot into a staged firmware image. Owner authority when a wallet exists (PIN verified, not duress);
+ * a blank controller may be updated with a long touch alone. */
+consent_result_t consent_begin_update_apply(consent_t *c, const char *id, const char *version, const uint8_t hash[4],
+                                            uint32_t now_ms, consent_reason_t *why);
 consent_result_t consent_begin_policy_multi(consent_t *c, const char *id, const consent_policy_req_t *req,
                                             uint32_t now_ms, consent_reason_t *why);
 consent_result_t consent_begin_allowance(consent_t *c, const char *id, const consent_allowance_t *a,
