@@ -155,8 +155,10 @@ export class Signer {
       return { ok: false, reason: "blocked", detail: why, parsed, explanation, risk };
     }
 
-    const requirePresence = this.cfg.PINCER_MODE === "prod" || req.source !== "agent";
-    if (requirePresence && req.source !== "agent" && !this.robot.ownerPresent()) {
+    // the overnight agent is the one caller that runs while the owner sleeps: its requests skip the presence
+    // check in every mode, and what they may sign is bounded by the allowance the owner granted with a long
+    // touch (the controller signs nothing else without a touch). Everything else needs the owner in the room.
+    if (req.source !== "agent" && !this.robot.ownerPresent()) {
       await this.robot.say("Someone wants a signature, but I can't see you. Come over and look at me.");
       return { ok: false, reason: "owner_not_present", detail: "owner not verified in the room", parsed, explanation, risk };
     }

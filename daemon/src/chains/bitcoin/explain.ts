@@ -1,3 +1,4 @@
+import { originAllowed } from "../../risk/filter.js";
 /** Spoken sentences and the scam filter for Bitcoin PSBTs. */
 import type { Explanation } from "../../tx/explain.js";
 import { short } from "../../tx/explain.js";
@@ -82,7 +83,7 @@ export function assessBtc(p: BtcParsed, ctx: AssessCtx): RiskVerdict {
     else if (share > 0.5 && !(p.dest && ctx.addressBook[p.dest])) raise("high", `it moves ${Math.round(share * 100)}% of your bitcoin.`);
   }
   if (p.satsOut > ctx.dailyLimit) raise("medium", "it is above your daily limit; I'll need a long touch.");
-  if (ctx.origin && ctx.originAllowlist.length && !ctx.originAllowlist.some((o) => ctx.origin!.startsWith(o)) && p.satsOut > 100_000n) raise("medium", `the request comes from ${ctx.origin.replace(/^https?:\/\//, "")}, which is not on your trusted sites.`);
+  if (ctx.origin && ctx.originAllowlist.length && !originAllowed(ctx.origin, ctx.originAllowlist) && p.satsOut > 100_000n) raise("medium", `the request comes from ${ctx.origin.replace(/^https?:\/\//, "")}, which is not on your trusted sites.`);
   if (p.foreignInputs > 0) raise("medium", "other people's coins are in this transaction (a coinjoin or payjoin).");
 
   if (reasons.length === 0) reasons.push("nothing unusual.");

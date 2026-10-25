@@ -6,6 +6,8 @@
  * Signals come from a provider behind an interface (`signals.ts`) so the product name of the feed is a
  * configuration detail, not code.
  */
+import { verifyJupiterTx } from "../swap/verify.js";
+import { parseMessage } from "../tx/parse.js";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
 import type { Signer } from "../sign.js";
 import type { ControllerClient } from "../controller/types.js";
@@ -31,6 +33,8 @@ const SOL = "So11111111111111111111111111111111111111112";
 const ALLOWANCE_PROGRAMS = [JUPITER_V6, SYSTEM, TOKEN, TOKEN_2022, ATA, COMPUTE_BUDGET];
 
 export class Agent {
+  /** token accounts the agent knows to be the owner's (its own positions' ATAs); anything else is a drain */
+  private ownAccounts = new Set<string>();
   private positions: Position[] = [];
   private proposals: Decision[] = [];
   private actions: string[] = [];
@@ -98,7 +102,7 @@ export class Agent {
     return { acted, proposed: this.proposals.length };
   }
 
-  private async execute(d: Decision): Promise<boolean> {
+  private async execute(d: Decision, source: "agent" | "api" = "agent"): Promise<boolean> {
     if (d.kind === "hold") return false;
     try {
       const owner = this.getOwner();
@@ -106,7 +110,13 @@ export class Agent {
       const quote = await jupiterQuote(inMint, outMint, amount);
       const txB64 = await jupiterSwapTx(quote, owner);
       const txBytes = new Uint8Array(Buffer.from(txB64, "base64"));
-      const r = await this.signer.sign({ txBytes, source: "agent" });
+      // the bytes come from a web API: before the allowance can sign them without a touch they must be exactly
+      // the swap that was quoted (router, direction, amounts, min-out, destination = the owner's own account)
+      const tx = VersionedTransaction.deserialize(txBytes);
+      const parsed = parseMessage(tx.message.serialize(), { owner });
+      verifyJupiterTx(parsed, BigInt(String(quote.otherAmountThreshold ?? quote.outAmount)), Number(quote.slippageBps ?? 0), amount);
+      if (parsed.tokenOut.some((t) => t.dest && !this.ownAccounts.has(t.dest))) throw new Error("tokens would leave to an account that is not the owner's");
+      const r = await this.signer.sign({ txBytes, source });
       if (!r.ok) { this.actions.push(`${d.say} → not signed (${r.reason})`); return false; }
       const sig = await this.conn.sendRawTransaction(r.signedTx, { skipPreflight: false, maxRetries: 3 });
       if (d.kind === "buy") this.positions.push({ mint: d.mint, costLamports: d.lamports, tokenAmount: BigInt(quote.outAmount), entryPrice: Number(d.lamports) / Number(quote.outAmount), lastPrice: Number(d.lamports) / Number(quote.outAmount), openedAt: Date.now(), sig });
@@ -123,15 +133,15 @@ export class Agent {
   async morning(): Promise<Report> {
     this.report = buildReport({ actions: this.actions, positions: this.positions, proposals: this.proposals, budgetLamports: this.cfg.budgetLamports });
     await this.robot.morningReport(this.report.items);
+    // the night is over: nothing from here on rides the allowance, every proposal takes presence and a touch
+    await this.controller.allowance({ revoke: true });
     for (const p of this.proposals) {
       await this.robot.say(`${p.say}. Touch me to do it, or say no.`);
-      // Proposals are executed through the normal presence-gated path (touch required, no allowance).
-      const ok = await this.execute({ ...p, autonomous: false });
+      const ok = await this.execute({ ...p, autonomous: false }, "api");
       this.actions.push(ok ? `morning: ${p.say}` : `morning: skipped ${p.say}`);
     }
     this.proposals = [];
     this.actions = [];
-    await this.controller.allowance({ revoke: true });
     return this.report;
   }
 }

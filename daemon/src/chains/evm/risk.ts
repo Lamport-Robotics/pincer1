@@ -1,3 +1,4 @@
+import { originAllowed } from "../../risk/filter.js";
 /**
  * The EVM scam filter. Same shape as risk/filter.ts: explicit rules, each one a sentence the robot can
  * say, the worst level wins.
@@ -96,7 +97,7 @@ export function assessEvm(p: EvmParsed, ctx: AssessCtx): RiskVerdict {
   }
 
   // ── origin ──
-  if (ctx.origin && ctx.originAllowlist.length && !ctx.originAllowlist.some((o) => ctx.origin!.startsWith(o))) {
+  if (ctx.origin && ctx.originAllowlist.length && !originAllowed(ctx.origin, ctx.originAllowlist)) {
     if (p.value > 5n * 10n ** 17n || p.tokenOut.length || p.dangers.length) raise("medium", `the request comes from ${ctx.origin.replace(/^https?:\/\//, "")}, which is not on your trusted sites.`);
   }
 

@@ -180,7 +180,7 @@ export class SimController implements ControllerClient {
 
   async hello(): Promise<Hello> {
     this.rollDay();
-    return { t: "hello", fw: this.fw, se050: false, initialized: this.initialized, pubkey: this.initialized ? this.publicKey : null, addresses: this.initialized ? this.addresses : undefined, locked: this.locked, policy: { ...this.policy }, allowance: this.allow ? { ...this.allow } : null, duress_pin_set: this.duressPinSet, pin_set: this.pinSet, pin_failures: 0, dev_keys: false, display: false, board: "sim", inheritance: this.inh ? { armed: true, inactivity_days: this.inh.inactivityDays, days_since_touch: this.daysSinceTouch() } : null, update: { partition: this.partition, staged: this.upd?.state === "verified", trial: this.trial } };
+    return { t: "hello", fw: this.fw, se050: false, initialized: this.initialized, pubkey: this.initialized ? this.publicKey : null, addresses: this.initialized ? this.addresses : undefined, locked: this.locked, policy: { ...this.policy }, allowance: this.allow ? { ...this.allow } : null, duress_pin_set: this.duressPinSet, pin_set: this.pinSet, pin_failures: 0, dev_keys: false, display: false, board: "sim", inheritance: this.inh ? { armed: true, inactivity_days: this.inh.inactivityDays, days_since_touch: this.daysSinceTouch() } : null, update: { partition: this.partition, staged: this.upd?.state === "verified", trial: this.trial, secure_boot: false } };
   }
 
   async init() {

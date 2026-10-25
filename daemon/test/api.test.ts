@@ -3,6 +3,7 @@ import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import http from "node:http";
 import { Connection } from "@solana/web3.js";
 import WebSocket from "ws";
 import { ApiServer } from "../src/api/server.js";
@@ -85,8 +86,31 @@ describe("extension protocol", () => {
     const s = await fetch(`http://127.0.0.1:${port}/status`).then((r) => r.json());
     expect(s.pubkey).toBe(sim.publicKey);
     expect(s.controller.se050).toBe(false);
-    const e = await fetch(`http://127.0.0.1:${port}/explain`, { method: "POST", body: JSON.stringify({ tx: Buffer.from(F.legacy([F.transfer(F.stranger, 1)])).toString("base64") }) }).then((r) => r.json());
+    const e = await fetch(`http://127.0.0.1:${port}/explain`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tx: Buffer.from(F.legacy([F.transfer(F.stranger, 1)])).toString("base64") }) }).then((r) => r.json());
+    // a plain form post (what a hostile page can send without a preflight) is refused
+    expect((await fetch(`http://127.0.0.1:${port}/explain`, { method: "POST", body: "{}" })).status).toBe(415);
+    // and so is a request whose Host does not name this machine (DNS rebinding); fetch() refuses to forge Host, node:http does not
+    const rebound = await new Promise<number>((resolve, reject) => { const rq = http.request({ host: "127.0.0.1", port, path: "/status", headers: { host: "evil.example" } }, (r) => { r.resume(); resolve(r.statusCode ?? 0); }); rq.on("error", reject); rq.end(); });
+    expect(rebound).toBe(403);
     expect(e.parsed.lamportsOut).toBe("1000000000");
     expect(e.risk).toBe("low");
   });
+
+  it("three wrong pairing codes retire the code", async () => {
+    const code = await api.newPairingCode();
+    const c = client(); await c.open;
+    const wrong = code === "000000" ? "111111" : "000000";
+    const t0 = Date.now();
+    c.send({ t: "pair", code: wrong });
+    expect((await c.next()).error).toBe("bad_code");
+    c.send({ t: "pair", code: wrong });
+    expect((await c.next()).error).toBe("bad_code");
+    c.send({ t: "pair", code: wrong });
+    expect((await c.next()).error).toBe("code_retired");
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1000 + 2000 + 3000 - 50); // each miss waits longer
+    c.send({ t: "pair", code }); // the right code is worthless now
+    expect((await c.next()).error).toBe("bad_code");
+    expect(robot.spoken.at(-1)).toMatch(/cancelled/);
+    c.ws.close();
+  }, 15_000);
 });

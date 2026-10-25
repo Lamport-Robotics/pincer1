@@ -40,7 +40,7 @@ describe("api: multi-chain status, settings and signTransaction", () => {
     robotSettings = h.robot.settingsLog;
   });
   afterAll(() => api.close());
-  const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
 
   it("GET /status lists every address, the chains with adapters, mode and brain", async () => {
     const s = await fetch(`http://127.0.0.1:${port}/status`).then((r) => r.json());

@@ -50,7 +50,7 @@ describe("flash flow on the sim", () => {
     expect(sent.at(-1)).toBe(10_240);
     const h = await sim.hello();
     expect(h.fw).toBe("0.5.0");
-    expect(h.update).toEqual({ partition: 1, staged: false, trial: true });
+    expect(h.update).toEqual({ partition: 1, staged: false, trial: true, secure_boot: false });
     expect(await confirmFirmware(sim)).toEqual({ ok: true, was_trial: true, bought: false });
     expect((await sim.hello()).update?.trial).toBe(false);
   });

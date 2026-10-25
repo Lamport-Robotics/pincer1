@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseMessage } from "../src/tx/parse.js";
 import { assess, isLookalike } from "../src/risk/filter.js";
+import { originAllowed } from "../src/risk/filter.js";
 import type { AddressIntel } from "../src/risk/intel.js";
 import * as F from "./fixtures.js";
 
@@ -74,5 +75,17 @@ describe("scam filter", () => {
     expect(big.reasons.some((r) => r.includes("not on your trusted sites"))).toBe(true);
     const small = assess({ tx: parse([F.transfer(F.stranger, 0.01)]), owner: own, origin: "https://random.site", originAllowlist: ["https://pump.fun"] });
     expect(small.level).toBe("low");
+  });
+});
+
+describe("originAllowed", () => {
+  it("matches the whole origin, never a prefix", () => {
+    const allow = ["https://pump.fun", "https://jup.ag"];
+    expect(originAllowed("https://pump.fun", allow)).toBe(true);
+    expect(originAllowed("https://pump.fun/", allow)).toBe(true);
+    expect(originAllowed("https://pump.fun.evil.com", allow)).toBe(false);
+    expect(originAllowed("https://pump.fun:8443", allow)).toBe(false);
+    expect(originAllowed("http://pump.fun", allow)).toBe(false);
+    expect(originAllowed("not a url", allow)).toBe(false);
   });
 });

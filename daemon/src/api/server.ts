@@ -47,9 +47,16 @@ export interface ServerDeps {
   port: number;
   /** Dev only: lets the HTTP API simulate a touch on the sim controller. */
   devTouch?: (long: boolean) => void;
+  /** PINCER_MODE=prod: firmware updates need secure boot on the controller. */
+  prod?: boolean;
 }
 
 interface Pairing { tokens: string[] }
+
+class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number, code: string) { super(code); this.status = status; }
+}
 
 /** Chain selector on wire messages; absent means Solana (the pre-multi-chain contract). */
 const chainOf = (v: unknown): ChainId | null => (v == null || v === "solana" ? "solana" : v === "evm" || v === "bitcoin" ? v : null);
@@ -65,7 +72,7 @@ export class ApiServer {
   constructor(private d: ServerDeps) {
     mkdirSync(d.dataDir, { recursive: true });
     this.pairing = this.loadPairing();
-    this.httpServer = http.createServer((req, res) => this.http(req, res).catch((e) => { res.statusCode = 500; res.end(JSON.stringify({ error: String(e) })); }));
+    this.httpServer = http.createServer((req, res) => this.http(req, res).catch((e) => { if (e instanceof HttpError) { res.statusCode = e.status; res.setHeader("content-type", "application/json"); res.end(JSON.stringify({ error: e.message })); return; } res.statusCode = 500; res.end(JSON.stringify({ error: String(e) })); }));
     this.wss = new WebSocketServer({ server: this.httpServer });
     this.wss.on("connection", (ws, req) => this.socket(ws, req.socket.remoteAddress ?? "?"));
   }
@@ -77,7 +84,9 @@ export class ApiServer {
   private savePairing() { writeFileSync(this.pairingPath(), JSON.stringify(this.pairing), { mode: 0o600 }); }
 
   /** Generate a fresh pairing code and have the robot speak it. Valid 2 minutes. */
+  private pairMisses = 0;
   async newPairingCode(): Promise<string> {
+    this.pairMisses = 0;
     this.code = String(randomInt(0, 1_000_000)).padStart(6, "0");
     this.codeExpires = Date.now() + 120_000;
     await this.d.robot.say(`Pairing code: ${this.code.split("").join(" ")}. It expires in two minutes.`);
@@ -102,10 +111,21 @@ export class ApiServer {
     let origin: string | undefined;
     const send = (o: unknown) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(o)); };
     ws.on("message", async (raw) => {
+      if (typeof raw !== "string" && (raw as Buffer).length > 256 * 1024) { send({ t: "error", error: "too_big" }); return ws.close(1009); }
       let m: any; try { m = JSON.parse(raw.toString()); } catch { return send({ t: "error", error: "bad_json" }); }
       try {
         if (m.t === "pair") {
-          if (!this.code || Date.now() > this.codeExpires || String(m.code) !== this.code) { await this.d.robot.say("Wrong pairing code."); return send({ t: "error", error: "bad_code" }); }
+          // a six-digit code is guessable in its two-minute window from any host that can reach this port:
+          // three misses retire the code (the owner asks for a new one), and every miss waits a second
+          if (!this.code || Date.now() > this.codeExpires) return send({ t: "error", error: "bad_code" });
+          const codeOk = typeof m.code === "string" && m.code.length === 6 && timingSafeEqual(Buffer.from(m.code), Buffer.from(this.code));
+          if (!codeOk) {
+            this.pairMisses++;
+            await new Promise((r) => setTimeout(r, 1000 * Math.min(this.pairMisses, 5)));
+            if (this.pairMisses >= 3) { this.code = null; await this.d.robot.say("Pairing cancelled after three wrong codes. Ask me for a new one."); return send({ t: "error", error: "code_retired" }); }
+            if (this.pairMisses === 1) await this.d.robot.say("Wrong pairing code.");
+            return send({ t: "error", error: "bad_code" });
+          }
           const token = randomBytes(32).toString("base64url");
           this.pairing.tokens.push(token); this.savePairing(); this.code = null;
           authed = true;
@@ -167,8 +187,20 @@ export class ApiServer {
   private async http(req: http.IncomingMessage, res: http.ServerResponse) {
     const url = new URL(req.url ?? "/", "http://x");
     const json = (code: number, body: unknown) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(body, (_k, v) => (typeof v === "bigint" ? v.toString() : v))); };
-    const body = async () => { const chunks: Buffer[] = []; for await (const c of req) chunks.push(c as Buffer); const s = Buffer.concat(chunks).toString("utf8"); return s ? JSON.parse(s) : {}; };
+    const body = async () => {
+      if (req.method === "POST" && !/^application\/json\b/i.test(String(req.headers["content-type"] ?? ""))) throw new HttpError(415, "json_only");
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const c of req) { size += (c as Buffer).length; if (size > 64 * 1024) throw new HttpError(413, "too_big"); chunks.push(c as Buffer); }
+      const s = Buffer.concat(chunks).toString("utf8"); return s ? JSON.parse(s) : {};
+    };
     const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress ?? "");
+    // a browser on this machine can be pointed at these routes by any page (DNS rebinding, a plain cross-site
+    // POST): the Host header must name this machine, and a paired caller may use its token from elsewhere
+    const host = String(req.headers.host ?? "");
+    const hostLocal = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host);
+    const bearer = /^Bearer\s+(\S+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
+    const paired = bearer !== undefined && this.tokenOk(bearer);
+    if (!(local && hostLocal) && !paired) return json(403, { error: "local_only" });
 
     if (req.method === "GET" && url.pathname === "/status") {
       const h = await this.d.controller.hello();
@@ -188,7 +220,7 @@ export class ApiServer {
       const ex = await this.d.signer.explainChain(chain, bytes, b.origin, b.chainId != null ? Number(b.chainId) : undefined);
       return json(200, { chain, summary: ex.explanation.spoken, lines: ex.explanation.lines, risk: ex.risk.level, reasons: ex.risk.reasons, parsed: { nativeOut: ex.parsed.nativeOut, nativeUnit: ex.parsed.nativeUnit, dest: ex.parsed.dest, programs: ex.parsed.programs, dangers: ex.parsed.dangers, tokenOut: ex.parsed.tokenOut } });
     }
-    if (!local) return json(403, { error: "local_only" });
+    if (!(local && hostLocal)) return json(403, { error: "local_only" }); /* the rest is the operator's, on this machine */
     if (req.method === "POST" && url.pathname === "/pair/new") return json(200, { code: await this.newPairingCode() });
     if (req.method === "POST" && url.pathname === "/pair/revoke") { this.pairing = { tokens: [] }; this.savePairing(); return json(200, { ok: true }); }
     if (req.method === "GET" && url.pathname === "/agent") return json(200, this.d.agent?.status() ?? { enabled: false });
@@ -204,6 +236,8 @@ export class ApiServer {
       if (req.method === "POST" && url.pathname === "/firmware/check") { const b = await body(); return json(200, checkImage(new Uint8Array(Buffer.from(String(b.image ?? ""), "base64")))); }
       if (req.method === "POST" && url.pathname === "/firmware/update") {
         const b = await body();
+        const h0 = await this.d.controller.hello();
+        if (this.d.prod && h0.update?.secure_boot !== true) return json(400, { error: "secure_boot_off", detail: "the controller's bootrom does not check signatures; provision the OTP before updating a production unit" });
         const image = new Uint8Array(Buffer.from(String(b.image ?? ""), "base64"));
         if (!image.length) return json(400, { error: "no_image" });
         const r = await flashFirmware(this.d.controller, image, String(b.version ?? ""), { onProgress: (sent, total) => { if (sent === total || sent % (64 * 1024) === 0) log.info("firmware", { sent, total }); } });

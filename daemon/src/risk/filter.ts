@@ -40,6 +40,12 @@ export interface RiskVerdict {
 const rank: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2, block: 3 };
 
 /** Two addresses that share a prefix and a suffix but differ in between: the classic poisoning trick. */
+/** Exact origin match (scheme + host + port): `https://pump.fun.evil.com` is not `https://pump.fun`. */
+export function originAllowed(origin: string, allow: string[]): boolean {
+  let o: string; try { o = new URL(origin).origin; } catch { return false; }
+  return allow.some((a) => { try { return new URL(a).origin === o; } catch { return false; } });
+}
+
 export function isLookalike(candidate: string, known: string): boolean {
   if (candidate === known) return false;
   if (candidate.length < 32 || known.length < 32) return false;
@@ -114,7 +120,7 @@ export function assess(input: RiskInput): RiskVerdict {
   }
 
   // ── origin ──
-  if (input.origin && input.originAllowlist && !input.originAllowlist.some((o) => input.origin!.startsWith(o))) {
+  if (input.origin && input.originAllowlist && !originAllowed(input.origin, input.originAllowlist)) {
     if (tx.lamportsOut > 1_000_000_000n || tx.tokenOut.length) raise("medium", `the request comes from ${input.origin.replace(/^https?:\/\//, "")}, which is not on your trusted sites.`);
   }
 

@@ -52,6 +52,7 @@ async function main() {
     if (!hello.se050) throw new Error("controller reports no SE050; refusing to run in prod mode");
     if (hello.display !== true) throw new Error("controller reports no trusted display; refusing to run in prod mode");
     if (hello.dev_keys !== false) throw new Error("controller carries development channel keys (or does not say); refusing to run in prod mode");
+    if (hello.update && hello.update.secure_boot !== true) throw new Error("controller's bootrom does not check image signatures (OTP not provisioned); refusing to run in prod mode");
   }
   if (!hello.initialized) {
     log.warn("controller has no key yet. Hold the touch pad for 3 s to create one. The 24 words appear ONLY on the robot's display; write them down there. Nothing is printed here.");
@@ -118,8 +119,20 @@ async function main() {
   controller.onEvent((e) => { if (e.ev === "wiped") log.error("CONTROLLER WIPED after repeated wrong PINs. Recover from the 24 words."); if (e.ev === "pin_failed") log.warn("wrong PIN rhythm"); });
   let wasOnline = true;
   let lastLowBattery = 0;
+  let duressLatched = false;
   robot.on("presence", async (p) => {
-    if (p.duress) { log.warn("DURESS"); await controller.duress(); return; }
+    if (p.duress) {
+      if (!duressLatched) {
+        // the rising edge: switch the controller to the decoy once, and tell the phone once. The robot keeps
+        // reporting duress for a while (it clears it itself when the owner is gone or after its hold time).
+        duressLatched = true;
+        log.warn("DURESS");
+        await controller.duress();
+        alerts?.phone("Duress word heard at the robot. The decoy wallet is active.", "duress").catch(() => undefined);
+      }
+      return;
+    }
+    duressLatched = false;
     const present = p.person && p.owner && !p.moved;
     if (!present && wasPresent) { await controller.lock(); log.info("locked: owner not present"); }
     wasPresent = present;
@@ -139,7 +152,7 @@ async function main() {
   const briefing = new Briefing({ robot, settings: () => settings.get(), conn, getOwner: owner, agentReport: () => agent?.lastReport()?.items ?? null, offlinePending: () => offline.pending().length, inheritance: () => inheritance.status().then((s) => s as any).catch(() => null) });
   briefing.start();
 
-  const api = new ApiServer({ signer, controller, robot, agent, settings, offline, inheritance, alerts, briefing, swap, conn, getOwner: owner, dataDir: cfg.DATA_DIR, bind: cfg.BIND, port: cfg.PORT, devTouch });
+  const api = new ApiServer({ signer, controller, robot, agent, settings, offline, inheritance, alerts, briefing, swap, conn, getOwner: owner, dataDir: cfg.DATA_DIR, bind: cfg.BIND, port: cfg.PORT, devTouch, prod: cfg.PINCER_MODE === "prod" });
   await api.listen();
   log.info(`pincerd ready. mode=${cfg.PINCER_MODE} controller=${cfg.CONTROLLER} robot=${cfg.ROBOT_WS} chains=${signer.chains().join(",")} wallet=${settings.get().mode}`);
 

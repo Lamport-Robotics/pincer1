@@ -107,7 +107,7 @@ export interface Hello {
   board?: string;
   inheritance?: { armed: boolean; inactivity_days: number; days_since_touch: number } | null;
   /** Firmware update state (PROTOCOL §1 "update"): which A/B partition runs, whether a verified image waits in the other one, and whether this image is still on trial (boots counted, not yet committed). Absent on firmware before 0.5.0. */
-  update?: { partition: number; staged: boolean; trial: boolean };
+  update?: { partition: number; staged: boolean; trial: boolean; secure_boot?: boolean };
 }
 
 export type UpdateReason = "not_supported" | "state" | "size" | "offset" | "length" | "flash" | "hash" | "image" | "version" | DenyReason;
