@@ -21,9 +21,9 @@
 #define STORAGE_SECTOR_SIZE 4096u
 #define STORAGE_PAGE_SIZE 256u
 #define STORAGE_REGION_SIZE (2u * STORAGE_SECTOR_SIZE)
-#define STORAGE_RECORD_SIZE 1280u /* multiple of the page size, <= one sector */
+#define STORAGE_RECORD_SIZE 1536u /* multiple of the page size, <= one sector */
 #define STORAGE_MAGIC 0x31524350u /* "PCR1" */
-#define STORAGE_VERSION 6u /* v6: + duress rhythm flag, soft-signer duress hash + salt */
+#define STORAGE_VERSION 7u /* v7: + the inactive slot's limits and counters (shadow) */
 
 #define STORAGE_INH_REGION_SIZE (2u * STORAGE_SECTOR_SIZE)
 #define STORAGE_INH_RECORD_SIZE 1280u /* multiple of the page size, <= one sector */

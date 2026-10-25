@@ -41,7 +41,7 @@ static size_t get_allowance(const uint8_t *p, consent_allowance_t *a)
 /* v5 appends: rollover_powered_seconds(8) n_routers(1) routers(8 x (chain 1 + addr 32)) */
 #define PAYLOAD_V5_LEN (PAYLOAD_V4_LEN + 8u + 1u + ROUTERS_MAX_OWNER * 33u)
 /* v6 appends: duress_pin_set(1) duress_hash(32) duress_salt(16) */
-#define PAYLOAD_LEN (PAYLOAD_V5_LEN + 1u + 32u + 16u)
+#define PAYLOAD_LEN (PAYLOAD_V5_LEN + 1u + 32u + 16u + 1u + 96u)
 
 size_t storage_encode(const storage_data_t *d, uint32_t seq, uint8_t *out, size_t cap)
 {
@@ -84,6 +84,13 @@ size_t storage_encode(const storage_data_t *d, uint32_t seq, uint8_t *out, size_
     out[o++] = d->consent.duress_pin_set ? 1 : 0;
     memcpy(out + o, d->duress_hash, 32); o += 32;
     memcpy(out + o, d->duress_salt, 16); o += 16;
+    out[o++] = d->consent.shadow_valid ? 1 : 0;
+    wr_le64(out + o, d->consent.shadow.daily_limit); o += 8;
+    wr_le64(out + o, d->consent.shadow.spent_today); o += 8;
+    u256_to_be32(&d->consent.shadow.daily_limit_wei, out + o); o += 32;
+    u256_to_be32(&d->consent.shadow.spent_today_wei, out + o); o += 32;
+    wr_le64(out + o, d->consent.shadow.daily_limit_sats); o += 8;
+    wr_le64(out + o, d->consent.shadow.spent_today_sats); o += 8;
     crc = crc32_buf(out, o);
     wr_le32(out + o, crc); o += 4;
     return o;
@@ -135,6 +142,13 @@ bool storage_decode(const uint8_t *in, size_t len, storage_data_t *d, uint32_t *
     d->consent.duress_pin_set = in[o++] != 0;
     memcpy(d->duress_hash, in + o, 32); o += 32;
     memcpy(d->duress_salt, in + o, 16); o += 16;
+    d->consent.shadow_valid = in[o++] != 0;
+    d->consent.shadow.daily_limit = rd_le64(in + o); o += 8;
+    d->consent.shadow.spent_today = rd_le64(in + o); o += 8;
+    u256_from_be(&d->consent.shadow.daily_limit_wei, in + o, 32); o += 32;
+    u256_from_be(&d->consent.shadow.spent_today_wei, in + o, 32); o += 32;
+    d->consent.shadow.daily_limit_sats = rd_le64(in + o); o += 8;
+    d->consent.shadow.spent_today_sats = rd_le64(in + o); o += 8;
     return true;
 }
 

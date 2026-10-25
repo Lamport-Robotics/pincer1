@@ -22,6 +22,37 @@ static void clear_allowance(consent_t *c)
     memset(&c->p.allowance, 0, sizeof c->p.allowance);
 }
 
+/* Exchanges the active slot's limits and counters with the other slot's. Called when duress starts or
+ * ends: the decoy slot keeps its own limits, so a policy request behaves the same in both slots. */
+static void swap_slot_policy(consent_t *c)
+{
+    consent_persist_t *p = &c->p;
+    uint64_t t64;
+    u256_t t256;
+    if (!p->duress && !p->shadow_valid) {
+        /* first time into duress: the decoy starts with the real slot's limits (a decoy that allows nothing
+         * convinces nobody) and a clean day; the owner may change them from inside the decoy later */
+        p->shadow.daily_limit = p->daily_limit;
+        p->shadow.daily_limit_wei = p->daily_limit_wei;
+        p->shadow.daily_limit_sats = p->daily_limit_sats;
+        p->shadow.spent_today = 0;
+        u256_zero(&p->shadow.spent_today_wei);
+        p->shadow.spent_today_sats = 0;
+        p->shadow_valid = true;
+    }
+#define SWAP64(a, b) do { t64 = (a); (a) = (b); (b) = t64; } while (0)
+#define SWAP256(a, b) do { t256 = (a); (a) = (b); (b) = t256; } while (0)
+    SWAP64(p->daily_limit, p->shadow.daily_limit);
+    SWAP64(p->spent_today, p->shadow.spent_today);
+    SWAP256(p->daily_limit_wei, p->shadow.daily_limit_wei);
+    SWAP256(p->spent_today_wei, p->shadow.spent_today_wei);
+    SWAP64(p->daily_limit_sats, p->shadow.daily_limit_sats);
+    SWAP64(p->spent_today_sats, p->shadow.spent_today_sats);
+#undef SWAP64
+#undef SWAP256
+    c->dirty = true;
+}
+
 static void clear_elevate(consent_t *c) { memset(&c->elevate, 0, sizeof c->elevate); }
 
 static bool time_reached(uint32_t now_ms, uint32_t deadline_ms)
@@ -280,7 +311,7 @@ consent_result_t consent_begin_set_duress_pin(consent_t *c, const char *id, cons
 {
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
     if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED; /* never in duress: the decoy must not learn the real flow */
+    if (!gate(c, why, true)) return CONSENT_R_DENIED; /* never in duress: the decoy must not learn the real flow */
     start_pending(c, CONSENT_OP_SET_DURESS_PIN, id, CONSENT_NEED_PIN, 0, now_ms);
     if (real_code) {
         memcpy(c->pending.pin_real, real_code, CONSENT_PIN_CODE_LEN);
@@ -294,7 +325,7 @@ consent_result_t consent_begin_decoy_addresses(consent_t *c, const char *id, uin
 {
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
     if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED; /* refused in duress */
+    if (!gate(c, why, true)) return CONSENT_R_DENIED; /* refused in duress */
     return start_pending(c, CONSENT_OP_DECOY_ADDRESSES, id, CONSENT_NEED_PIN, 0, now_ms);
 }
 
@@ -393,7 +424,7 @@ consent_result_t consent_begin_elevate_chain(consent_t *c, const char *id, conse
 {
     if (chain >= CONSENT_CHAIN_COUNT) return deny(CONSENT_DENY_POLICY, why);
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED;
+    if (!gate(c, why, true)) return CONSENT_R_DENIED;
     start_pending(c, CONSENT_OP_ELEVATE, id, CONSENT_NEED_LONG_TOUCH, 0, now_ms);
     c->pending.chain = chain;
     c->pending.limit = chain == CONSENT_CHAIN_EVM ? 0 : limit;
@@ -427,7 +458,7 @@ consent_result_t consent_begin_policy_multi(consent_t *c, const char *id, const 
         return deny(CONSENT_DENY_POLICY, why); /* list full */
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
     if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED;
+    if (!gate(c, why, true)) return CONSENT_R_DENIED;
     start_pending(c, CONSENT_OP_POLICY, id, CONSENT_NEED_PIN, 0, now_ms);
     c->pending.policy = *req;
     return CONSENT_R_PENDING;
@@ -441,7 +472,7 @@ consent_result_t consent_begin_update_apply(consent_t *c, const char *id, const 
     if (c->p.initialized) {
         /* a wallet is on this controller: the same authority as a policy change */
         if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
-        if (!gate(c, why, false)) return CONSENT_R_DENIED;
+        if (!gate(c, why, true)) return CONSENT_R_DENIED;
     }
     start_pending(c, CONSENT_OP_UPDATE_APPLY, id, CONSENT_NEED_LONG_TOUCH, 0, now_ms);
     memcpy(c->pending.update_version, version, vl + 1);
@@ -464,7 +495,7 @@ consent_result_t consent_begin_allowance(consent_t *c, const char *id, const con
 {
     uint64_t now;
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED;
+    if (!gate(c, why, true)) return CONSENT_R_DENIED;
     if (a->n_programs == 0 || a->n_programs > CONSENT_ALLOWANCE_MAX_PROGRAMS) return deny(CONSENT_DENY_POLICY, why);
     if (a->lamports == 0 || a->max_per_tx == 0 || a->max_per_tx > a->lamports) return deny(CONSENT_DENY_POLICY, why);
     /* Needs host time, and must end in the future. */
@@ -482,14 +513,14 @@ consent_result_t consent_begin_inheritance_set(consent_t *c, const char *id, con
     uint8_t i;
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
     if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED; /* never with the decoy key */
+    if (!gate(c, why, true)) return CONSENT_R_DENIED; /* never with the decoy key */
     if (!durable_nonce) return deny(CONSENT_DENY_POLICY, why);
     if (req->inactivity_days == 0 || req->n_warn > CONSENT_INH_MAX_WARN) return deny(CONSENT_DENY_POLICY, why);
     for (i = 0; i < req->n_warn; i++)
         if (req->warn_days[i] == 0 || req->warn_days[i] >= req->inactivity_days) return deny(CONSENT_DENY_POLICY, why);
     /* An arrangement is bound to the key that signed it: a wiped-and-re-initialised controller (a thief's
      * fresh wallet) can neither replace nor clear it. */
-    if (c->ih.inh.armed && memcmp(c->ih.inh.signer, req->signer, 32) != 0) return deny(CONSENT_DENY_POLICY, why);
+    if (!c->p.duress && c->ih.inh.armed && memcmp(c->ih.inh.signer, req->signer, 32) != 0) return deny(CONSENT_DENY_POLICY, why);
     /* Arming is a long touch; replacing an existing arrangement (balances drifted) is a plain touch. */
     start_pending(c, CONSENT_OP_INHERITANCE_SET, id, c->ih.inh.armed ? CONSENT_NEED_TOUCH : CONSENT_NEED_LONG_TOUCH,
                   0, now_ms);
@@ -505,7 +536,7 @@ consent_result_t consent_begin_inheritance_clear(consent_t *c, const char *id, c
 {
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
     if (!c->p.pin_set) return deny(CONSENT_DENY_PIN_NOT_SET, why);
-    if (!gate(c, why, false)) return CONSENT_R_DENIED;
+    if (!gate(c, why, true)) return CONSENT_R_DENIED;
     if (!c->ih.inh.armed) return deny(CONSENT_DENY_NOT_ARMED, why);
     if (memcmp(c->ih.inh.signer, owner, 32) != 0) return deny(CONSENT_DENY_POLICY, why);
     return start_pending(c, CONSENT_OP_INHERITANCE_CLEAR, id, CONSENT_NEED_LONG_TOUCH, 0, now_ms);
@@ -537,7 +568,7 @@ bool consent_lock(consent_t *c, consent_action_t *cancelled)
 bool consent_duress(consent_t *c, consent_action_t *cancelled)
 {
     bool had = cancel_pending(c, cancelled);
-    if (!c->p.duress) c->dirty = true;
+    if (!c->p.duress) { swap_slot_policy(c); c->dirty = true; }
     c->p.duress = true;
     clear_elevate(c);
     clear_allowance(c);
@@ -574,15 +605,16 @@ static void complete_pending(consent_t *c, uint32_t now_ms, consent_action_t *ou
         break;
     case CONSENT_OP_UNLOCK:
         c->locked = false;
-        if (c->p.duress) c->dirty = true;
+        if (c->p.duress) { swap_slot_policy(c); clear_elevate(c); clear_allowance(c); c->dirty = true; }
         c->p.duress = false;
         break;
     case CONSENT_OP_POLICY:
         if (c->pending.policy.has_sol) c->p.daily_limit = c->pending.policy.sol;
         if (c->pending.policy.has_wei) c->p.daily_limit_wei = c->pending.policy.wei;
         if (c->pending.policy.has_sats) c->p.daily_limit_sats = c->pending.policy.sats;
-        if (c->pending.policy.has_router_add) routers_add(&c->p.routers, c->pending.policy.router.chain, c->pending.policy.router.addr);
-        if (c->pending.policy.has_router_remove) routers_remove(&c->p.routers, c->pending.policy.router.chain, c->pending.policy.router.addr);
+        /* routers are shared by both slots: the decoy may not make the real wallet trust an address */
+        if (!c->p.duress && c->pending.policy.has_router_add) routers_add(&c->p.routers, c->pending.policy.router.chain, c->pending.policy.router.addr);
+        if (!c->p.duress && c->pending.policy.has_router_remove) routers_remove(&c->p.routers, c->pending.policy.router.chain, c->pending.policy.router.addr);
         out->policy = c->pending.policy;
         c->dirty = true;
         break;
@@ -595,12 +627,14 @@ static void complete_pending(consent_t *c, uint32_t now_ms, consent_action_t *ou
         memcpy(out->pin, c->pending.pin, CONSENT_PIN_CODE_LEN);
         break;
     case CONSENT_OP_INHERITANCE_SET:
-        out->slot = CONSENT_SLOT_REAL; /* gate() refused duress, so this is always the real key */
+        out->slot = consent_active_slot(c); /* in duress: signed by the decoy key and stored nowhere (main.c) */
         out->inh = c->pending.inh;
         break;
     case CONSENT_OP_INHERITANCE_CLEAR:
-        memset(&c->ih.inh, 0, sizeof c->ih.inh);
-        c->ih_dirty = true;
+        if (!c->p.duress) { /* the decoy cannot touch the real arrangement; the reply looks the same */
+            memset(&c->ih.inh, 0, sizeof c->ih.inh);
+            c->ih_dirty = true;
+        }
         break;
     case CONSENT_OP_UPDATE_APPLY:
         memcpy(out->update_version, c->pending.update_version, sizeof out->update_version);
@@ -729,7 +763,7 @@ consent_pin_result_t consent_pin_verdict(consent_t *c, consent_verdict_t v, uint
         copy_id(out->id, c->pending.id);
         clear_pending(c);
         c->locked = false;
-        if (!c->p.duress) c->dirty = true;
+        if (!c->p.duress) { swap_slot_policy(c); c->dirty = true; }
         c->p.duress = true;
         clear_elevate(c);
         clear_allowance(c);

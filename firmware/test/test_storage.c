@@ -88,6 +88,9 @@ static void fill(storage_data_t *d, int v)
         d->consent.routers.e[i].chain = (uint8_t)((i + v) & 1);
         memset(d->consent.routers.e[i].addr, 0x60 + i + v, 32);
     }
+    d->consent.shadow.daily_limit = 777; d->consent.shadow.spent_today = 5;
+    u256_from_u64(&d->consent.shadow.daily_limit_wei, 123456789ull);
+    d->consent.shadow.daily_limit_sats = 4242; d->consent.shadow.spent_today_sats = 1;
 }
 
 static void test_encode_decode(void)
@@ -125,6 +128,7 @@ static void test_encode_decode(void)
     CHECK_MEM(back.duress_hash, d.duress_hash, 32);
     CHECK_MEM(back.duress_salt, d.duress_salt, 16);
     CHECK_EQ(back.consent.duress_pin_set, 0);
+    CHECK_MEM(&back.consent.shadow, &d.consent.shadow, sizeof d.consent.shadow);
     fill(&d, 4);
     n = storage_encode(&d, 43, buf, sizeof buf);
     CHECK(storage_decode(buf, sizeof buf, &back, &seq));

@@ -362,20 +362,32 @@ static void test_duress(void)
     consent_display_shown(&c, 0, 1);
     CHECK(consent_touch(&c, false, ms, &a));
     CHECK_EQ(a.slot, CONSENT_SLOT_DECOY);
-    /* owner-authority operations are refused */
-    CHECK_EQ(consent_begin_elevate(&c, "e1", SOL, ms, &why), CONSENT_R_DENIED);
-    CHECK_EQ(why, CONSENT_DENY_POLICY);
-    CHECK_EQ(consent_begin_policy(&c, "p1", SOL, ms, &why), CONSENT_R_DENIED);
-    /* duress survives a reboot */
+    /* owner-authority operations answer exactly as they would in the real slot: pending, then done.
+     * They act on the decoy slot's own limits; the real slot's are kept aside. */
+    CHECK_U64(c.p.daily_limit, 2 * SOL); /* the decoy starts with the real slot's limits, its own counters */
+    CHECK_U64(c.p.shadow.daily_limit, 2 * SOL);
+    CHECK(c.p.shadow_valid);
+    CHECK_EQ(consent_begin_elevate(&c, "e1", SOL, ms, &why), CONSENT_R_PENDING);
+    consent_cancel_pending(&c, NULL);
+    CHECK_EQ(consent_begin_policy(&c, "p1", 5 * SOL, ms, &why), CONSENT_R_PENDING);
+    CHECK_EQ(consent_rhythm(&c, PIN, ms, &a), CONSENT_RHYTHM_VERIFY);
+    CHECK_EQ(consent_pin_result(&c, true, ms, &a), CONSENT_PIN_OK);
+    CHECK_EQ(a.op, CONSENT_OP_POLICY);
+    CHECK_U64(c.p.daily_limit, 5 * SOL);          /* the decoy's limit */
+    CHECK_U64(c.p.shadow.daily_limit, 2 * SOL);   /* the real one, untouched */
+    /* duress survives a reboot, with the decoy's limits active */
     saved = c.p;
     consent_init(&c, &saved, ms);
     CHECK(c.p.duress);
     CHECK(c.locked);
     CHECK_EQ(consent_active_slot(&c), CONSENT_SLOT_DECOY);
-    /* cleared by unlock (PIN rhythm verified in the chip) */
+    CHECK_U64(c.p.daily_limit, 5 * SOL);
+    /* cleared by unlock (PIN rhythm verified in the chip): the real limits come back */
     unlock_with_pin(&c, "u1", ms);
     CHECK(!c.p.duress);
     CHECK_EQ(consent_active_slot(&c), CONSENT_SLOT_REAL);
+    CHECK_U64(c.p.daily_limit, 2 * SOL);
+    CHECK_U64(c.p.shadow.daily_limit, 5 * SOL);
 }
 
 static void test_day_rollover(void)
@@ -692,7 +704,13 @@ static void test_allowance_revoke_lock_duress(void)
     CHECK_EQ(consent_begin_sign(&c, "s2", 1, P_JUP, 1, false, 0, ms, &a, &why), CONSENT_R_PENDING);
     consent_display_shown(&c, 0, 1);
     consent_tick(&c, ms + 60000, &a);
-    CHECK_EQ(consent_begin_allowance(&c, "a2", &c.p.allowance, ms, &why), CONSENT_R_DENIED); /* not in duress */
+    /* an allowance in duress is the decoy slot's own, granted and spent like the real one */
+    {
+        consent_allowance_t a2 = {0};
+        a2.lamports = SOL; a2.max_per_tx = SOL; a2.until_unix = T0 + 3600; a2.n_programs = 1; memcpy(a2.programs[0], P_JUP[0], 32);
+        CHECK_EQ(consent_begin_allowance(&c, "a2", &a2, ms, &why), CONSENT_R_PENDING);
+        consent_cancel_pending(&c, NULL);
+    }
 }
 
 /* ---- PIN ---- */
@@ -1091,10 +1109,11 @@ static void test_duress_rhythm(void)
     consent_display_shown(&c, 0, 1);
     CHECK(consent_touch(&c, false, ms, &a));
     CHECK_EQ(a.slot, CONSENT_SLOT_DECOY);
-    CHECK_EQ(consent_begin_set_duress_pin(&c, "d8", NULL, ms, &why), CONSENT_R_DENIED);
-    CHECK_EQ(why, CONSENT_DENY_POLICY);
-    CHECK_EQ(consent_begin_decoy_addresses(&c, "x1", ms, &why), CONSENT_R_DENIED);
-    CHECK_EQ(why, CONSENT_DENY_POLICY);
+    /* in duress these go pending like in the real slot (main.c verifies the rhythm that opened the decoy) */
+    CHECK_EQ(consent_begin_set_duress_pin(&c, "d8", NULL, ms, &why), CONSENT_R_PENDING);
+    consent_cancel_pending(&c, NULL);
+    CHECK_EQ(consent_begin_decoy_addresses(&c, "x1", ms, &why), CONSENT_R_PENDING);
+    consent_cancel_pending(&c, NULL);
     /* the real rhythm unlocks out of duress, as before */
     consent_lock(&c, NULL);
     CHECK_EQ(consent_begin_unlock(&c, "u2", ms, &why), CONSENT_R_PENDING);

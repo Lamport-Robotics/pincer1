@@ -122,9 +122,14 @@ static void test_arm_requires_long_touch_and_nonce(void)
     CHECK_EQ(why, CONSENT_DENY_LOCKED);
     ready(&c, &ms);
     consent_duress(&c, NULL);
-    CHECK_EQ(consent_begin_inheritance_set(&c, "h0", &r, true, ms, &why), CONSENT_R_DENIED);
+    /* in duress the request goes through like in the real slot; the action carries the decoy slot, and
+     * main.c signs with the decoy key and stores nothing (the real arrangement is never touched) */
+    CHECK_EQ(consent_begin_inheritance_set(&c, "h0", &r, true, ms, &why), CONSENT_R_PENDING);
     consent_display_shown(&c, 0, 1);
-    CHECK_EQ(why, CONSENT_DENY_POLICY); /* never signed with the decoy */
+    CHECK(consent_touch(&c, true, ms, &a));
+    CHECK_EQ(a.op, CONSENT_OP_INHERITANCE_SET);
+    CHECK_EQ(a.slot, CONSENT_SLOT_DECOY);
+    CHECK(!c.ih.inh.armed);
     consent_init(&c, NULL, 0);
     consent_init_inheritance(&c, NULL);
     CHECK_EQ(consent_begin_inheritance_set(&c, "h0", &r, true, 0, &why), CONSENT_R_DENIED);
@@ -446,8 +451,11 @@ static void test_clear(void)
     consent_rhythm(&c, PIN, ms, &a);
     consent_pin_result(&c, true, ms, &a);
     consent_duress(&c, NULL);
-    CHECK_EQ(consent_begin_inheritance_clear(&c, "c2", OWNER, ms, &why), CONSENT_R_DENIED);
-    CHECK_EQ(why, CONSENT_DENY_POLICY);
+    /* in duress a clear looks exactly like the real thing and changes nothing */
+    CHECK_EQ(consent_begin_inheritance_clear(&c, "c2", OWNER, ms, &why), CONSENT_R_PENDING);
+    CHECK(consent_touch(&c, true, ms, &a));
+    CHECK_EQ(a.op, CONSENT_OP_INHERITANCE_CLEAR);
+    CHECK(c.ih.inh.armed);
     CHECK_EQ(consent_begin_unlock(&c, "u", ms, &why), CONSENT_R_PENDING);
     consent_rhythm(&c, PIN, ms, &a);
     consent_pin_result(&c, true, ms, &a);

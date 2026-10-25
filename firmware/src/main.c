@@ -833,6 +833,10 @@ static void do_inheritance_set(const consent_action_t *a)
     if (!g_signer_ok || !g_pending_sign.valid || g_pending_sign.len > CONSENT_INH_MSG_MAX ||
         signer_sign(a->slot, g_pending_sign.bytes, g_pending_sign.len, sig) != 0) {
         send_denied_shown(a->id, "policy");
+    } else if (a->slot == CONSENT_SLOT_DECOY) {
+        /* duress: the decoy key signed it; the real arrangement is not touched, the reply is the same */
+        send_line(proto_fmt_inheritance_set(g_out, sizeof g_out, a->id, sig));
+        ui_notice("INHERITANCE", "armed", NULL, NOTICE_MS);
     } else {
         memset(g_inh.msg, 0, sizeof g_inh.msg);
         memcpy(g_inh.msg, g_pending_sign.bytes, g_pending_sign.len);
@@ -849,6 +853,11 @@ static void do_inheritance_set(const consent_action_t *a)
 
 static void do_inheritance_clear(const consent_action_t *a)
 {
+    if (g_consent.p.duress) { /* the decoy cannot cancel the real arrangement; same reply, same screen */
+        send_line(proto_fmt_ok(g_out, sizeof g_out, "inheritance_clear", a->id));
+        ui_notice("INHERITANCE", "cleared", NULL, NOTICE_MS);
+        return;
+    }
     secure_zero(g_inh.msg, sizeof g_inh.msg);
     secure_zero(g_inh.sig, sizeof g_inh.sig);
     g_inh.msg_len = 0;
@@ -930,7 +939,10 @@ static void handle_rhythm(const touch_rhythm_t *r, uint32_t now)
     case CONSENT_RHYTHM_VERIFY: {
         /* unlock: both objects, every time, same pattern (signer_pin_verify2); everything else: the real one */
         consent_verdict_t verdict;
-        int v = !g_signer_ok ? -1 : act.op == CONSENT_OP_UNLOCK ? signer_pin_verify2(act.pin) : signer_pin_verify(act.pin);
+        /* in duress every PIN-gated request accepts the rhythm that opened the decoy (the one the coercer saw),
+         * so the request runs against the decoy slot instead of answering differently than the real one would */
+        bool in_duress = g_consent.p.duress;
+        int v = !g_signer_ok ? -1 : (act.op == CONSENT_OP_UNLOCK || in_duress) ? signer_pin_verify2(act.pin) : signer_pin_verify(act.pin);
         if (v < 0) {
             /* The chip could not be asked: not a wrong PIN, do not count it. */
             consent_cancel_pending(&g_consent, &res);
@@ -938,6 +950,7 @@ static void handle_rhythm(const touch_rhythm_t *r, uint32_t now)
             break;
         }
         verdict = v == SIGNER_VERIFY_REAL ? CONSENT_VERDICT_REAL : v == SIGNER_VERIFY_DURESS ? CONSENT_VERDICT_DURESS : CONSENT_VERDICT_WRONG;
+        if (in_duress && act.op != CONSENT_OP_UNLOCK && verdict == CONSENT_VERDICT_DURESS) verdict = CONSENT_VERDICT_REAL;
         switch (consent_pin_verdict(&g_consent, verdict, now, &res)) {
         case CONSENT_PIN_OK:
             perform(&res); /* a duress unlock arrives here as a plain UNLOCK: same reply, same screen */
@@ -985,7 +998,7 @@ static void handle_hello(void)
     h.daily_limit = g_consent.p.daily_limit;
     h.spent_today = g_consent.p.spent_today;
     h.day = g_consent.p.day;
-    h.allowance = (!g_consent.p.duress && g_consent.p.allowance.active) ? &g_consent.p.allowance : NULL;
+    h.allowance = g_consent.p.allowance.active ? &g_consent.p.allowance : NULL; /* the active slot's, in both modes */
     h.pin_set = g_consent.p.pin_set;
     h.duress_pin_set = g_consent.p.duress_pin_set;
     h.pin_failures = g_consent.p.pin_failures;

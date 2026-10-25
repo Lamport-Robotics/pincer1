@@ -131,6 +131,18 @@ typedef struct {
     bool duress_pin_set;  /* a second UserID object (decoy rhythm) exists */
     uint64_t rollover_powered_seconds; /* powered_seconds at the last accepted day rollover */
     router_list_t routers;             /* owner-added swap routers (built-ins live in routers.c) */
+    /* The inactive slot's limits and counters. Each slot (real, decoy) has its own; entering or leaving
+     * duress swaps the active set with this one, so every policy request works the same way in both slots
+     * and nothing in a reply says which slot is live. */
+    bool shadow_valid; /* the decoy slot has limits of its own; until then it inherits the real ones on first use */
+    struct {
+        uint64_t daily_limit;
+        uint64_t spent_today;
+        u256_t daily_limit_wei;
+        u256_t spent_today_wei;
+        uint64_t daily_limit_sats;
+        uint64_t spent_today_sats;
+    } shadow;
 } consent_persist_t;
 
 /* Inheritance arrangement (dead-man's switch). The signed transaction itself is kept by the caller
