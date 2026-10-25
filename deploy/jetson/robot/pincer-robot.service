@@ -11,7 +11,8 @@ User=pincer
 Group=pincer
 # video: CSI/USB camera and the Tegra GPU nodes (/dev/nvhost-*, /dev/nvmap are root:video)
 # audio: USB mic/speaker through ALSA/portaudio   dialout: USB lidar serial (/dev/pincer-lidar)
-# The consent controller (/dev/pincer-consent) is deliberately NOT here: only pincerd talks to it.
+# The consent controller (/dev/pincer-consent) is group pincer-consent: this service is not in that group,
+# so only pincerd can open it. dialout here is for the lidar.
 SupplementaryGroups=video audio dialout render
 WorkingDirectory=/opt/pincer1/current/robot
 EnvironmentFile=/etc/pincer1/robot.env
@@ -33,6 +34,17 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ReadWritePaths=/var/lib/pincer1
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
 # Jetson GPU memory is shared with the CPU; cap the service so a model-load spike cannot take
 # the daemon down with it (8 GB board). Raise if you move to larger models.
 MemoryMax=4G

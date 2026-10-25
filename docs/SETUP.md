@@ -17,7 +17,9 @@ slowly: no key yet.
    fused to a key only boots images signed with it, forever. Keep the keys with the Pico 2 signing key,
    offline.
 3. `sudo nvpmodel -m 0 && sudo jetson_clocks` for full performance; ROS2 Humble via apt on 22.04.
-4. Copy the udev rule: `sudo install -m 644 deploy/jetson/udev/99-pincer1.rules /etc/udev/rules.d/ && sudo udevadm control --reload`.
+4. The udev rule is installed by `deploy/jetson/daemon/install.sh`: the controller's port belongs to the
+   `pincer-consent` group, and only the `pincerd` user is in it. The robot service runs as `pincer` with the
+   camera, audio and lidar groups and cannot open the controller.
 
 ## 3. Install the robot software (Jetson)
 
@@ -68,7 +70,8 @@ signed on touch.
   for policy changes, and for granting the overnight allowance.
 - **Leave the room**: the robot locks. Come back, let it see you, tap your PIN rhythm to unlock.
 - **Duress**: say the duress word, or tap the duress rhythm instead of your PIN. The decoy wallet opens, the
-  real one locks. The word also sends a silent alert; the rhythm sends nothing, since you may be standing
+  real one locks. The word also sends one alert to your phone when alerts are configured (ntfy, Telegram or a
+  webhook in `daemon.env`); the rhythm sends nothing, since you may be standing
   next to the person forcing you.
 - **Night**: `curl -XPOST localhost:7401/agent/arm` (or ask the robot) → long touch → it works the budget.
   In the morning it reads the report and asks about proposals one at a time.

@@ -5,21 +5,35 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pincer
-Group=pincer
+User=pincerd
+Group=pincerd
 WorkingDirectory=/opt/pincer1/current/daemon
 EnvironmentFile=/etc/pincer1/daemon.env
 ExecStart=/usr/bin/node /opt/pincer1/current/daemon/dist/main.js
 Restart=always
 RestartSec=3
-# the daemon is untrusted by design; keep it in its lane
+# the daemon is untrusted by design; keep it in its lane: own user, own state directory, one device
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/pincer1
+ReadWritePaths=/var/lib/pincerd
 PrivateTmp=true
+DevicePolicy=closed
 DeviceAllow=/dev/pincer-consent rw
-SupplementaryGroups=dialout
+SupplementaryGroups=pincer-consent
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
 
 [Install]
 WantedBy=multi-user.target

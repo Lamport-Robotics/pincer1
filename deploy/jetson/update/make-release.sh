@@ -16,7 +16,7 @@ stage=$(mktemp -d); trap 'rm -rf "$stage" "$stage.txt"' EXIT
 mkdir -p "$stage/daemon" "$stage/robot" "$stage/deploy"
 cp -R daemon/dist daemon/package.json daemon/pnpm-lock.yaml "$stage/daemon/"
 cp deploy/jetson/update/pincer-update.sh deploy/jetson/update/pincer-rollback.sh "$stage/deploy/"
-rsync -a --exclude .venv --exclude '.*_cache' --exclude '__pycache__' --exclude '*.egg-info' --exclude tests robot/ "$stage/robot/"
+rsync -a --exclude .venv --exclude '.env' --exclude '.env.*' --exclude '.*_cache' --exclude '__pycache__' --exclude '*.egg-info' --exclude tests robot/ "$stage/robot/"
 printf '%s\n' "$ver" > "$stage/VERSION"
 (cd "$stage" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | sed 's|  \./|  |' > "$stage.txt")
 # manifest.json: {"version":..,"created":..,"files":{"path":"sha256",...}}

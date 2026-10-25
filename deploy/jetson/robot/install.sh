@@ -42,6 +42,8 @@ id -u pincer >/dev/null 2>&1 || sudo useradd --system --create-home --home-dir /
 for g in video audio dialout render; do
   getent group "$g" >/dev/null && sudo usermod -aG "$g" pincer || true
 done
+# never the controller's group: that port is pincerd's alone
+getent group pincer-consent >/dev/null && sudo gpasswd -d pincer pincer-consent >/dev/null 2>&1 || true
 sudo mkdir -p "$ROOT/releases" /etc/pincer1 /var/lib/pincer1
 sudo chown pincer:pincer /var/lib/pincer1
 sudo chmod 750 /var/lib/pincer1
@@ -60,11 +62,12 @@ $PIP install -q --upgrade pip wheel
 if [ -z "${PINCER_SKIP_CUDA:-}" ]; then
   echo "installing CUDA wheels from $INDEX"
   # torch for resemblyzer (CPU torch from PyPI would otherwise satisfy the dependency).
-  $PIP install -q --index-url "$INDEX" --extra-index-url https://pypi.org/simple torch torchaudio
+  # one index per step: a package name that exists on both indexes must not be resolvable from either
+  $PIP install -q --no-deps --index-url "$INDEX" torch torchaudio
   # onnxruntime-gpu for insightface's CUDAExecutionProvider (PyPI has no Tegra build).
-  $PIP install -q --index-url "$INDEX" --extra-index-url https://pypi.org/simple onnxruntime-gpu
+  $PIP install -q --no-deps --index-url "$INDEX" onnxruntime-gpu
   # CUDA ctranslate2 for faster-whisper float16 (PyPI's aarch64 wheel is CPU-only).
-  $PIP install -q --index-url "$INDEX" --extra-index-url https://pypi.org/simple ctranslate2 || \
+  $PIP install -q --no-deps --index-url "$INDEX" ctranslate2 || \
     echo "warning: no CUDA ctranslate2 on $INDEX; faster-whisper will run int8 on CPU" >&2
 fi
 
