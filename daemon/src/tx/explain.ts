@@ -57,12 +57,13 @@ export function explain(p: ParsedTx, ctx: ExplainContext = {}): Explanation {
   const apps = p.programs.filter((x) => !PLUMBING.has(x));
   const appNames = apps.map((x) => PROGRAM_NAMES[x] ?? `unknown program ${short(x)}`);
 
+  if (p.priorityLamports >= 10_000_000n) lines.push(`pays ${fmtSol(p.priorityLamports)} in priority fees`);
   if (p.lamportsOut > 0n && p.dest) {
     const n = p.tokenOut.length ? "also " : "";
     lines.push(`${n}sends ${fmtSol(p.lamportsOut)} to ${who(p.dest)}`);
   }
   for (const t of p.tokenOut) {
-    lines.push(`sends ${fmtToken(t.amount, t.mint, t.mint ? ctx.tokenMeta?.[t.mint] : undefined)} to ${who(t.dest)}`);
+    lines.push(t.dest ? `sends ${fmtToken(t.amount, t.mint, t.mint ? ctx.tokenMeta?.[t.mint] : undefined)} to ${who(t.dest)}` : `burns ${fmtToken(t.amount, t.mint, t.mint ? ctx.tokenMeta?.[t.mint] : undefined)}`);
   }
   for (const t of p.tokenIn) {
     lines.push(`receives ${fmtToken(t.amount, t.mint, t.mint ? ctx.tokenMeta?.[t.mint] : undefined)}`);

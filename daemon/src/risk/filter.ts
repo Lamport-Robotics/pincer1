@@ -9,6 +9,7 @@
  *
  * Rules are deliberately boring and explicit; each one is a sentence the robot can say.
  */
+import { fmtSol } from "../tx/explain.js";
 import { TRUSTED_PROGRAMS, U64_MAX } from "../tx/known.js";
 import type { ParsedTx } from "../tx/parse.js";
 import { short } from "../tx/explain.js";
@@ -73,6 +74,8 @@ export function assess(input: RiskInput): RiskVerdict {
   }
 
   // ── destination checks ──
+  if (tx.priorityLamports >= 1_000_000_000n) raise("block", `it sets a priority fee of ${fmtSol(tx.priorityLamports)}; that is not a fee, that is a transfer to whoever produces the block.`);
+  else if (tx.priorityLamports >= 10_000_000n) raise("high", `it pays ${fmtSol(tx.priorityLamports)} in priority fees on top of the amount.`);
   if (tx.dest && tx.lamportsOut > 0n) {
     const dest = tx.dest;
     const i = intelOf(dest);
@@ -95,6 +98,7 @@ export function assess(input: RiskInput): RiskVerdict {
 
   // ── token transfers to strangers ──
   for (const t of tx.tokenOut) {
+    if (!t.dest) continue; // a burn has no recipient
     const i = intelOf(t.dest);
     if (i && i.ageDays != null && i.ageDays < 3 && !book[t.dest]) raise("high", `tokens go to a wallet created ${i.ageDays < 1 ? "today" : Math.floor(i.ageDays) + " days ago"}.`);
   }

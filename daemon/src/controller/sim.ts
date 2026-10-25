@@ -237,6 +237,9 @@ export class SimController implements ControllerClient {
       lamportsOut = parsed.lamportsOut;
       lastDest = parsed.dest;
       if (lamportsOut > BigInt(claims.lamports_out)) return { ok: false, reason: "claims_mismatch" };
+      // the fee is SOL leaving too: an unclaimed priority fee is a transfer to the leader the display never showed
+      if (parsed.feeLamports > BigInt(claims.fee_lamports ?? "0")) return { ok: false, reason: "claims_mismatch" };
+      lamportsOut += parsed.priorityLamports;
       // dest must match the claim
       if (lamportsOut > 0n && parsed.dest && parsed.dest !== claims.dest) return { ok: false, reason: "claims_mismatch" };
       // every token out needs a matching claim (mint, amount, dest)

@@ -13,7 +13,7 @@ export interface TokenMove {
   mint: string | null; // null when the instruction does not carry the mint (plain `transfer`)
   amount: bigint; // raw units
   source: string; // token account
-  dest: string; // token account or wallet (for closeAccount: lamport destination)
+  dest: string; // token account or wallet (for closeAccount: lamport destination); "" for a burn
 }
 
 export type DangerKind = "set_authority" | "approve" | "close_account" | "assign" | "lookup_table" | "unknown_instruction" | "nonce" | "burn";
@@ -46,6 +46,10 @@ export interface ParsedTx {
   programs: string[];
   /** SOL leaving the owner via System instructions, in lamports. */
   lamportsOut: bigint;
+  /** What the fee payer pays the leader: 5000 lamports per signature plus the ComputeBudget priority fee. Mirrors solmsg.c. */
+  feeLamports: bigint;
+  /** The ComputeBudget part alone (unit limit x unit price, rounded up). Counted against limits like a transfer. */
+  priorityLamports: bigint;
   /** Primary recipient of SOL: the destination receiving the most lamports from the owner. */
   dest: string | null;
   tokenOut: TokenMove[];
@@ -54,6 +58,12 @@ export interface ParsedTx {
   usesDurableNonce: boolean;
   memo: string | null;
 }
+
+/** Token / Token-2022 tags that move nothing out of the owner (mirrors the list in firmware solmsg.c). */
+const TOKEN_BENIGN = new Set([0, 1, 2, 5, 7, 10, 11, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 36, 39, 40, 41]);
+const BASE_FEE_PER_SIG = 5000n;
+const MAX_CU = 1_400_000n;
+const DEFAULT_CU_PER_IX = 200_000n;
 
 const u64 = (d: Uint8Array, o: number) => (o + 8 <= d.length ? new DataView(d.buffer, d.byteOffset + o, 8).getBigUint64(0, true) : 0n);
 const u32 = (d: Uint8Array, o: number) => (o + 4 <= d.length ? new DataView(d.buffer, d.byteOffset + o, 4).getUint32(0, true) : 0xffffffff);
@@ -121,6 +131,8 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
     instructions,
     programs: [...new Set(instructions.map((i) => i.program))],
     lamportsOut: 0n,
+    feeLamports: 0n,
+    priorityLamports: 0n,
     dest: null,
     tokenOut: [],
     tokenIn: [],
@@ -247,13 +259,40 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
         }
         case 8: { // burn: [account, mint, owner] amount @1
           ix.label = "Token.burn";
-          if (ix.accounts[2] === owner) out.dangers.push({ kind: "burn", program: prog, detail: `burns ${u64(d, 1)} units of ${ix.accounts[1]}`, amount: u64(d, 1) });
+          if (ix.accounts[2] === owner) {
+            // the controller counts a burn as a token outflow with no recipient: claim it as one
+            out.tokenOut.push({ mint: ix.accounts[1], amount: u64(d, 1), source: ix.accounts[0], dest: "" });
+            out.dangers.push({ kind: "burn", program: prog, detail: `burns ${u64(d, 1)} units of ${ix.accounts[1]}`, amount: u64(d, 1) });
+          }
+          break;
+        }
+        case 15: { // burnChecked: [account, mint, owner] amount @1, decimals @9
+          ix.label = "Token.burnChecked";
+          if (ix.accounts[2] === owner) {
+            out.tokenOut.push({ mint: ix.accounts[1], amount: u64(d, 1), source: ix.accounts[0], dest: "" });
+            out.dangers.push({ kind: "burn", program: prog, detail: `burns ${u64(d, 1)} units of ${ix.accounts[1]}`, amount: u64(d, 1) });
+          }
+          break;
+        }
+        case 26: { // Token-2022 TransferFeeExtension; sub 1 = transferCheckedWithFee: [source, mint, dest, authority] amount @2, decimals @10, fee @11
+          if (d[1] === 1) {
+            ix.label = "Token2022.transferCheckedWithFee";
+            const mv: TokenMove = { mint: ix.accounts[1], amount: u64(d, 2), source: ix.accounts[0], dest: ix.accounts[2] };
+            if (ix.accounts[3] === owner) out.tokenOut.push(mv); else out.tokenIn.push(mv);
+          } else {
+            ix.label = `Token2022.transferFee.${d[1]}`;
+            out.dangers.push({ kind: "unknown_instruction", program: prog, detail: `transfer-fee instruction ${d[1]} is not understood` });
+          }
           break;
         }
         case 1: ix.label = "Token.initializeAccount"; break;
         case 18: ix.label = "Token.initializeAccount3"; break;
         case 17: ix.label = "Token.syncNative"; break;
-        default: ix.label = `Token.${kind}`;
+        default:
+          ix.label = `Token.${kind}`;
+          // the controller's parser (solmsg.c) treats the same set as "nothing leaves"; everything else is an
+          // instruction the display cannot show, so it is declared and needs a conscious touch
+          if (!TOKEN_BENIGN.has(kind)) out.dangers.push({ kind: "unknown_instruction", program: prog, detail: `Token instruction ${kind} is not understood` });
       }
       continue;
     }
@@ -274,6 +313,21 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
   let best: [string, bigint] | null = null;
   for (const e of lamportsTo) if (!best || e[1] > best[1]) best = e;
   out.dest = best?.[0] ?? null;
+  // the fee: 5000 per required signature, plus the compute budget's unit limit x price. Without an explicit
+  // limit the runtime grants 200k units per non-budget instruction (capped at 1.4M), the same way solmsg.c counts it.
+  let cuLimit: bigint | null = null;
+  let cuPrice = 0n;
+  let budgetIxs = 0;
+  for (const ix of instructions) {
+    if (ix.program !== COMPUTE_BUDGET) continue;
+    budgetIxs++;
+    if (ix.data[0] === 2 && ix.data.length >= 5) cuLimit = BigInt(u32(ix.data, 1));
+    else if (ix.data[0] === 3 && ix.data.length >= 9) cuPrice = u64(ix.data, 1);
+  }
+  let limit = cuLimit ?? DEFAULT_CU_PER_IX * BigInt(Math.max(0, instructions.length - budgetIxs));
+  if (limit > MAX_CU) limit = MAX_CU;
+  out.priorityLamports = limit > 0n ? (limit * cuPrice + 999_999n) / 1_000_000n : 0n;
+  out.feeLamports = BASE_FEE_PER_SIG * BigInt(header.numRequiredSignatures) + out.priorityLamports;
   return out;
 }
 
@@ -284,7 +338,10 @@ export function claimsFor(p: ParsedTx) {
     token_out: p.tokenOut.map((t) => ({ mint: t.mint ?? "", amount: t.amount.toString(), dest: t.dest ?? "" })),
     dest: p.dest ?? "",
     programs: p.programs,
-    dangerous: p.dangers.map((d) => d.kind),
+    // the controller knows these names (solmsg.c DANGER_NAMES); its parser sees a nonce handover as set_authority
+    // and a burn as a token outflow, so those are translated or dropped rather than sent as words it would refuse
+    dangerous: [...new Set(p.dangers.map((d) => (d.kind === "nonce" ? "set_authority" : d.kind)).filter((k) => k !== "burn"))],
+    fee_lamports: p.feeLamports.toString(),
   };
 }
 

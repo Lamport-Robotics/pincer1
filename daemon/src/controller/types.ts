@@ -8,6 +8,8 @@ export interface Claims {
   dest: string;
   programs: string[];
   dangerous: string[];
+  /** Base fee plus priority fee the owner pays; the controller refuses a message whose compute budget costs more. */
+  fee_lamports?: string;
 }
 export type SolanaClaims = Claims;
 

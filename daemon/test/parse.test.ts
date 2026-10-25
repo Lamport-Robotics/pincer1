@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { parseMessage, looksLikeMessage, claimsFor } from "../src/tx/parse.js";
 import { explain } from "../src/tx/explain.js";
 import * as F from "./fixtures.js";
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
-import { SYSTEM, TOKEN, U64_MAX } from "../src/tx/known.js";
+import { ComputeBudgetProgram, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { SYSTEM, TOKEN, TOKEN_2022, U64_MAX } from "../src/tx/known.js";
 
 const own = F.owner.publicKey.toBase58();
 
@@ -105,4 +105,46 @@ describe("explain", () => {
     const p = parseMessage(F.messageOf(F.legacy([F.jupiterLike()])), { owner: own });
     expect(explain(p).spoken).toBe("Swap through Jupiter.");
   });
+
+  it("counts the compute budget as a fee, claims it, and treats a huge priority fee as a transfer", () => {
+    const p = parseMessage(F.messageOf(F.legacy([ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000_000_000n }), F.transfer(F.stranger, 0)])), { owner: own });
+    expect(p.lamportsOut).toBe(0n);
+    expect(p.priorityLamports).toBe(1_400_000_000_000n);
+    expect(p.feeLamports).toBe(1_400_000_000_000n + 5000n);
+    expect(claimsFor(p).fee_lamports).toBe((1_400_000_000_000n + 5000n).toString());
+    // no explicit limit: 200k units per non-budget instruction
+    const q = parseMessage(F.messageOf(F.legacy([ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000 }), F.transfer(F.stranger, 1)])), { owner: own });
+    expect(q.priorityLamports).toBe(200n);
+    expect(q.feeLamports).toBe(5200n);
+    const plain = parseMessage(F.messageOf(F.legacy([F.transfer(F.stranger, 1)])), { owner: own });
+    expect(plain.priorityLamports).toBe(0n);
+    expect(plain.feeLamports).toBe(5000n);
+  });
+
+  it("Token-2022: transferCheckedWithFee and burnChecked are outflows; unclassified tags are declared, benign ones are not", () => {
+    const keys = (owner: boolean) => [
+      { pubkey: F.ownerUsdc, isSigner: false, isWritable: true },
+      { pubkey: F.usdc, isSigner: false, isWritable: false },
+      { pubkey: F.strangerUsdc, isSigner: false, isWritable: true },
+      { pubkey: owner ? F.owner.publicKey : F.friend, isSigner: true, isWritable: false },
+    ];
+    const withFee = new Uint8Array(19); withFee[0] = 26; withFee[1] = 1; new DataView(withFee.buffer).setBigUint64(2, 777n, true); withFee[10] = 6; new DataView(withFee.buffer).setBigUint64(11, 7n, true);
+    const p = parseMessage(F.messageOf(F.legacy([new TransactionInstruction({ programId: new PublicKey(TOKEN_2022), keys: keys(true), data: Buffer.from(withFee) })])), { owner: own });
+    expect(p.tokenOut).toEqual([{ mint: F.usdc.toBase58(), amount: 777n, source: F.ownerUsdc.toBase58(), dest: F.strangerUsdc.toBase58() }]);
+    expect(p.dangers).toEqual([]);
+    const burn = new Uint8Array(10); burn[0] = 15; new DataView(burn.buffer).setBigUint64(1, 55n, true); burn[9] = 6;
+    const b = parseMessage(F.messageOf(F.legacy([new TransactionInstruction({ programId: new PublicKey(TOKEN_2022), keys: keys(true).slice(0, 2).concat([keys(true)[3]!]), data: Buffer.from(burn) })])), { owner: own });
+    expect(b.tokenOut).toEqual([{ mint: F.usdc.toBase58(), amount: 55n, source: F.ownerUsdc.toBase58(), dest: "" }]);
+    expect(claimsFor(b).token_out).toEqual([{ mint: F.usdc.toBase58(), amount: "55", dest: "" }]);
+    expect(claimsFor(b).dangerous).toEqual([]); // the controller has no "burn" word: the outflow is the claim
+    for (const tag of [27, 38, 35]) {
+      const u = parseMessage(F.messageOf(F.legacy([new TransactionInstruction({ programId: new PublicKey(TOKEN_2022), keys: keys(true).slice(0, 3), data: Buffer.from([tag, 3]) })])), { owner: own });
+      expect(u.dangers.map((d) => d.kind)).toEqual(["unknown_instruction"]);
+    }
+    const harvest = parseMessage(F.messageOf(F.legacy([new TransactionInstruction({ programId: new PublicKey(TOKEN_2022), keys: keys(true).slice(0, 3), data: Buffer.from([26, 4]) })])), { owner: own });
+    expect(harvest.dangers.map((d) => d.kind)).toEqual(["unknown_instruction"]);
+    const sync = parseMessage(F.messageOf(F.legacy([new TransactionInstruction({ programId: new PublicKey(TOKEN), keys: keys(true).slice(0, 1), data: Buffer.from([17]) })])), { owner: own });
+    expect(sync.dangers).toEqual([]);
+  });
+
 });
