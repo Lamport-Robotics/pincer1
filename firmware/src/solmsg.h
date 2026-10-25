@@ -49,7 +49,10 @@ typedef struct {
 #define SOLMSG_DANGER_UNKNOWN_PROGRAM (1u << 5) /* "unknown_program": a program that is neither a core program nor an
                                                    allowlisted router (decided by policy.c, needs the router list) */
 #define SOLMSG_DANGER_UNKNOWN_IX (1u << 6) /* "unknown_instruction": a System instruction this parser cannot classify */
-#define SOLMSG_DANGER_ALL 0x7fu
+#define SOLMSG_DANGER_ROUTE (1u << 7) /* "route_dest": a Jupiter route whose output does not land in the owner's own
+                                       * associated token account, whose authority is not the owner, or whose shape
+                                       * this parser does not know */
+#define SOLMSG_DANGER_ALL 0xffu
 
 typedef struct {
     uint8_t source[32];
@@ -79,7 +82,16 @@ typedef struct {
      * is the one way a message spends SOL without a transfer, so it is parsed, shown and claimed. */
     uint64_t fee_lamports;      /* base + priority, saturating */
     uint64_t priority_lamports; /* the ComputeBudget part alone: counted against limits and the allowance */
+    /* Programs that are neither core nor a Jupiter route this parser verified end to end. Anything here
+     * means the message can move assets the display cannot show, so the allowance never covers it. */
+    uint8_t n_unverified_programs;
+    bool has_swap;              /* a verified Jupiter route: output goes to the owner's ATA of swap_mint */
+    uint8_t swap_mint[32];
 } solmsg_summary_t;
+
+/* Associated token account of `owner` for `mint` under `token_program` (sha256 + off-curve search, like
+ * find_program_address). False only if no bump works (cannot happen for real keys). */
+bool solmsg_ata_derive(const uint8_t owner[32], const uint8_t token_program[32], const uint8_t mint[32], uint8_t out[32]);
 
 enum {
     SOLMSG_OK = 0,

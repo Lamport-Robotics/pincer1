@@ -11,6 +11,7 @@
 #include "policy.h"
 #include "solmsg.h"
 #include "u256.h"
+#include "eip712.h"
 
 #define PROTO_LINE_MAX 8192
 #define PROTO_ID_MAX CONSENT_ID_MAX
@@ -81,6 +82,7 @@ typedef struct {
         policy_btc_claims_t btc_claims; /* kind btc_psbt */
         struct {
             bool present;          /* evm_msg carried typed_data + digest */
+            eip712_desc_t desc;    /* what the display shows: struct, domain, fields */
             int rc;                /* eip712_digest() result over the JSON */
             uint8_t digest[32];    /* what the controller computed */
             uint8_t claimed[32];   /* what the daemon says it is */

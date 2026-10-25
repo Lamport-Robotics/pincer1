@@ -260,6 +260,7 @@ static int parse_typed_data(const cJSON *root, proto_req_t *req)
     u256_to_be32(&v, req->sign.typed.claimed);
     req->sign.typed.present = true;
     req->sign.typed.rc = eip712_digest(td, req->sign.typed.digest);
+    if (req->sign.typed.rc == EIP712_OK && eip712_describe(td, &req->sign.typed.desc) != EIP712_OK) req->sign.typed.rc = EIP712_E_UNSUPPORTED;
     return PROTO_OK;
 }
 

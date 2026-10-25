@@ -22,6 +22,7 @@
 #include "routers.h"
 #include "solmsg.h"
 #include "u256.h"
+#include "eip712.h"
 
 #define TUI_LINE_BYTES 40 /* 21 cells; UTF-8 for "·" and "…" takes extra bytes */
 #define TUI_MAX_LINES 6
@@ -95,6 +96,7 @@ typedef struct {
     const uint8_t *msg;          /* *_MSG: the bytes */
     size_t msg_len;
     const uint8_t *digest;       /* EVM_TYPED: the 32-byte digest the controller computed */
+    const eip712_desc_t *typed;  /* EVM_TYPED: the struct, domain and fields the digest covers */
     uint16_t inh_days;           /* INHERITANCE: inactivity days */
     const uint8_t *inh_heir;     /* INHERITANCE: heir key */
     bool inh_replace;            /* INHERITANCE: replacing (touch) vs arming (long touch) */

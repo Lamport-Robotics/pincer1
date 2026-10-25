@@ -27,6 +27,23 @@ enum {
     EIP712_E_UNSUPPORTED = -2, /* nested struct, array, unknown type, too many fields */
 };
 
+#define EIP712_DESC_FIELDS 8
+/* What the owner is shown for a typed-data request: the struct name, the domain, every field of the
+ * message (name and value as text). `permit_like` marks structs that hand a spender or operator rights
+ * over tokens (ERC-2612 Permit, Permit2, marketplace orders): those take a long touch. */
+typedef struct {
+    char primary[32];
+    char domain_name[32];
+    char chain_id[24];       /* decimal, "" when the domain has none */
+    bool has_contract;
+    uint8_t contract[20];
+    uint8_t n_fields;
+    bool fields_truncated;   /* more fields than EIP712_DESC_FIELDS, or a value that did not fit: refuse to sign */
+    struct { char name[20]; char value[44]; } f[EIP712_DESC_FIELDS];
+    bool permit_like;
+} eip712_desc_t;
+int eip712_describe(const cJSON *typed_data, eip712_desc_t *out);
+
 /* hashStruct(primaryType, message) for the named struct in `types`. */
 int eip712_hash_struct(const cJSON *types, const char *type_name, const cJSON *data, uint8_t out[32]);
 /* keccak(0x19 0x01 || hashStruct(EIP712Domain, domain) || hashStruct(primaryType, message)) */

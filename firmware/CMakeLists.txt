@@ -52,6 +52,8 @@ set(PINCER_CORE_SOURCES
     src/trusted_ui.c
     third_party/cjson/cJSON.c
     third_party/ed25519/src/sha512.c
+    third_party/ed25519/src/fe.c
+    third_party/ed25519/src/ge.c
     third_party/micro-ecc/uECC.c
     third_party/tiny_sha3/sha3.c
     third_party/bech32/segwit_addr.c
@@ -69,8 +71,6 @@ set(PINCER_UECC_DEFINES
 )
 set(PINCER_ED25519_SOURCES
     third_party/ed25519/src/add_scalar.c
-    third_party/ed25519/src/fe.c
-    third_party/ed25519/src/ge.c
     third_party/ed25519/src/key_exchange.c
     third_party/ed25519/src/keypair.c
     third_party/ed25519/src/sc.c
@@ -100,7 +100,7 @@ if(BUILD_HOST_TESTS)
     set_source_files_properties(third_party/micro-ecc/uECC.c third_party/bech32/segwit_addr.c
                                 PROPERTIES COMPILE_OPTIONS "-w") # vendored as-is
 
-    foreach(t util proto touch storage update solmsg policy consent keygen scp03 inheritance secp256k1 evmtx btcpsbt display trusted_ui)
+    foreach(t util proto touch storage update solmsg policy consent keygen scp03 inheritance secp256k1 evmtx btcpsbt display trusted_ui eip712)
         add_executable(test_${t} test/test_${t}.c)
         target_link_libraries(test_${t} pincer_core)
         target_include_directories(test_${t} PRIVATE test)

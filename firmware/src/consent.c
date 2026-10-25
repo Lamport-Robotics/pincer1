@@ -365,6 +365,12 @@ consent_result_t consent_begin_sign(consent_t *c, const char *id, uint64_t lampo
 consent_result_t consent_begin_sign_chain(consent_t *c, const char *id, consent_chain_t chain, uint64_t amount,
                                           const u256_t *wei, uint32_t ttl_ms, uint32_t now_ms, consent_reason_t *why)
 {
+    return consent_begin_sign_chain_need(c, id, chain, amount, wei, ttl_ms, now_ms, CONSENT_NEED_TOUCH, why);
+}
+
+consent_result_t consent_begin_sign_chain_need(consent_t *c, const char *id, consent_chain_t chain, uint64_t amount,
+                                               const u256_t *wei, uint32_t ttl_ms, uint32_t now_ms, consent_need_t need, consent_reason_t *why)
+{
     u256_t w;
     if (chain >= CONSENT_CHAIN_COUNT) return deny(CONSENT_DENY_POLICY, why);
     if (!c->p.initialized) return deny(CONSENT_DENY_NOT_INITIALIZED, why);
@@ -374,8 +380,8 @@ consent_result_t consent_begin_sign_chain(consent_t *c, const char *id, consent_
     if (chain != CONSENT_CHAIN_EVM) u256_zero(&w);
     if (chain == CONSENT_CHAIN_EVM) amount = 0;
     if (!within_daily_limit(c, chain, amount, &w, now_ms)) return deny(CONSENT_DENY_OVER_DAILY_LIMIT, why);
-    start_pending(c, CONSENT_OP_SIGN, id, CONSENT_NEED_TOUCH, ttl_ms, now_ms);
-    gate_on_display(c, CONSENT_NEED_TOUCH);
+    start_pending(c, CONSENT_OP_SIGN, id, need, ttl_ms, now_ms);
+    gate_on_display(c, need);
     c->pending.chain = chain;
     c->pending.lamports = amount;
     c->pending.wei = w;

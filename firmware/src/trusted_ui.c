@@ -284,6 +284,10 @@ static void build_sol_tx(const tui_sign_t *r, tui_doc_t *doc, const char *head)
         else tui_add(doc, TUI_TEXT, " burn");
     }
     if (s->token_out_overflow) add_danger(doc, "MORE TOKEN MOVES");
+    if (s->has_swap) {
+        tui_short_b58(s->swap_mint, sh, sizeof sh);
+        tui_addf(doc, TUI_TEXT, "swap -> your %s", sh);
+    }
     for (i = 0; i < s->n_programs; i++) {
         if (solmsg_is_core_program(s->programs[i])) continue;
         tui_short_b58(s->programs[i], sh, sizeof sh);
@@ -431,6 +435,25 @@ void tui_build_sign(const tui_sign_t *r, tui_doc_t *doc)
         break;
     case TUI_SIGN_EVM_TYPED:
         tui_add(doc, TUI_HEAD, "EVM " DOT " TYPED DATA");
+        if (r->typed) {
+            uint8_t i;
+            char hx[48];
+            const eip712_desc_t *t = r->typed;
+            if (t->permit_like) add_danger(doc, "PERMIT: TOKEN ACCESS");
+            tui_add_wrap(doc, TUI_TEXT, t->primary);
+            if (t->domain_name[0]) { snprintf(hx, sizeof hx, "on %s", t->domain_name); tui_add_wrap(doc, TUI_TEXT, hx); }
+            if (t->chain_id[0]) tui_addf(doc, TUI_TEXT, "chain %s", t->chain_id);
+            if (t->has_contract) {
+                snprintf(hx, sizeof hx, "0x%02x%02x%02x%02x..%02x%02x%02x%02x", t->contract[0], t->contract[1], t->contract[2], t->contract[3], t->contract[16], t->contract[17], t->contract[18], t->contract[19]);
+                tui_addf(doc, TUI_TEXT, "at %s", hx);
+            }
+            for (i = 0; i < t->n_fields; i++) {
+                tui_addf(doc, TUI_TEXT, "%s:", t->f[i].name);
+                tui_add_wrap(doc, TUI_TEXT, t->f[i].value);
+            }
+            /* a field the display cannot show is a field the owner cannot consent to */
+            if (t->fields_truncated) doc->truncated = true;
+        }
         if (r->digest) add_digest(doc, r->digest);
         break;
     case TUI_SIGN_BTC_PSBT:
@@ -447,6 +470,7 @@ void tui_build_sign(const tui_sign_t *r, tui_doc_t *doc)
 tui_foot_t tui_sign_footer(const tui_sign_t *r)
 {
     if (r->kind == TUI_SIGN_INHERITANCE && !r->inh_replace) return TUI_FOOT_HOLD;
+    if (r->kind == TUI_SIGN_EVM_TYPED && r->typed && r->typed->permit_like) return TUI_FOOT_HOLD;
     return TUI_FOOT_SIGN;
 }
 

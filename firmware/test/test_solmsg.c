@@ -421,6 +421,75 @@ static void test_token_2022_outflows(void)
     CHECK_EQ(s.n_token_out, 0);
 }
 
+/* Jupiter routes: read end to end, or flagged. Reference ATAs from @solana/spl-token for owner 0x11.. / mint 0x66.. */
+static void test_jupiter_route(void)
+{
+    mb_t m;
+    uint8_t jup[32], ata[32], ata2022[32], want[32], want2022[32], disc[8] = {0xe5, 0x17, 0xcb, 0x97, 0x7a, 0xe3, 0xad, 0x2a};
+    uint8_t keys[8][32], d[16], accts[9];
+    solmsg_t p;
+    solmsg_summary_t s;
+    CHECK(pubkey_from_b58("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", jup));
+    CHECK(pubkey_from_b58("8i2kbQccvSxNPcbQTtoxEoJi77GKE6i2sj9mmm5HH82t", want));
+    CHECK(pubkey_from_b58("DxmVKtdeojLVA46sinLeY9abTPC5SGkJWKEgBZV74cGG", want2022));
+    CHECK(solmsg_ata_derive(OWNER, SOLMSG_TOKEN_PROGRAM, MINT, ata));
+    CHECK_MEM(ata, want, 32);
+    CHECK(solmsg_ata_derive(OWNER, SOLMSG_TOKEN2022_PROGRAM, MINT, ata2022));
+    CHECK_MEM(ata2022, want2022, 32);
+    /* keys: 0 owner, 1 token program, 2 source ata, 3 dest ata (owner's), 4 mint, 5 event auth, 6 jupiter, 7 stranger ata */
+    memcpy(keys[0], OWNER, 32); memcpy(keys[1], SOLMSG_TOKEN_PROGRAM, 32); memcpy(keys[2], SRC_ATA, 32); memcpy(keys[3], ata, 32);
+    memcpy(keys[4], MINT, 32); memcpy(keys[5], OTHER, 32); memcpy(keys[6], jup, 32); memcpy(keys[7], DST_ATA, 32);
+    memcpy(d, disc, 8); d[8] = 0; /* route plan etc. do not matter to the check */
+    /* route: [token_program, authority, user_source, user_destination, destination(opt = program id), destination_mint, platform_fee(opt), event_authority, program] */
+    accts[0] = 1; accts[1] = 0; accts[2] = 2; accts[3] = 3; accts[4] = 6; accts[5] = 4; accts[6] = 6; accts[7] = 5; accts[8] = 6;
+    mb_begin(&m, -1, 1, 0, 5, keys, 8); mb_n_ix(&m, 1);
+    mb_ix(&m, 6, accts, 9, d, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.dangerous, 0);
+    CHECK_EQ(s.n_unverified_programs, 0);
+    CHECK(s.has_swap); CHECK_MEM(s.swap_mint, MINT, 32);
+    /* output to someone else's account: flagged, and the program counts as unread */
+    accts[3] = 7;
+    mb_begin(&m, -1, 1, 0, 5, keys, 8); mb_n_ix(&m, 1);
+    mb_ix(&m, 6, accts, 9, d, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_ROUTE);
+    CHECK_EQ(s.n_unverified_programs, 1);
+    CHECK(!s.has_swap);
+    /* a third-party destination that is not the owner's ATA */
+    accts[3] = 3; accts[4] = 7;
+    mb_begin(&m, -1, 1, 0, 5, keys, 8); mb_n_ix(&m, 1);
+    mb_ix(&m, 6, accts, 9, d, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_ROUTE);
+    /* authority is not the owner */
+    accts[4] = 6; accts[1] = 5;
+    mb_begin(&m, -1, 1, 0, 5, keys, 8); mb_n_ix(&m, 1);
+    mb_ix(&m, 6, accts, 9, d, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_ROUTE);
+    /* an instruction shape this parser does not know */
+    accts[1] = 0; d[0] ^= 0xff;
+    mb_begin(&m, -1, 1, 0, 5, keys, 8); mb_n_ix(&m, 1);
+    mb_ix(&m, 6, accts, 9, d, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_ROUTE);
+    CHECK_STR(solmsg_danger_name(SOLMSG_DANGER_ROUTE), "route_dest");
+    /* any other non-core program is simply unread (no route flag) */
+    memcpy(keys[6], OTHER, 32);
+    mb_begin(&m, -1, 1, 0, 5, keys, 8); mb_n_ix(&m, 1);
+    mb_ix(&m, 6, accts, 9, d, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.dangerous & SOLMSG_DANGER_ROUTE, 0);
+    CHECK_EQ(s.n_unverified_programs, 1);
+}
+
 static void test_malformed(void)
 {
     mb_t m;
@@ -460,6 +529,7 @@ int main(void)
     RUN(test_v0_lookup_table);
     RUN(test_compute_budget_fee);
     RUN(test_token_2022_outflows);
+    RUN(test_jupiter_route);
     RUN(test_malformed);
     TEST_END();
 }

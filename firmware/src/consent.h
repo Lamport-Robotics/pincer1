@@ -253,6 +253,9 @@ consent_result_t consent_begin_sign(consent_t *c, const char *id, uint64_t lampo
  * spent_today(chain) + amount <= daily_limit(chain), or the elevated limit when the elevate is for that chain. */
 consent_result_t consent_begin_sign_chain(consent_t *c, const char *id, consent_chain_t chain, uint64_t amount,
                                           const u256_t *wei, uint32_t ttl_ms, uint32_t now_ms, consent_reason_t *why);
+/* Same, with the kind of consent the request needs (a permit-like typed-data signature takes a long touch). */
+consent_result_t consent_begin_sign_chain_need(consent_t *c, const char *id, consent_chain_t chain, uint64_t amount,
+                                               const u256_t *wei, uint32_t ttl_ms, uint32_t now_ms, consent_need_t need, consent_reason_t *why);
 consent_result_t consent_begin_elevate(consent_t *c, const char *id, uint64_t limit, uint32_t now_ms,
                                        consent_reason_t *why);
 /* Per-chain elevate: `limit` for SOL/BTC, `limit_wei` for EVM. */

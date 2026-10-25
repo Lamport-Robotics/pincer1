@@ -1057,7 +1057,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         v = policy_check(&parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
         if (v != POLICY_OK) { send_denied_shown(r->id, policy_verdict_reason(v)); return; }
         res = consent_begin_sign(&g_consent, r->id, u64_sat_add(parsed.lamports_out, parsed.priority_lamports), (const uint8_t (*)[32])parsed.programs,
-                                 parsed.n_programs, eff_danger != 0 || parsed.n_token_out > 0 || parsed.token_out_overflow,
+                                 parsed.n_programs, eff_danger != 0 || parsed.n_token_out > 0 || parsed.token_out_overflow || parsed.n_unverified_programs > 0,
                                  r->sign.ttl_ms, now, &act, &why); /* check 5; tokens never ride the allowance */
         break;
     }
@@ -1099,7 +1099,9 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
             if (looks_like_any_tx(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
             evmtx_personal_digest(r->sign.bytes, r->sign.len, digest);
         }
-        res = consent_begin_sign_chain(&g_consent, r->id, CONSENT_CHAIN_EVM, 0, NULL, r->sign.ttl_ms, now, &why);
+        /* a permit hands a spender rights over tokens with no transaction to show: it takes the long touch */
+        res = consent_begin_sign_chain_need(&g_consent, r->id, CONSENT_CHAIN_EVM, 0, NULL, r->sign.ttl_ms, now,
+                                            r->sign.typed.present && r->sign.typed.desc.permit_like ? CONSENT_NEED_LONG_TOUCH : CONSENT_NEED_TOUCH, &why);
         break;
     case PROTO_KIND_BTC_MSG: {
         const uint8_t *pkh = owner_btc_pkh();
@@ -1138,7 +1140,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     case PROTO_KIND_EVM_TX: ui.kind = TUI_SIGN_EVM_TX; ui.evm = &evm; ui.evm_dangerous = eff_danger; break;
     case PROTO_KIND_BTC_PSBT: ui.kind = TUI_SIGN_BTC_PSBT; ui.btc = &g_pending_sign.btc; ui.btc_dangerous = eff_danger; break;
     case PROTO_KIND_EVM_MSG:
-        if (r->sign.typed.present) { ui.kind = TUI_SIGN_EVM_TYPED; ui.digest = g_pending_sign.digest; }
+        if (r->sign.typed.present) { ui.kind = TUI_SIGN_EVM_TYPED; ui.digest = g_pending_sign.digest; ui.typed = &r->sign.typed.desc; }
         else { ui.kind = TUI_SIGN_EVM_MSG; ui.msg = g_pending_sign.bytes; ui.msg_len = g_pending_sign.len; }
         break;
     case PROTO_KIND_BTC_MSG: ui.kind = TUI_SIGN_BTC_MSG; ui.msg = g_pending_sign.bytes; ui.msg_len = g_pending_sign.len; break;
@@ -1152,9 +1154,9 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         send_denied_shown(r->id, "policy");
         return;
     }
-    g_doc_foot = TUI_FOOT_SIGN;
+    g_doc_foot = tui_sign_footer(&ui);
     g_doc_cancelable = true;
-    ui_sign_page(0); /* -> pending(touch) */
+    ui_sign_page(0); /* -> pending(touch or long touch) */
     need = consent_need_str(consent_pending_need(&g_consent));
     switch (r->sign.kind) {
     case PROTO_KIND_EVM_TX: send_line(proto_fmt_pending_evm(g_out, sizeof g_out, r->id, need, &evm, eff_danger)); break;

@@ -1,5 +1,8 @@
 #include "solmsg.h"
 
+#include "ge.h"
+#include "sha256.h"
+
 #include <string.h>
 
 #include "util.h"
@@ -403,12 +406,93 @@ bool solmsg_is_core_program(const uint8_t pid[32])
     return false;
 }
 
+
+/* ---- Jupiter v6: the one non-core program the controller reads into, so the overnight allowance can cover
+ * a swap. Four route shapes; in each the owner must be the transfer authority and the output must land in
+ * the owner's own associated token account of the destination mint. Anything else is SOLMSG_DANGER_ROUTE. */
+static const char JUPITER_V6_B58[] = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
+static uint8_t g_jup[32];
+static uint8_t g_jup_disc[4][8]; /* route, shared_accounts_route, exact_out_route, shared_accounts_exact_out_route */
+static bool g_jup_ready;
+static void jup_init(void)
+{
+    static const char *const names[4] = {"global:route", "global:shared_accounts_route", "global:exact_out_route", "global:shared_accounts_exact_out_route"};
+    uint8_t h[32];
+    size_t i;
+    if (g_jup_ready) return;
+    (void)pubkey_from_b58(JUPITER_V6_B58, g_jup);
+    for (i = 0; i < 4; i++) { sha256((const uint8_t *)names[i], strlen(names[i]), h); memcpy(g_jup_disc[i], h, 8); }
+    g_jup_ready = true;
+}
+
+bool solmsg_ata_derive(const uint8_t owner[32], const uint8_t token_program[32], const uint8_t mint[32], uint8_t out[32])
+{
+    static const char PDA_MARKER[] = "ProgramDerivedAddress";
+    uint8_t buf[32 * 3 + 1 + 32 + sizeof PDA_MARKER - 1];
+    int bump;
+    solmsg_is_core_program(owner); /* makes sure g_core (the ATA program id) is decoded */
+    memcpy(buf, owner, 32); memcpy(buf + 32, token_program, 32); memcpy(buf + 64, mint, 32);
+    memcpy(buf + 97, g_core[0], 32);
+    memcpy(buf + 129, PDA_MARKER, sizeof PDA_MARKER - 1);
+    for (bump = 255; bump >= 0; bump--) {
+        ge_p3 pt;
+        buf[96] = (uint8_t)bump;
+        sha256(buf, sizeof buf, out);
+        /* a program address must not be a point on the curve: the first bump whose hash fails to decode wins */
+        if (ge_frombytes_negate_vartime(&pt, out) != 0) return true;
+    }
+    return false;
+}
+
+/* True when `ix` is a Jupiter route this parser understands and its output goes to the owner's own ATA. */
+static bool jupiter_route_ok(const solmsg_t *m, const solmsg_ix_t *ix, const uint8_t owner[32], uint8_t swap_mint[32])
+{
+    int shape = -1, i;
+    uint8_t auth_pos, dest_pos, mint_pos, opt_dest_pos;
+    const uint8_t *tp, *mint, *dest, *opt;
+    uint8_t ata[32];
+    jup_init();
+    if (ix->data_len < 8) return false;
+    for (i = 0; i < 4; i++) if (memcmp(ix->data, g_jup_disc[i], 8) == 0) { shape = i; break; }
+    switch (shape) {
+    case 0: /* route: [token_program, user_transfer_authority, user_source, user_destination, destination(opt), destination_mint, ...] */
+        if (ix->n_accounts < 6) return false;
+        auth_pos = 1; dest_pos = 3; opt_dest_pos = 4; mint_pos = 5; break;
+    case 1: /* shared_accounts_route: [token_program, program_authority, user_transfer_authority, source, prog_source, prog_dest, destination, source_mint, destination_mint, ...] */
+        if (ix->n_accounts < 9) return false;
+        auth_pos = 2; dest_pos = 6; opt_dest_pos = 6; mint_pos = 8; break;
+    case 2: /* exact_out_route: [token_program, user_transfer_authority, user_source, user_destination, destination(opt), source_mint, destination_mint, ...] */
+        if (ix->n_accounts < 7) return false;
+        auth_pos = 1; dest_pos = 3; opt_dest_pos = 4; mint_pos = 6; break;
+    case 3: /* shared_accounts_exact_out_route: same layout as shared_accounts_route */
+        if (ix->n_accounts < 9) return false;
+        auth_pos = 2; dest_pos = 6; opt_dest_pos = 6; mint_pos = 8; break;
+    default:
+        return false;
+    }
+    if (!ix_key_is(m, ix, auth_pos, owner)) return false;
+    tp = key_at(m, ix->account_indexes[0]);
+    mint = key_at(m, ix->account_indexes[mint_pos]);
+    dest = key_at(m, ix->account_indexes[dest_pos]);
+    opt = key_at(m, ix->account_indexes[opt_dest_pos]);
+    if (!tp || !mint || !dest || !opt) return false;
+    if (memcmp(tp, SOLMSG_TOKEN_PROGRAM, 32) != 0 && memcmp(tp, SOLMSG_TOKEN2022_PROGRAM, 32) != 0) return false;
+    if (!solmsg_ata_derive(owner, tp, mint, ata)) return false;
+    if (memcmp(dest, ata, 32) != 0) return false;
+    /* the optional third-party destination is either absent (the program id stands in) or the same ATA */
+    if (memcmp(opt, g_jup, 32) != 0 && memcmp(opt, ata, 32) != 0) return false;
+    memcpy(swap_mint, mint, 32);
+    return true;
+}
+
 void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t *s)
 {
     bool has_limit = false;
     uint32_t cu_limit = 0;
     uint64_t cu_price = 0;
     uint8_t n_cb = 0;
+    const uint8_t *unverified[SOLMSG_MAX_IX];
+    uint8_t n_unverified_ix = 0;
     uint8_t i;
     memset(s, 0, sizeof *s);
     s->fee_payer_is_owner = m->n_static_keys > 0 && m->num_required_signatures > 0 &&
@@ -433,7 +517,26 @@ void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t
         } else if (solmsg_is_core_program(pid) && memcmp(pid, g_core[1], 32) == 0) {
             n_cb++;
             analyze_compute_budget(ix, &has_limit, &cu_limit, &cu_price);
+        } else if (!solmsg_is_core_program(pid)) {
+            uint8_t mint[32];
+            jup_init();
+            if (memcmp(pid, g_jup, 32) == 0 && jupiter_route_ok(m, ix, owner, mint)) {
+                if (!s->has_swap) { s->has_swap = true; memcpy(s->swap_mint, mint, 32); }
+            } else {
+                if (memcmp(pid, g_jup, 32) == 0) s->dangerous |= SOLMSG_DANGER_ROUTE;
+                unverified[n_unverified_ix < SOLMSG_MAX_IX ? n_unverified_ix++ : SOLMSG_MAX_IX - 1] = pid;
+            }
         }
+    }
+    /* distinct non-core programs that were not read end to end: the allowance never covers them */
+    {
+        uint8_t i, j, n = 0;
+        for (i = 0; i < n_unverified_ix; i++) {
+            bool dup = false;
+            for (j = 0; j < i; j++) if (memcmp(unverified[j], unverified[i], 32) == 0) { dup = true; break; }
+            if (!dup && n < 255) n++;
+        }
+        s->n_unverified_programs = n;
     }
     /* the fee: what the leader is paid even when no transfer is in the message */
     {
@@ -458,6 +561,7 @@ static const struct {
     {SOLMSG_DANGER_LOOKUP_TABLE, "lookup_table"},
     {SOLMSG_DANGER_UNKNOWN_PROGRAM, "unknown_program"},
     {SOLMSG_DANGER_UNKNOWN_IX, "unknown_instruction"},
+    {SOLMSG_DANGER_ROUTE, "route_dest"},
 };
 
 const char *solmsg_danger_name(uint32_t bit)

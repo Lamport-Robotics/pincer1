@@ -219,3 +219,120 @@ int eip712_digest(const cJSON *td, uint8_t digest[32])
     keccak256_final(&c, digest);
     return EIP712_OK;
 }
+
+/* ---- description for the trusted display ---- */
+
+static void copy_text(char *dst, size_t cap, const char *src)
+{
+    size_t n = strlen(src);
+    if (n >= cap) { memcpy(dst, src, cap - 2); dst[cap - 2] = '~'; dst[cap - 1] = 0; }
+    else memcpy(dst, src, n + 1);
+}
+
+static void hex_text(char *dst, size_t cap, const uint8_t *b, size_t n)
+{
+    static const char H[] = "0123456789abcdef";
+    size_t i, o = 0;
+    if (cap < 4) { dst[0] = 0; return; }
+    dst[o++] = '0'; dst[o++] = 'x';
+    for (i = 0; i < n && o + 2 < cap - 1; i++) { dst[o++] = H[b[i] >> 4]; dst[o++] = H[b[i] & 15]; }
+    if (i < n) dst[o++] = '~';
+    dst[o] = 0;
+}
+
+static bool describe_value(ptype_t kind, unsigned bits, const cJSON *v, char *out, size_t cap)
+{
+    uint8_t word[32];
+    u256_t n;
+    bool neg = false;
+    (void)bits;
+    switch (kind) {
+    case T_ADDRESS:
+        if (!cJSON_IsString(v) || !evm_address_from_hex(v->valuestring, word + 12)) return false;
+        hex_text(out, cap, word + 12, 20);
+        return true;
+    case T_BOOL:
+        if (!cJSON_IsBool(v)) return false;
+        copy_text(out, cap, cJSON_IsTrue(v) ? "true" : "false");
+        return true;
+    case T_UINT:
+    case T_INT: {
+        char dec[U256_DEC_MAX + 2];
+        size_t len, i;
+        bool all_max = true;
+        if (!json_int(v, &n, &neg)) return false;
+        if (u256_to_dec(&n, dec, sizeof dec) < 0) return false;
+        len = strlen(dec);
+        if (len + (neg ? 1 : 0) < cap) { if (neg) { out[0] = '-'; memcpy(out + 1, dec, len + 1); } else memcpy(out, dec, len + 1); return true; }
+        /* too many digits for the line: 2^256-1 is the "unlimited" of every permit; anything else is shown
+         * as a mantissa and an exponent so its size, not its digits, is what the owner reads */
+        for (i = 0; i < 32; i++) if (((const uint8_t *)&n)[i] != 0xff) { all_max = false; break; }
+        if (all_max && !neg && u256_to_dec(&n, dec, sizeof dec) > 0 && len == 78) { copy_text(out, cap, "UNLIMITED"); return true; }
+        if (cap < 12) return false;
+        out[0] = neg ? '-' : dec[0];
+        if (neg) { out[1] = dec[0]; out[2] = '.'; memcpy(out + 3, dec + 1, 4); snprintf(out + 7, cap - 7, "e%u", (unsigned)(len - 1)); }
+        else { out[1] = '.'; memcpy(out + 2, dec + 1, 4); snprintf(out + 6, cap - 6, "e%u", (unsigned)(len - 1)); }
+        return true;
+    }
+    case T_BYTESN:
+    case T_BYTES: {
+        size_t len;
+        uint8_t buf[64];
+        if (!cJSON_IsString(v) || !hex_bytes(v->valuestring, buf, sizeof buf, &len)) {
+            /* longer bytes: show what fits, marked */
+            if (cJSON_IsString(v) && v->valuestring) { copy_text(out, cap, v->valuestring); return true; }
+            return false;
+        }
+        hex_text(out, cap, buf, len);
+        return true;
+    }
+    case T_STRING:
+        if (!cJSON_IsString(v) || !v->valuestring) return false;
+        copy_text(out, cap, v->valuestring);
+        return true;
+    }
+    return false;
+}
+
+int eip712_describe(const cJSON *td, eip712_desc_t *out)
+{
+    const cJSON *types, *primary, *domain, *message, *fields, *f, *v;
+    memset(out, 0, sizeof *out);
+    if (!cJSON_IsObject(td)) return EIP712_E_MALFORMED;
+    types = cJSON_GetObjectItemCaseSensitive(td, "types");
+    primary = cJSON_GetObjectItemCaseSensitive(td, "primaryType");
+    domain = cJSON_GetObjectItemCaseSensitive(td, "domain");
+    message = cJSON_GetObjectItemCaseSensitive(td, "message");
+    if (!cJSON_IsObject(types) || !cJSON_IsString(primary) || !cJSON_IsObject(domain) || !cJSON_IsObject(message))
+        return EIP712_E_MALFORMED;
+    copy_text(out->primary, sizeof out->primary, primary->valuestring);
+    v = cJSON_GetObjectItemCaseSensitive(domain, "name");
+    if (cJSON_IsString(v) && v->valuestring) copy_text(out->domain_name, sizeof out->domain_name, v->valuestring);
+    v = cJSON_GetObjectItemCaseSensitive(domain, "chainId");
+    if (v) {
+        u256_t n; bool neg;
+        if (json_int(v, &n, &neg) && !neg) (void)u256_to_dec(&n, out->chain_id, sizeof out->chain_id);
+    }
+    v = cJSON_GetObjectItemCaseSensitive(domain, "verifyingContract");
+    if (cJSON_IsString(v) && v->valuestring && evm_address_from_hex(v->valuestring, out->contract)) out->has_contract = true;
+    /* a permit by name, or by the fields that make one: somebody else gets rights over the owner's tokens */
+    if (strncmp(out->primary, "Permit", 6) == 0 || strcmp(out->primary, "Order") == 0 || strcmp(out->primary, "OrderComponents") == 0)
+        out->permit_like = true;
+    fields = cJSON_GetObjectItemCaseSensitive(types, primary->valuestring);
+    if (!cJSON_IsArray(fields)) return EIP712_E_MALFORMED;
+    cJSON_ArrayForEach(f, fields) {
+        const cJSON *name = cJSON_GetObjectItemCaseSensitive(f, "name");
+        const cJSON *type = cJSON_GetObjectItemCaseSensitive(f, "type");
+        ptype_t kind; unsigned bits;
+        if (!cJSON_IsString(name) || !cJSON_IsString(type) || !name->valuestring || !type->valuestring) return EIP712_E_MALFORMED;
+        if (strcmp(name->valuestring, "spender") == 0 || strcmp(name->valuestring, "operator") == 0) out->permit_like = true;
+        if (out->n_fields >= EIP712_DESC_FIELDS) { out->fields_truncated = true; continue; }
+        if (!parse_type(type->valuestring, &kind, &bits)) return EIP712_E_UNSUPPORTED;
+        v = cJSON_GetObjectItemCaseSensitive(message, name->valuestring);
+        if (!v) return EIP712_E_MALFORMED;
+        copy_text(out->f[out->n_fields].name, sizeof out->f[out->n_fields].name, name->valuestring);
+        if (!describe_value(kind, bits, v, out->f[out->n_fields].value, sizeof out->f[out->n_fields].value)) out->fields_truncated = true;
+        out->n_fields++;
+    }
+    return EIP712_OK;
+}
