@@ -57,7 +57,15 @@ typedef struct {
     sha256_ctx hash;
     uint8_t head[UPDATE_HEADER_SCAN]; /* copy of the first bytes for the image checks */
     uint32_t head_len;
+    bool has_version;      /* the image carries a VERSION item (pico_set_binary_version) */
+    uint16_t img_major, img_minor;
 } update_t;
+
+/* What `update_check_image` learned about the image besides "signed executable". */
+typedef struct {
+    bool has_version;
+    uint16_t major, minor;
+} update_image_info_t;
 
 void update_init(update_t *u, const update_flash_t *fl);
 update_rc_t update_begin(update_t *u, uint32_t size, const uint8_t sha256[32], const char *version);
@@ -70,6 +78,13 @@ const char *update_rc_str(update_rc_t rc);
  * finds the first picobin block in `head`, requires an IMAGE_TYPE item saying EXE / secure / RP2350
  * and a SIGNATURE item. Returns UPDATE_OK or UPDATE_E_IMAGE. */
 update_rc_t update_check_image(const uint8_t *head, size_t len);
+/* Same check, and reports the VERSION item (major.minor) when the image has one. `info` may be NULL. */
+update_rc_t update_inspect_image(const uint8_t *head, size_t len, update_image_info_t *info);
+/* The running image's major.minor (from PROTO_FW_VERSION) for the downgrade rule, set by main.c. */
+void update_set_running_version(uint16_t major, uint16_t minor);
+/* True when an image at `major.minor` may replace the running one (equal or newer; no version item = refused
+ * once the running image has one). */
+bool update_version_allowed(bool has_version, uint16_t major, uint16_t minor);
 
 /* Boot ledger: one flash sector that says "partition P (version V) is on trial". The image that boots
  * from P counts its boots in it (one bit per boot, no erase needed) and, past UPDATE_TRIAL_BOOTS without

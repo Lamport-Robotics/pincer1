@@ -3,7 +3,7 @@
   "version": [1, 0],
   "unpartitioned": {
     "families": ["absolute", "data"],
-    "permissions": {"secure": "rw", "nonsecure": "", "bootloader": "rw"}
+    "permissions": {"secure": "rw", "nonsecure": "", "bootloader": ""}
   },
   "partitions": [
     {

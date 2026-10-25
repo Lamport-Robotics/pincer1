@@ -146,7 +146,7 @@ static void test_format(void)
                    "\"allowance\":null,\"pin_set\":true,\"duress_pin_set\":false,\"pin_failures\":0,\"inheritance\":{\"armed\":false,\"inactivity_days\":0,\"days_since_touch\":0.0},"
                    "\"display\":false,\"routers\":{\"builtin\":[{\"chain\":\"solana\",\"address\":\"JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4\"},"
                    "{\"chain\":\"evm\",\"address\":\"0x111111125421cA6dc452d289314280a0f8842A65\"},{\"chain\":\"evm\",\"address\":\"0xDef1C0ded9bec7F1a1670819833240f027b25EfF\"}],\"owner\":[]},"
-                   "\"update\":{\"partition\":0,\"staged\":false,\"trial\":false}}\n");
+                   "\"update\":{\"partition\":0,\"staged\":false,\"trial\":false,\"secure_boot\":false}}\n");
     /* display present + an owner-added router */
     {
         router_list_t rl;

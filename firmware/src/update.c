@@ -7,6 +7,7 @@
 #define BLOCK_MARKER_END 0xab123579u
 #define ITEM_1BS_IMAGE_TYPE 0x42u
 #define ITEM_SIGNATURE 0x09u
+#define ITEM_1BS_VERSION 0x48u
 #define ITEM_2BS_LAST 0xffu
 #define IMAGE_TYPE_TYPE_BITS 0x000fu
 #define IMAGE_TYPE_EXE 0x1u
@@ -85,10 +86,23 @@ update_rc_t update_chunk(update_t *u, uint32_t off, const uint8_t *data, size_t 
     return UPDATE_OK;
 }
 
-update_rc_t update_check_image(const uint8_t *head, size_t len)
+static uint16_t g_run_major, g_run_minor;
+static bool g_run_set;
+void update_set_running_version(uint16_t major, uint16_t minor) { g_run_major = major; g_run_minor = minor; g_run_set = true; }
+bool update_version_allowed(bool has_version, uint16_t major, uint16_t minor)
+{
+    if (!g_run_set) return true;
+    if (!has_version) return false; /* an image without a version stamp cannot prove it is not older */
+    return major > g_run_major || (major == g_run_major && minor >= g_run_minor);
+}
+
+update_rc_t update_check_image(const uint8_t *head, size_t len) { return update_inspect_image(head, len, NULL); }
+
+update_rc_t update_inspect_image(const uint8_t *head, size_t len, update_image_info_t *info)
 {
     size_t start, p;
     bool exe = false, signed_ = false;
+    if (info) memset(info, 0, sizeof *info);
     /* the block loop starts at a word-aligned marker somewhere in the first 4 KiB */
     for (start = 0; start + 8 <= len; start += 4)
         if (rd32(head + start) == BLOCK_MARKER_START) break;
@@ -105,6 +119,12 @@ update_rc_t update_check_image(const uint8_t *head, size_t len)
                   (flags & IMAGE_TYPE_CHIP_BITS) == IMAGE_TYPE_CHIP_RP2350;
         } else if (type == ITEM_SIGNATURE) {
             signed_ = true;
+        } else if (type == ITEM_1BS_VERSION && p + 8 <= len && info) {
+            /* word after the header: major in the high half, minor in the low half (pico_set_binary_version) */
+            uint32_t v = rd32(head + p + 4);
+            info->has_version = true;
+            info->major = (uint16_t)(v >> 16);
+            info->minor = (uint16_t)(v & 0xffff);
         }
         /* 1-byte-size items carry their word count in byte 1; 2-byte-size items in bytes 1..2 */
         words = (type & 0x80) ? (item >> 8) & 0xffff : (item >> 8) & 0xff;
@@ -123,8 +143,16 @@ update_rc_t update_end(update_t *u)
     if (u->received != u->size) { update_abort(u); return UPDATE_E_SIZE; }
     sha256_final(&u->hash, got);
     if (memcmp(got, u->expect, 32) != 0) { update_abort(u); return UPDATE_E_HASH; }
-    rc = update_check_image(u->head, u->head_len);
-    if (rc != UPDATE_OK) { update_abort(u); return rc; }
+    {
+        update_image_info_t info;
+        rc = update_inspect_image(u->head, u->head_len, &info);
+        if (rc != UPDATE_OK) { update_abort(u); return rc; }
+        u->has_version = info.has_version;
+        u->img_major = info.major;
+        u->img_minor = info.minor;
+        /* older than what runs: refused here, before any touch is asked for */
+        if (!update_version_allowed(info.has_version, info.major, info.minor)) { update_abort(u); return UPDATE_E_VERSION; }
+    }
     /* read back the first page: what we hashed must be what flash holds */
     if (u->fl->read(0, got, sizeof got) != 0 || memcmp(got, u->head, sizeof got) != 0) { update_abort(u); return UPDATE_E_FLASH; }
     u->state = UPDATE_VERIFIED;

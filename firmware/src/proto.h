@@ -151,6 +151,7 @@ typedef struct {
     int8_t partition;              /* A/B partition this image booted from, -1 when there is no table */
     bool update_staged;            /* a verified image waits for the owner's touch */
     bool trial;                    /* this image is on trial: `update_commit` or it rolls back */
+    bool secure_boot; /* the bootrom checks image signatures (OTP); false on bench boards */
 } proto_hello_t;
 
 typedef struct {

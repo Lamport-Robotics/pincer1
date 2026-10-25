@@ -3,7 +3,7 @@
 # optional debug disable.
 #
 #   firmware/scripts/provision-otp.sh <build>/pincer1_consent.otp.json [--scp03 scp03-keys.bin]
-#                                     [--disable-debug] [--yes]
+#                                     [--disable-debug] [--disable-picoboot] [--yes]
 #
 # <build>/pincer1_consent.otp.json is written by the signed build (cmake -DPINCER_SIGN_KEY=...). It holds
 #   bootkey0            SHA-256 of the signing public key (rows 0x080..0x08F)
@@ -28,11 +28,13 @@ set -euo pipefail
 otp_json=""
 scp03_bin=""
 disable_debug=0
+disable_picoboot=0
 yes=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --scp03) scp03_bin="$2"; shift 2 ;;
         --disable-debug) disable_debug=1; shift ;;
+        --disable-picoboot) disable_picoboot=1; shift ;;
         --yes) yes=1; shift ;;
         -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
         *) if [ -z "$otp_json" ]; then otp_json="$1"; shift; else echo "unexpected argument: $1" >&2; exit 2; fi ;;
@@ -58,6 +60,7 @@ echo "== will burn (irreversible)"
 echo "  $otp_json  -> bootkey0 hash, boot_flags1.key_valid, crit1.secure_boot_enable"
 [ -n "$scp03_bin" ] && echo "  $scp03_bin -> rows 0x0C0..0x0D7 (ECC) + PAGE3_LOCK1 = S:ro NS:none BL:none"
 [ "$disable_debug" = 1 ] && echo "  crit1.debug_disable = 1 (SWD dead forever)"
+[ "$disable_picoboot" = 1 ] && echo "  boot_flags0.disable_bootsel_usb_picoboot_ifc = 1 (no USB flash access in BOOTSEL, forever; updates come through the daemon only)"
 echo
 if [ "$yes" != 1 ]; then
     echo "Type BURN to continue:"
@@ -91,3 +94,10 @@ fi
 echo
 echo "done. Flash the SIGNED image now: picotool load -x <build>/pincer1_consent.uf2"
 echo "The board will refuse any image not signed with the key behind $otp_json."
+
+if [ "$disable_picoboot" = 1 ]; then
+  # BOOTSEL stays (recovery through the UF2 drive is also off: the bootrom then only runs signed images
+  # already in flash). Storage, the trial ledger and the partition table can no longer be read or rewritten
+  # over USB. Check the exact selector on your picotool: `picotool otp list | grep -i picoboot`.
+  picotool otp set BOOT_FLAGS0.DISABLE_BOOTSEL_USB_PICOBOOT_IFC 1
+fi

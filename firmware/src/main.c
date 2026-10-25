@@ -25,6 +25,7 @@
 #if PICO_RP2350
 #include "boot/picobin.h"
 #include "boot/picoboot_constants.h"
+#include "hardware/structs/otp.h"
 #include "pico/bootrom.h"
 #endif
 #if PICO_RP2040
@@ -268,6 +269,17 @@ static void __no_inline_not_in_flash_func(self_invalidate)(uint32_t my_base)
 /* On every boot: an armed ledger for OUR partition means we are the image on trial. Count the boot; past
  * the limit the daemon never confirmed us, so we erase our own first sector (the IMAGE_DEF lives there)
  * and reboot: the bootrom then finds only the previous image and boots that. */
+/* Whether the bootrom verifies image signatures on this board (OTP crit1.secure_boot_enable). Without it an
+ * update is just a flash write, so the daemon refuses the update path in production. */
+static bool secure_boot_enabled(void)
+{
+#if PICO_RP2350
+    return (otp_hw->critical & OTP_CRITICAL_SECURE_BOOT_ENABLE_BITS) != 0;
+#else
+    return false;
+#endif
+}
+
 static void update_boot_check(void)
 {
     update_ledger_t l;
@@ -275,6 +287,10 @@ static void update_boot_check(void)
     find_ab_partitions();
 #endif
     update_init(&g_update, &g_update_fl);
+    {
+        unsigned mj = 0, mn = 0;
+        if (sscanf(PROTO_FW_VERSION, "%u.%u", &mj, &mn) == 2) update_set_running_version((uint16_t)mj, (uint16_t)mn);
+    }
     update_ledger_read(&g_ledger_fl, &l);
     if (!l.armed || g_boot_partition < 0 || l.partition != (uint8_t)g_boot_partition) return;
     g_trial = true;
@@ -308,6 +324,15 @@ static void handle_update(void)
     case PROTO_REQ_UPDATE_END:
         rc = update_end(&g_update);
         if (rc != UPDATE_OK) { send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, update_rc_str(rc))); return; }
+        if (g_update.has_version) {
+            /* the daemon's "major.minor.patch" must name the image it sent */
+            unsigned mj = 0, mn = 0;
+            if (sscanf(g_update.version, "%u.%u", &mj, &mn) != 2 || mj != g_update.img_major || mn != g_update.img_minor) {
+                update_abort(&g_update);
+                send_line(proto_fmt_denied(g_out, sizeof g_out, g_req.id, "version"));
+                return;
+            }
+        }
         send_line(proto_fmt_ok(g_out, sizeof g_out, "update_end", g_req.id));
         return;
     case PROTO_REQ_UPDATE_APPLY:
@@ -316,7 +341,9 @@ static void handle_update(void)
         res = consent_begin_update_apply(&g_consent, g_req.id, g_update.version, g_update.expect, now_ms(), &why);
         if (res == CONSENT_R_PENDING) {
             char line[32];
-            snprintf(line, sizeof line, "v%s  %02x%02x%02x%02x", g_update.version, g_update.expect[0], g_update.expect[1], g_update.expect[2], g_update.expect[3]);
+            /* the number on the screen is the image's own stamp, never the daemon's string */
+            if (g_update.has_version) snprintf(line, sizeof line, "v%u.%u  %02x%02x%02x%02x", (unsigned)g_update.img_major, (unsigned)g_update.img_minor, g_update.expect[0], g_update.expect[1], g_update.expect[2], g_update.expect[3]);
+            else snprintf(line, sizeof line, "unstamped  %02x%02x%02x%02x", g_update.expect[0], g_update.expect[1], g_update.expect[2], g_update.expect[3]);
             ui_notice("FIRMWARE", line, "hold 3s to install", NOTICE_LONG_MS);
         }
         reply_pending_or_denied(res, g_req.id, why);
@@ -991,6 +1018,7 @@ static void handle_hello(void)
     h.partition = g_boot_partition;
     h.update_staged = g_update.state == UPDATE_VERIFIED;
     h.trial = g_trial;
+    h.secure_boot = secure_boot_enabled();
     h.se050 = signer_is_hardware() && g_signer_ok;
     h.initialized = g_consent.p.initialized;
     h.pubkey = h.initialized ? owner_pubkey() : NULL;

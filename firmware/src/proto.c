@@ -653,6 +653,7 @@ int proto_fmt_hello(char *out, size_t cap, const proto_hello_t *h)
         cJSON_AddNumberToObject(up, "partition", h->partition);
         cJSON_AddBoolToObject(up, "staged", h->update_staged);
         cJSON_AddBoolToObject(up, "trial", h->trial);
+        cJSON_AddBoolToObject(up, "secure_boot", h->secure_boot);
     }
     return finish(o, out, cap);
 }

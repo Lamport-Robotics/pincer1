@@ -35,6 +35,7 @@ static void put32(uint8_t *p, uint32_t v) { p[0] = v & 0xff; p[1] = (v >> 8) & 0
 
 /* A plausible RP2350 image head: vector table, then a block with IMAGE_TYPE (exe, secure, rp2350),
  * an optional SIGNATURE item, LAST. `flags` lets the tests build bad ones. */
+static int g_ver_major = -1, g_ver_minor = 0; /* <0: no VERSION item */
 static void make_image(uint8_t *img, size_t size, bool exe_secure, bool with_sig)
 {
     size_t i, p;
@@ -42,6 +43,10 @@ static void make_image(uint8_t *img, size_t size, bool exe_secure, bool with_sig
     p = 0x100; /* block after the vector table */
     put32(img + p, 0xffffded3u); p += 4;
     put32(img + p, 0x42u | (1u << 8) | ((exe_secure ? (0x1u | (0x2u << 4) | (0x1u << 12)) : 0x2u) << 16)); p += 4;
+    if (g_ver_major >= 0) { /* VERSION item: size 2 words, major.minor in the next word */
+        put32(img + p, 0x48u | (2u << 8)); p += 4;
+        put32(img + p, ((uint32_t)g_ver_major << 16) | (uint32_t)g_ver_minor); p += 4;
+    }
     if (with_sig) { /* signature item: 2-byte size, 2 words payload here (real ones are longer) */
         put32(img + p, 0x09u | (3u << 8)); p += 4;
         put32(img + p, 0x11111111u); p += 4;
@@ -215,6 +220,51 @@ static void test_boot_ledger(void)
     CHECK_EQ(update_ledger_arm(&g_ledger_fl, 0, ""), -1);
 }
 
+static void test_version_item_and_downgrade(void)
+{
+    static uint8_t img[4096];
+    uint8_t h[32];
+    update_t u;
+    update_rc_t rc;
+    update_image_info_t info;
+    update_set_running_version(0, 5);
+    /* stamped 0.6: read, and allowed over 0.5 */
+    g_ver_major = 0; g_ver_minor = 6;
+    make_image(img, sizeof img, true, true);
+    CHECK_EQ(update_inspect_image(img, 4096, &info), UPDATE_OK);
+    CHECK(info.has_version); CHECK_EQ(info.major, 0); CHECK_EQ(info.minor, 6);
+    sha256(img, sizeof img, h);
+    update_init(&u, &g_fl);
+    CHECK_EQ(update_begin(&u, sizeof img, h, "0.6.0"), UPDATE_OK);
+    feed(&u, img, sizeof img, &rc);
+    CHECK_EQ(update_end(&u), UPDATE_OK);
+    CHECK(u.has_version); CHECK_EQ(u.img_major, 0); CHECK_EQ(u.img_minor, 6);
+    update_abort(&u);
+    /* the same major.minor is fine (a patch release) */
+    g_ver_minor = 5;
+    make_image(img, sizeof img, true, true); sha256(img, sizeof img, h);
+    CHECK_EQ(update_begin(&u, sizeof img, h, "0.5.3"), UPDATE_OK);
+    feed(&u, img, sizeof img, &rc);
+    CHECK_EQ(update_end(&u), UPDATE_OK);
+    update_abort(&u);
+    /* older: refused before anything is staged */
+    g_ver_minor = 4;
+    make_image(img, sizeof img, true, true); sha256(img, sizeof img, h);
+    CHECK_EQ(update_begin(&u, sizeof img, h, "0.4.9"), UPDATE_OK);
+    feed(&u, img, sizeof img, &rc);
+    CHECK_EQ(update_end(&u), UPDATE_E_VERSION);
+    CHECK_EQ(u.state, UPDATE_IDLE);
+    /* no stamp at all: refused once the running image has one */
+    g_ver_major = -1;
+    make_image(img, sizeof img, true, true); sha256(img, sizeof img, h);
+    CHECK_EQ(update_begin(&u, sizeof img, h, "9.9.9"), UPDATE_OK);
+    feed(&u, img, sizeof img, &rc);
+    CHECK_EQ(update_end(&u), UPDATE_E_VERSION);
+    CHECK(update_version_allowed(true, 1, 0));
+    CHECK(!update_version_allowed(true, 0, 4));
+    CHECK(!update_version_allowed(false, 0, 0));
+}
+
 int main(void)
 {
     RUN(test_boot_ledger);
@@ -223,5 +273,6 @@ int main(void)
     RUN(test_hash_mismatch_leaves_nothing_usable);
     RUN(test_image_checks);
     RUN(test_flash_failure_aborts);
+    RUN(test_version_item_and_downgrade); /* last: it pins the running version for the rest of the process */
     TEST_END();
 }
