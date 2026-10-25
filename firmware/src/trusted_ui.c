@@ -266,6 +266,12 @@ static void build_sol_tx(const tui_sign_t *r, tui_doc_t *doc, const char *head)
     } else if (s->n_token_out == 0) {
         tui_add(doc, TUI_TEXT, "no SOL leaves");
     }
+    if (s->priority_lamports > 0) {
+        /* a prioritisation fee is SOL spent without a transfer: always on the screen, loud past 0.01 SOL */
+        tui_fmt_units(s->fee_lamports, 9, amt, sizeof amt);
+        tui_addf(doc, TUI_TEXT, "fee up to %s SOL", amt);
+        if (s->priority_lamports >= 10000000u) add_danger(doc, "HIGH FEE");
+    }
     add_sol_dangers(doc, r->sol_dangerous);
     for (i = 0; i < s->n_token_out; i++) {
         const solmsg_token_out_t *t = &s->token_out[i];

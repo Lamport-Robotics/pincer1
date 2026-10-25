@@ -74,6 +74,11 @@ typedef struct {
     bool multi_dest;                  /* lamports leave the owner towards more than one recipient: the display
                                          can only show one, so policy refuses the message */
     bool fee_payer_is_owner;
+    /* What the fee payer (the owner) pays the leader: 5000 lamports per required signature plus the
+     * prioritisation fee set through ComputeBudget (unit limit x unit price, rounded up). A compute budget
+     * is the one way a message spends SOL without a transfer, so it is parsed, shown and claimed. */
+    uint64_t fee_lamports;      /* base + priority, saturating */
+    uint64_t priority_lamports; /* the ComputeBudget part alone: counted against limits and the allowance */
 } solmsg_summary_t;
 
 enum {

@@ -1056,7 +1056,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         have_parsed = true;
         v = policy_check(&parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
         if (v != POLICY_OK) { send_denied_shown(r->id, policy_verdict_reason(v)); return; }
-        res = consent_begin_sign(&g_consent, r->id, parsed.lamports_out, (const uint8_t (*)[32])parsed.programs,
+        res = consent_begin_sign(&g_consent, r->id, u64_sat_add(parsed.lamports_out, parsed.priority_lamports), (const uint8_t (*)[32])parsed.programs,
                                  parsed.n_programs, eff_danger != 0 || parsed.n_token_out > 0 || parsed.token_out_overflow,
                                  r->sign.ttl_ms, now, &act, &why); /* check 5; tokens never ride the allowance */
         break;

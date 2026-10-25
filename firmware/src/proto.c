@@ -135,6 +135,7 @@ static int parse_claims(const cJSON *c, policy_claims_t *cl)
     memset(cl, 0, sizeof *cl);
     if (!c || !cJSON_IsObject(c)) return PROTO_E_FIELD;
     if (!get_u64(c, "lamports_out", &cl->lamports_out, false)) return PROTO_E_FIELD;
+    if (!get_u64(c, "fee_lamports", &cl->fee_lamports, false)) return PROTO_E_FIELD;
     if (!get_str(c, "dest", dest, sizeof dest, false)) return PROTO_E_FIELD;
     if (dest[0]) {
         if (!pubkey_from_b58(dest, cl->dest)) return PROTO_E_ENCODING;

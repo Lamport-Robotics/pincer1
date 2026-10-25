@@ -1,4 +1,5 @@
 #include "solmsg.h"
+#include "util.h"
 
 #include "harness.h"
 #include "msgbuild.h"
@@ -310,6 +311,116 @@ static void test_v0_lookup_table(void)
     CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_E_INDEX);
 }
 
+static uint8_t CB_PROGRAM[32];
+
+/* ComputeBudget: the fee is parsed from unit limit x unit price; without a limit, 200k units per instruction. */
+static void test_compute_budget_fee(void)
+{
+    mb_t m;
+    uint8_t keys[4][32], d1[16], d2[16], d3[64], a0[1] = {0}, a3[2] = {0, 1};
+    solmsg_t p;
+    solmsg_summary_t s;
+    CHECK(pubkey_from_b58("ComputeBudget111111111111111111111111111111", CB_PROGRAM));
+    memcpy(keys[0], OWNER, 32); memcpy(keys[1], DEST, 32); memcpy(keys[2], SOLMSG_SYSTEM_PROGRAM, 32); memcpy(keys[3], CB_PROGRAM, 32);
+    /* limit 1.4M units at 10^12 micro-lamports per unit = 1.4e12 lamports of "fee" on a 0-lamport memo-like tx */
+    d1[0] = 2; wr_le32(d1 + 1, 1400000u);
+    d2[0] = 3; wr_le64(d2 + 1, 1000000000000ull);
+    mb_begin(&m, -1, 1, 0, 2, keys, 4); mb_n_ix(&m, 3);
+    mb_ix(&m, 3, a0, 0, d1, 5);
+    mb_ix(&m, 3, a0, 0, d2, 9);
+    mb_ix(&m, 2, a3, 2, d3, ix_sys_transfer(d3, 0));
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.lamports_out, 0);
+    CHECK_U64(s.priority_lamports, 1400000000000ull);
+    CHECK_U64(s.fee_lamports, 1400000000000ull + 5000);
+    CHECK_EQ(s.dangerous, 0); /* ComputeBudget stays a core program: the fee is the claim, not a danger flag */
+    /* no limit set: 200k units per non-budget instruction (one transfer) at 1000 micro-lamports = 200 lamports */
+    d2[0] = 3; wr_le64(d2 + 1, 1000);
+    mb_begin(&m, -1, 1, 0, 2, keys, 4); mb_n_ix(&m, 2);
+    mb_ix(&m, 3, a0, 0, d2, 9);
+    mb_ix(&m, 2, a3, 2, d3, ix_sys_transfer(d3, SOL));
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.priority_lamports, 200);
+    CHECK_U64(s.fee_lamports, 5200);
+    /* no budget at all, two signers: just the base fee */
+    mb_begin(&m, -1, 2, 0, 1, keys, 3); mb_n_ix(&m, 1);
+    mb_ix(&m, 2, a3, 2, d3, ix_sys_transfer(d3, SOL));
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.priority_lamports, 0);
+    CHECK_U64(s.fee_lamports, 10000);
+    /* a price that overflows saturates rather than wrapping to something small */
+    d1[0] = 2; wr_le32(d1 + 1, 1400000u);
+    d2[0] = 3; wr_le64(d2 + 1, UINT64_MAX);
+    mb_begin(&m, -1, 1, 0, 2, keys, 4); mb_n_ix(&m, 2);
+    mb_ix(&m, 3, a0, 0, d1, 5);
+    mb_ix(&m, 3, a0, 0, d2, 9);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.priority_lamports, UINT64_MAX);
+    CHECK_U64(s.fee_lamports, UINT64_MAX);
+}
+
+/* Token-2022: transfer-with-fee and checked burn are outflows; anything unclassified is flagged, benign setup is not. */
+static void test_token_2022_outflows(void)
+{
+    mb_t m;
+    uint8_t keys[5][32], d[32], a4[4] = {1, 2, 3, 0}, a3[3] = {1, 2, 0}, a1[1] = {1};
+    solmsg_t p;
+    solmsg_summary_t s;
+    memcpy(keys[0], OWNER, 32); memcpy(keys[1], SRC_ATA, 32); memcpy(keys[2], MINT, 32); memcpy(keys[3], DST_ATA, 32);
+    memcpy(keys[4], SOLMSG_TOKEN2022_PROGRAM, 32);
+    /* TransferCheckedWithFee: 26, 1, amount, decimals, fee */
+    d[0] = 26; d[1] = 1; wr_le64(d + 2, 777); d[10] = 6; wr_le64(d + 11, 7);
+    mb_begin(&m, -1, 1, 0, 2, keys, 5); mb_n_ix(&m, 1);
+    mb_ix(&m, 4, a4, 4, d, 19);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.n_token_out, 1);
+    CHECK_U64(s.token_out[0].amount, 777);
+    CHECK(s.token_out[0].has_mint); CHECK_MEM(s.token_out[0].mint, MINT, 32);
+    CHECK(s.token_out[0].has_dest); CHECK_MEM(s.token_out[0].dest, DST_ATA, 32);
+    CHECK_EQ(s.dangerous, 0);
+    /* BurnChecked: 15, amount, decimals */
+    d[0] = 15; wr_le64(d + 1, 55); d[9] = 6;
+    mb_begin(&m, -1, 1, 0, 2, keys, 5); mb_n_ix(&m, 1);
+    mb_ix(&m, 4, a3, 3, d, 10);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.n_token_out, 1);
+    CHECK_U64(s.token_out[0].amount, 55);
+    CHECK(!s.token_out[0].has_dest);
+    /* a transfer-fee sub-instruction that is not a transfer (harvest) and a confidential transfer: unknown */
+    d[0] = 26; d[1] = 4;
+    mb_begin(&m, -1, 1, 0, 2, keys, 5); mb_n_ix(&m, 1);
+    mb_ix(&m, 4, a3, 3, d, 2);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_UNKNOWN_IX);
+    d[0] = 27; d[1] = 3;
+    mb_begin(&m, -1, 1, 0, 2, keys, 5); mb_n_ix(&m, 1);
+    mb_ix(&m, 4, a3, 3, d, 2);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_UNKNOWN_IX);
+    d[0] = 38;
+    mb_begin(&m, -1, 1, 0, 2, keys, 5); mb_n_ix(&m, 1);
+    mb_ix(&m, 4, a3, 3, d, 1);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.dangerous & SOLMSG_DANGER_UNKNOWN_IX);
+    /* syncNative (17) and initializeAccount3 (18) move nothing: no flag */
+    d[0] = 17;
+    mb_begin(&m, -1, 1, 0, 2, keys, 5); mb_n_ix(&m, 1);
+    mb_ix(&m, 4, a1, 1, d, 1);
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_EQ(s.dangerous, 0);
+    CHECK_EQ(s.n_token_out, 0);
+}
+
 static void test_malformed(void)
 {
     mb_t m;
@@ -347,6 +458,8 @@ int main(void)
     RUN(test_spl_transfer_checked);
     RUN(test_set_authority_and_friends);
     RUN(test_v0_lookup_table);
+    RUN(test_compute_budget_fee);
+    RUN(test_token_2022_outflows);
     RUN(test_malformed);
     TEST_END();
 }

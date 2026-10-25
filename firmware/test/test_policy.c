@@ -252,7 +252,24 @@ static void test_end_to_end_lie(void)
     base_claims(&c); /* claims 0.5 SOL */
     CHECK_EQ(CHK(&s, &c), POLICY_LAMPORTS);
     c.lamports_out = 50 * SOL;
+    CHECK_EQ(CHK(&s, &c), POLICY_FEE); /* the 5000-lamport base fee is SOL leaving too: it must be claimed */
+    c.fee_lamports = 4999;
+    CHECK_EQ(CHK(&s, &c), POLICY_FEE);
+    c.fee_lamports = 5000;
     CHECK_EQ(CHK(&s, &c), POLICY_OK);
+}
+
+/* A priority fee is a transfer to the leader without a System instruction: claimed or refused. */
+static void test_priority_fee_claim(void)
+{
+    solmsg_summary_t s; policy_claims_t c;
+    base_parsed(&s); base_claims(&c);
+    s.fee_lamports = 5000 + 2 * SOL; s.priority_lamports = 2 * SOL;
+    c.fee_lamports = 5000;
+    CHECK_EQ(CHK(&s, &c), POLICY_FEE);
+    c.fee_lamports = 5000 + 2 * SOL;
+    CHECK_EQ(CHK(&s, &c), POLICY_OK);
+    CHECK_STR(policy_verdict_reason(POLICY_FEE), "claims_mismatch");
 }
 
 /* ---- EVM ---- */
@@ -518,6 +535,7 @@ int main(void)
     RUN(test_check4_dangerous);
     RUN(test_end_to_end_lie);
     RUN(test_evm_checks);
+    RUN(test_priority_fee_claim);
     RUN(test_evm_tokens_and_dangerous);
     RUN(test_btc_checks);
     TEST_END();

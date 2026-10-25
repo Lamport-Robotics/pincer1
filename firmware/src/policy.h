@@ -35,6 +35,7 @@ typedef struct {
     uint8_t programs[POLICY_MAX_PROGRAMS][32];
     uint8_t n_programs;
     uint32_t dangerous; /* SOLMSG_DANGER_* bitmask */
+    uint64_t fee_lamports; /* base + priority fee the daemon expects the owner to pay ("fee_lamports") */
 } policy_claims_t;
 
 /* claims for kind "evm_tx". `routers` is no longer a field: the controller keeps its own allowlist. */

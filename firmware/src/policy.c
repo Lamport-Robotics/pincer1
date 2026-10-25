@@ -81,6 +81,8 @@ policy_verdict_t policy_check(const solmsg_summary_t *p, const policy_claims_t *
     if (!p->fee_payer_is_owner) return POLICY_FEE_PAYER;
     /* 2. what leaves the owner is at most what was claimed, and goes where the daemon said */
     if (p->lamports_out > c->lamports_out) return POLICY_LAMPORTS;
+    /* the fee is SOL leaving too: a priority fee the daemon did not claim is a hidden transfer to the leader */
+    if (p->fee_lamports > c->fee_lamports) return POLICY_FEE;
     if (p->multi_dest) return POLICY_DEST; /* two recipients would be shown as one: refuse outright */
     if (p->lamports_out > 0) {
         if (!p->has_dest || !c->has_dest) return POLICY_DEST;

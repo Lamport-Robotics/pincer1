@@ -336,50 +336,47 @@ static void analyze_token(const solmsg_t *m, const solmsg_ix_t *ix, const uint8_
         if (ix->n_accounts >= 3 && (ix_key_from(m, ix, 2, owner) || ix_key_is(m, ix, 0, owner)))
             s->dangerous |= SOLMSG_DANGER_CLOSE_ACCOUNT;
         break;
+    case 15: /* BurnChecked: [account, mint, authority, (signers)], u8 tag, u64 amount, u8 decimals */
+        if (ix->data_len >= 10 && ix->n_accounts >= 3 && (ix_key_from(m, ix, 2, owner) || ix_key_is(m, ix, 0, owner)))
+            add_token_out(s, m, ix, 0, 1, -1, rd_le64(ix->data + 1));
+        break;
+    case 26: /* Token-2022 TransferFeeExtension: sub-tag 1 = TransferCheckedWithFee
+              * [source, mint, dest, authority, (signers)], u8 26, u8 1, u64 amount, u8 decimals, u64 fee */
+        if (ix->data_len >= 2 && ix->data[1] == 1) {
+            if (ix->data_len >= 19 && ix->n_accounts >= 4 && (ix_key_from(m, ix, 3, owner) || ix_key_is(m, ix, 0, owner))) {
+                add_token_out(s, m, ix, 0, 1, 2, rd_le64(ix->data + 2));
+                set_dest(s, m, ix, 2);
+            }
+        } else {
+            s->dangerous |= SOLMSG_DANGER_UNKNOWN_IX; /* fee config / harvest / withdraw: not something the display can show */
+        }
+        break;
+    /* instructions that move nothing out of the owner: mint / account / multisig initialisation, revoke,
+     * mint-to (the owner would be the mint authority, not a payer), freeze / thaw, sync, size and ui-amount
+     * helpers, immutable-owner, close-authority / pointer / interest / memo-transfer / cpi-guard extension setup */
+    case 0: case 1: case 2: case 5: case 7: case 10: case 11: case 14: case 16: case 17: case 18: case 19:
+    case 20: case 21: case 22: case 23: case 24: case 25: case 28: case 29: case 30: case 31: case 32: case 33:
+    case 34: case 36: case 39: case 40: case 41:
+        break;
     default:
+        /* confidential transfers (27), withdraw excess lamports (38), permanent delegate (35), anything newer:
+         * assets can leave in ways the display cannot show, so the daemon must name it and the owner touch */
+        s->dangerous |= SOLMSG_DANGER_UNKNOWN_IX;
         break;
     }
 }
 
-void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t *s)
+/* ComputeBudget: u8 tag; 2 = SetComputeUnitLimit(u32), 3 = SetComputeUnitPrice(u64 micro-lamports per unit). */
+static void analyze_compute_budget(const solmsg_ix_t *ix, bool *has_limit, uint32_t *limit, uint64_t *price)
 {
-    uint8_t i;
-    memset(s, 0, sizeof *s);
-    s->fee_payer_is_owner = m->n_static_keys > 0 && m->num_required_signatures > 0 &&
-                            memcmp(m->static_keys, owner, 32) == 0;
-    for (i = 0; i < m->n_ix; i++) {
-        const solmsg_ix_t *ix = &m->ix[i];
-        const uint8_t *pid;
-        if (ix->touches_lookup) {
-            /* Cannot know what this instruction does without the table: refuse unless explicitly claimed. */
-            s->dangerous |= SOLMSG_DANGER_LOOKUP_TABLE;
-            pid = key_at(m, ix->program_index);
-            if (pid) add_program(s, pid);
-            continue;
-        }
-        pid = key_at(m, ix->program_index);
-        if (!pid) continue;
-        add_program(s, pid);
-        if (memcmp(pid, SOLMSG_SYSTEM_PROGRAM, 32) == 0) {
-            analyze_system(m, ix, owner, s);
-        } else if (memcmp(pid, SOLMSG_TOKEN_PROGRAM, 32) == 0 || memcmp(pid, SOLMSG_TOKEN2022_PROGRAM, 32) == 0) {
-            analyze_token(m, ix, owner, s);
-        }
-    }
+    if (ix->data_len < 1) return;
+    if (ix->data[0] == 2 && ix->data_len >= 5) { *has_limit = true; *limit = rd_le32(ix->data + 1); }
+    else if (ix->data[0] == 3 && ix->data_len >= 9) *price = rd_le64(ix->data + 1);
 }
 
-static const struct {
-    uint32_t bit;
-    const char *name;
-} DANGER_NAMES[] = {
-    {SOLMSG_DANGER_SET_AUTHORITY, "set_authority"},
-    {SOLMSG_DANGER_APPROVE, "approve"},
-    {SOLMSG_DANGER_CLOSE_ACCOUNT, "close_account"},
-    {SOLMSG_DANGER_ASSIGN, "assign"},
-    {SOLMSG_DANGER_LOOKUP_TABLE, "lookup_table"},
-    {SOLMSG_DANGER_UNKNOWN_PROGRAM, "unknown_program"},
-    {SOLMSG_DANGER_UNKNOWN_IX, "unknown_instruction"},
-};
+#define SOLMSG_BASE_FEE_PER_SIG 5000u
+#define SOLMSG_MAX_CU 1400000u
+#define SOLMSG_DEFAULT_CU_PER_IX 200000u
 
 /* Core programs (base58 decoded once). */
 static const char *const CORE_B58[] = {
@@ -405,6 +402,63 @@ bool solmsg_is_core_program(const uint8_t pid[32])
         if (memcmp(pid, g_core[i], 32) == 0) return true;
     return false;
 }
+
+void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t *s)
+{
+    bool has_limit = false;
+    uint32_t cu_limit = 0;
+    uint64_t cu_price = 0;
+    uint8_t n_cb = 0;
+    uint8_t i;
+    memset(s, 0, sizeof *s);
+    s->fee_payer_is_owner = m->n_static_keys > 0 && m->num_required_signatures > 0 &&
+                            memcmp(m->static_keys, owner, 32) == 0;
+    for (i = 0; i < m->n_ix; i++) {
+        const solmsg_ix_t *ix = &m->ix[i];
+        const uint8_t *pid;
+        if (ix->touches_lookup) {
+            /* Cannot know what this instruction does without the table: refuse unless explicitly claimed. */
+            s->dangerous |= SOLMSG_DANGER_LOOKUP_TABLE;
+            pid = key_at(m, ix->program_index);
+            if (pid) add_program(s, pid);
+            continue;
+        }
+        pid = key_at(m, ix->program_index);
+        if (!pid) continue;
+        add_program(s, pid);
+        if (memcmp(pid, SOLMSG_SYSTEM_PROGRAM, 32) == 0) {
+            analyze_system(m, ix, owner, s);
+        } else if (memcmp(pid, SOLMSG_TOKEN_PROGRAM, 32) == 0 || memcmp(pid, SOLMSG_TOKEN2022_PROGRAM, 32) == 0) {
+            analyze_token(m, ix, owner, s);
+        } else if (solmsg_is_core_program(pid) && memcmp(pid, g_core[1], 32) == 0) {
+            n_cb++;
+            analyze_compute_budget(ix, &has_limit, &cu_limit, &cu_price);
+        }
+    }
+    /* the fee: what the leader is paid even when no transfer is in the message */
+    {
+        uint64_t limit = has_limit ? cu_limit : (uint64_t)SOLMSG_DEFAULT_CU_PER_IX * (m->n_ix > n_cb ? m->n_ix - n_cb : 0);
+        uint64_t priority;
+        if (limit > SOLMSG_MAX_CU) limit = SOLMSG_MAX_CU;
+        if (limit && cu_price > UINT64_MAX / limit) priority = UINT64_MAX;
+        else priority = limit ? (limit * cu_price + 999999u) / 1000000u : 0;
+        s->priority_lamports = priority;
+        s->fee_lamports = u64_sat_add((uint64_t)SOLMSG_BASE_FEE_PER_SIG * m->num_required_signatures, priority);
+    }
+}
+
+static const struct {
+    uint32_t bit;
+    const char *name;
+} DANGER_NAMES[] = {
+    {SOLMSG_DANGER_SET_AUTHORITY, "set_authority"},
+    {SOLMSG_DANGER_APPROVE, "approve"},
+    {SOLMSG_DANGER_CLOSE_ACCOUNT, "close_account"},
+    {SOLMSG_DANGER_ASSIGN, "assign"},
+    {SOLMSG_DANGER_LOOKUP_TABLE, "lookup_table"},
+    {SOLMSG_DANGER_UNKNOWN_PROGRAM, "unknown_program"},
+    {SOLMSG_DANGER_UNKNOWN_IX, "unknown_instruction"},
+};
 
 const char *solmsg_danger_name(uint32_t bit)
 {
