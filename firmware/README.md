@@ -478,6 +478,14 @@ test/                host unit tests, assert-based, no framework
 
 ## Security properties enforced here (see `docs/SECURITY.md`)
 
+- The compute budget is a fee the owner pays: parsed, shown ("fee up to"), claimed by the daemon and
+  counted against limits and the allowance like a transfer.
+- Token and Token-2022 instructions the parser does not classify are flagged, like unknown System ones.
+- Typed data is shown field by field (struct, domain, every value); permit-like structs need the long touch.
+- Jupiter routes are read on-device: authority must be the owner and the output must land in the owner's
+  own associated token account; anything else, or any other non-core program, never rides the allowance.
+- Each key slot keeps its own limits and counters; owner operations answer the same in both slots.
+
 - No signature without a touch on GP15; the pin is read only by this firmware.
 - No touch counts before the trusted display has shown the request, rendered from the controller's own
   parse; the final page must have been shown; a long touch cancels. Host-supplied text never reaches the panel.

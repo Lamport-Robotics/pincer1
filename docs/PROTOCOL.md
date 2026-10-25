@@ -470,6 +470,11 @@ a *signature* item, and reads the first page back. Any failure leaves the runnin
 stage empty. `begin` while a verified image is staged replaces it; `begin` on a board without a partition
 table (bench boards, RP2040) is `not_supported`.
 
+`update_end` also reads the image's VERSION item (`pico_set_binary_version`): an image older than the
+running one, or without a stamp, is refused (`version`), and the display shows the stamp, not the daemon's
+string (which must agree with it). `hello.update.secure_boot` says whether the bootrom checks signatures
+(OTP provisioned); the daemon refuses the update path in `prod` when it does not.
+
 `update_apply` is an owner-authority request: on an initialised controller it needs the PIN set, the
 controller unlocked and not in duress, then a **long touch** while the display shows the version and the
 first four bytes of the hash. On a blank controller (before `init`) the long touch alone suffices. Approval

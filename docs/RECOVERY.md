@@ -70,7 +70,8 @@ The real wallet refused everything meanwhile and nothing on the robot showed it 
    rhythm has little entropy and a watched tap is a known tap.
 3. Re-fund the decoy; an empty decoy convinces nobody next time. `GET /duress/decoy` shows its addresses.
 4. Replace the duress rhythm (`POST /duress/set_pin`) if it was seen.
-5. If the duress *word* was used, the daemon sent the silent alert and the beacon pulsed; check where
+5. If the duress *word* was used, the daemon sent one alert to the phone (if alerts are configured) and the
+   beacon pulsed; check where
    those went and who was told.
 
 ## When the owner is gone (heirs)

@@ -42,7 +42,9 @@ key is kept safe by the controller + chip, which require a physical touch and an
    a 3-second touch, and cleared by lock or duress.
 6. **Lock** is only reversible with the PIN rhythm, verified inside the SE050. **Duress** switches to a
    decoy key slot and clears allowances. It has two triggers: the spoken duress word (robot → daemon →
-   controller, with a silent alert) and a second tap rhythm verified inside the SE050 next to the real PIN.
+   controller; the daemon then sends one alert to the phone through whatever `ALERTS` is configured with,
+   ntfy, Telegram or a webhook, and nothing when none is) and a second tap rhythm verified inside the SE050
+   next to the real PIN.
    The rhythm path is silent and indistinguishable: the controller answers exactly as it does for a real
    unlock, counts no failure, and never reports to the daemon which wallet is active. The daemon cannot
    tell the decoy from the real wallet, so neither can anyone reading its screen.
@@ -68,18 +70,27 @@ key is kept safe by the controller + chip, which require a physical touch and an
 The Jetson Orin Nano is fused for secure boot (PKC) and runs an encrypted rootfs keyed to the SoC, so
 someone with the robot cannot swap the SD/NVMe, edit the face or voice checks, or read enrolment data by
 pulling the drive. Face, liveness, speech and the local language model run on the device: camera and
-microphone data never leave the robot. None of this changes the trust table above: a compromised Jetson
+microphone data never leave the robot. What the robot *says* may: with a cloud voice (ElevenLabs) every
+spoken line, amounts and addresses included, goes to that API, and with a cloud brain the briefing, chat and
+presence context go to that model. Both are the owner's choice (`PINCER_TTS`, `PINCER_BRAIN`); the offline
+voice and the local model keep everything on the machine. None of this changes the trust table above: a compromised Jetson
 still cannot sign, because it cannot touch the pad or talk to the SE050 without the controller.
 
 ## What the daemon and robot add (defence in depth, not key safety)
 
 - Presence gate: the daemon does not even forward a request unless the robot reports a verified owner in
-  the room within the last 6 s. In `prod` mode this cannot be disabled.
+  the room within the last 6 s. The one exception, in every mode, is the overnight agent: its requests skip
+  the presence check because the owner is asleep, and what they may sign is bounded by the allowance the
+  owner granted with a long touch (the controller signs nothing outside it without a touch, and only reads
+  Jupiter routes whose output lands in the owner's own account). Morning proposals go through the normal
+  presence-and-touch path.
 - Scam filter: drainer patterns, address poisoning against the address book, wallet-emptying sends,
   brand-new destinations, unknown and brand-new programs, durable-nonce tricks, untrusted origins.
 - Spoken explanation of every request, with counterparty age and history, before the touch.
 - Automatic lock when the owner leaves or the robot is moved.
-- Duress word/expression → decoy wallet, silent alert.
+- Duress word/expression → decoy wallet; one alert to the phone if alerts are configured. The robot keeps
+  reporting duress for `PINCER_DURESS_HOLD_S` (15 min) and then listens again; the controller leaves the
+  decoy on the next unlock with the real rhythm.
 
 ## Threats
 
@@ -118,7 +129,9 @@ EVM, THORChain across chains). The daemon verifies the router address and that t
 embedded in the transaction before asking for a touch; approvals are exact-amount and to the router only;
 the controller treats any other destination as an unknown contract and refuses unless it was declared and
 the owner touched. A compromised daemon can at most route a swap through a listed router at a worse price
-within the slippage cap, never to an arbitrary address.
+within the slippage cap, never to an arbitrary address. The controller reads Jupiter routes itself and
+refuses one whose output account is not the owner's own associated token account; THORChain inbound
+addresses still come from the configured node and are spoken in full before the touch.
 
 ## Known gaps in v1
 
