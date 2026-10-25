@@ -8,6 +8,7 @@ environment.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -19,7 +20,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PINCER_",
-        env_file=".env",
+        # a .env beside the code is for a developer's laptop; under systemd the unit's
+        # EnvironmentFile is the only source, so a .env that slipped into a release fills nothing
+        env_file=None if os.environ.get("INVOCATION_ID") else ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
@@ -74,6 +77,8 @@ class Settings(BaseSettings):
     mic_sample_rate: int = 16000
     mic_device: str | None = None
     listen_chunk_s: float = 4.0
+    # how long the robot keeps reporting duress after the word (then it listens again)
+    duress_hold_s: float = 900.0
     listen_energy_threshold: float = 0.01
     passphrase_record_s: float = 5.0
     whisper_model: str | None = None  # small on cuda, base on cpu

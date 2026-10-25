@@ -184,7 +184,11 @@ class RobotService:
     # -- lifecycle ----------------------------------------------------------------------
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
-        self._server = await serve(self._handle, self.host, self.port, max_size=1 << 20)
+        # origins=[None]: only clients that send no Origin header, i.e. programs, never a browser
+        # tab on this machine (a page could otherwise drive say / settings / dock from JavaScript)
+        self._server = await serve(
+            self._handle, self.host, self.port, max_size=1 << 20, origins=[None]
+        )
         self._broadcast_task = asyncio.create_task(self._broadcast_loop(), name="presence-push")
         log.info("robot service listening on ws://%s:%d", self.host, self.port)
 
@@ -298,12 +302,34 @@ class RobotService:
                 await self._send(ws, self._state.to_message())
             async for raw in ws:
                 for obj in _parse_lines(raw):
-                    self._spawn(self._dispatch(ws, obj))
+                    if self._inflight >= self.MAX_INFLIGHT:
+                        mid = obj.get("id") if isinstance(obj, dict) else None
+                        await self._send(ws, {"t": "error", "id": mid, "error": "busy"})
+                        continue
+                    self._spawn(self._tracked(self._dispatch(ws, obj)))
         except ConnectionClosed:
             pass
         finally:
             self._clients.discard(ws)
             log.info("daemon disconnected (%d client(s))", len(self._clients))
+
+    MAX_INFLIGHT = 16
+
+    _inflight = 0
+
+
+    async def _tracked(self, coro):  # noqa: ANN001, ANN201
+
+        self._inflight += 1
+
+        try:
+
+            return await coro
+
+        finally:
+
+            self._inflight -= 1
+
 
     def _spawn(self, coro: Any) -> None:
         task = asyncio.create_task(coro)
@@ -408,6 +434,9 @@ class RobotService:
                     await self._send(ws, {"t": "error", "id": mid, "error": "bad_action"})
                     return
                 name = msg.get("name")
+                if name is not None and not re.fullmatch(r"[a-z0-9_-]{1,32}", str(name)):
+                    await self._send(ws, {"t": "error", "id": mid, "error": "bad_name"})
+                    return
                 info = await self.handlers.map_action(action, str(name) if name else None)
                 await self._send(ws, {"t": "map", "id": mid, "action": action, **info})
             elif t == "dock":

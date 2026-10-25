@@ -140,7 +140,8 @@ class ElevenLabsSpeaker:
             await asyncio.to_thread(self._say_blocking, text, urgency)
         except Exception as exc:  # network/audio failure must not kill the service
             log.error("elevenlabs tts failed: %s", exc)
-            print(f"[robot says] {text}", flush=True)
+            # not the text: a spoken line may carry an address, an amount, a message to sign
+            print(f"[robot says] ({len(text)} chars, not shown)", flush=True)
 
 
 def make_speaker(cfg: Settings, *, mock: bool = False) -> Speaker:

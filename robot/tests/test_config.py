@@ -106,3 +106,26 @@ def test_enrolment_people_roundtrip(tmp_path) -> None:  # noqa: ANN001
         back.add_person(EnrolledPerson(label="can"))
     add_person(cfg, "spouse", mock=True, path=path)  # re-enrolling replaces, not duplicates
     assert load_enrolment(path).labels() == ["can", "spouse"]
+
+
+def test_enrolment_file_is_authenticated(tmp_path) -> None:  # noqa: ANN001
+    cfg = Settings(_env_file=None, mock_passphrase="open sesame", mock_duress_word="pineapple")  # type: ignore[call-arg]
+    enrol = build_mock_enrolment(cfg)
+    path = tmp_path / "enrol.json"
+    save_enrolment(enrol, path)
+    assert (path.stat().st_mode & 0o777) == 0o600
+    assert (tmp_path / "enrol.json.key").exists()
+    assert ((tmp_path / "enrol.json.key").stat().st_mode & 0o777) == 0o600
+    load_enrolment(path)  # intact: fine
+    # another account rewrites the file (a new duress word, a new face): refused without the key
+    data = path.read_text().replace("}", " }", 1)
+    path.write_text(data)
+    import pytest
+
+    with pytest.raises(ValueError, match="authentication tag"):
+        load_enrolment(path)
+    # a file without a tag next to a key is refused too
+    save_enrolment(enrol, path)
+    (tmp_path / "enrol.json.mac").unlink()
+    with pytest.raises(ValueError, match="no authentication tag"):
+        load_enrolment(path)

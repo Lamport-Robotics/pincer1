@@ -76,6 +76,8 @@ class _Shared:
     face_x_norm: float | None = None
     face_ts: float = 0.0
     speaking: bool = False
+    # when the last utterance ended; listening ignores chunks that overlap it
+    spoke_until: float = 0.0
     room_match: float | None = None  # fingerprint path (lidar thread writes it)
     room_match_ts: float = 0.0
     rear_range: float | None = None  # lidar range straight behind (dock approach)
@@ -366,6 +368,16 @@ class RobotApp:
     def _on_duress(self, source: str) -> None:
         with self.shared.lock:
             self.fusion.raise_duress(time.time(), source)
+        # the latch is not forever: after the hold time the robot stops reporting duress, the
+        # daemon only ever acts on its rising edge, and the controller leaves the decoy on the next
+        # real unlock. Without this the service had to be restarted to hear the word again.
+        threading.Timer(self.cfg.duress_hold_s, self._clear_duress).start()
+
+    def _clear_duress(self) -> None:
+        with self.shared.lock:
+            self.fusion.clear_duress()
+        self.duress.reset()
+        log.warning("duress latch cleared")
 
     # -- battery / dock plumbing -----------------------------------------------------------------
     def battery_state(self) -> BatteryState | None:
@@ -407,10 +419,12 @@ class RobotApp:
     # -- ServiceHandlers --------------------------------------------------------------------
     async def say(self, text: str, urgency: float = 0.0) -> None:
         self.shared.speaking = True
+        self.shared.spoke_until = float("inf")
         try:
             await self.speaker.say(text, urgency=urgency)
         finally:
             self.shared.speaking = False
+            self.shared.spoke_until = time.time()
 
     async def ask_passphrase(self) -> bool:
         await self.say("Say the passphrase.")
@@ -584,7 +598,11 @@ class RobotApp:
         while not self._stop.is_set():
             with self._mic_lock:
                 audio = self.mic.record(self.cfg.listen_chunk_s)
-            if self.shared.speaking or rms(audio) < self.cfg.listen_energy_threshold:
+            # a chunk recorded while the robot spoke, or that started before it stopped, is the
+            # robot's own voice: never a passphrase, never a duress word (a `say` carrying the
+            # words must not unlock or alarm)
+            recent = time.time() - self.shared.spoke_until < self.cfg.listen_chunk_s + 1.0
+            if self.shared.speaking or recent or rms(audio) < self.cfg.listen_energy_threshold:
                 continue
             try:
                 text = verifier.stt.transcribe(audio, self.mic.sample_rate)

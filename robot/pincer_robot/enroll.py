@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
+import hmac
 import json
 import os
 import sys
@@ -89,18 +91,65 @@ class Enrolment(BaseModel):
         return np.asarray(self.voice_embedding, dtype=np.float64)
 
 
-def save_enrolment(enrol: Enrolment, path: Path) -> None:
-    path = path.expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(enrol.model_dump_json(indent=2))
-    os.chmod(tmp, 0o600)
+def _key_path(path: Path) -> Path:
+    return path.with_name(path.name + ".key")
+
+
+def _mac_path(path: Path) -> Path:
+    return path.with_name(path.name + ".mac")
+
+
+def _write_private(path: Path, data: bytes) -> None:
+    """Create with mode 0600 from the first byte (no umask window), then rename into place."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     os.replace(tmp, path)
 
 
+def _mac(key: bytes, data: bytes) -> str:
+    return hmac.new(key, data, hashlib.sha256).hexdigest()
+
+
+def save_enrolment(enrol: Enrolment, path: Path) -> None:
+    """Writes the enrolment and an HMAC over it.
+
+    The key lives next to it, 0600, created on first use: another account on the machine (or a
+    process that can write the directory) cannot replace the owner's face, voice or duress word
+    without the key, and a rewritten file is refused on load.
+    """
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    key_path = _key_path(path)
+    if key_path.exists():
+        key = key_path.read_bytes()
+    else:
+        key = os.urandom(32)
+        _write_private(key_path, key)
+    data = enrol.model_dump_json(indent=2).encode()
+    _write_private(path, data)
+    _write_private(_mac_path(path), _mac(key, data).encode())
+
+
 def load_enrolment(path: Path) -> Enrolment:
-    data = json.loads(path.expanduser().read_text())
-    return Enrolment.model_validate(data)
+    path = path.expanduser()
+    data = path.read_bytes()
+    key_path = _key_path(path)
+    if key_path.exists():
+        mac_path = _mac_path(path)
+        if not mac_path.exists():
+            raise ValueError(f"{path} has a key but no authentication tag; re-enrol")
+        if not hmac.compare_digest(_mac(key_path.read_bytes(), data), mac_path.read_text().strip()):
+            raise ValueError(
+                f"{path} does not match its authentication tag: "
+                "the file was changed by something else; re-enrol"
+            )
+    return Enrolment.model_validate(json.loads(data))
 
 
 def build_mock_enrolment(cfg: Settings, rng: np.random.Generator | None = None) -> Enrolment:
