@@ -251,6 +251,7 @@ flashing until you arm it. The relay sends nothing anywhere unless you set a des
 - A jammer can stop LoRa. Find My is independent of it.
 - Anyone with a BLE sniffer sees that *something* advertises like a lost AirTag; the key rotates every
   15 min so they cannot follow it across rotations without the seed.
-- The board button and the USB serial can arm/disarm when the beacon is idle or armed but never end an
-  alarm. Both are inside the shell: reaching them means opening it, which trips the tamper switch.
+- The board button and the USB serial can arm/disarm when the beacon is idle or armed, and are ignored
+  while it is in alarm (`trig_command` refuses everything but the owner's radio `ok` then). Both are inside
+  the shell: reaching them means opening it, which trips the tamper switch.
 

@@ -250,13 +250,17 @@ static bool settle(bool sample_imu) {
                               (unsigned long)rtc.pkt.peer_seq, (unsigned long)rtc.findmy_idx, gps_last_fix()->valid, gps_fix_age_s(now));
             } else if (line == "arm" || line == "disarm" || line == "ok") {
 #ifndef BEACON_UNPROVISIONED
+                if (trig_state(&rtc.trig) == BEACON_ALARM) {
+                    // the shell is open (tamper) or the robot was taken: whoever holds the USB cable is not the owner
+                    Serial.println("serial: alarm; only the owner's `ok` over the radio ends it");
+                } else
                 trig_command(&rtc.trig, line == "arm" ? TRIG_CMD_ARM : line == "disarm" ? TRIG_CMD_DISARM : TRIG_CMD_OK, now);
                 persist_state();
                 Serial.printf("serial: now %s\n", pkt_state_str(trig_state(&rtc.trig)));
 #else
                 Serial.println("serial: unprovisioned");
 #endif
-            } else if (line == "test-alarm") {
+            } else if (line == "test-alarm" && trig_state(&rtc.trig) != BEACON_ALARM) {
                 rtc.trig.cause |= TRIG_CAUSE_ROBOT;
                 rtc.trig.state = BEACON_ALARM;
                 rtc.trig.alarm_since = now;

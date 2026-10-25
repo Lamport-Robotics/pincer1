@@ -84,6 +84,9 @@ void trig_heartbeat_sent(trig_t *t, uint64_t now) { t->last_heartbeat = now; }
 
 bool trig_command(trig_t *t, uint8_t cmd, uint64_t now) {
     beacon_state_t before = t->state;
+    // an alarm ends only through the owner's acknowledgement path (TRIG_CMD_OK from the authenticated radio),
+    // never by an arm/disarm from the button or the serial port: those are reachable from inside the shell
+    if (before == BEACON_ALARM && cmd != TRIG_CMD_OK) return false;
     switch (cmd) {
         case TRIG_CMD_ARM:
             t->state = BEACON_ARMED;
