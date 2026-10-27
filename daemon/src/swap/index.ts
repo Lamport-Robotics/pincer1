@@ -209,7 +209,7 @@ export class SwapService {
     const owner = this.d.signer.getOwner();
     const bytes = await this.jupiter.build(q.raw, owner);
     const ex = await this.d.signer.explainChain<SolanaParsed>("solana", bytes, origin);
-    try { verifyJupiterTx(ex.parsed.tx, q.minOut, q.slippageBps, q.amountIn); } catch (e) { throw this.verifyFail(e); }
+    try { verifyJupiterTx(ex.parsed.tx, q.minOut, q.slippageBps, q.amountIn, { owner, inMint: q.from.id, outMint: q.to.id }); } catch (e) { throw this.verifyFail(e); }
     if (ex.parsed.tx.lamportsOut > (q.from.native ? q.amountIn + 20_000_000n : 20_000_000n)) throw new SwapError("amount", "the swap transaction moves more SOL than quoted");
     const { txid } = await this.signAndSend<SolanaParsed>("solana", bytes, preface, {}, origin);
     return { ok: true, quoteId: q.id, steps: [{ kind: "swap", chain: "solana", txid }], spoken: `Swap sent through Jupiter. At least ${fmtAmt(q.minOut, q.to)} is on its way.` };
@@ -234,6 +234,9 @@ export class SwapService {
     if (q.from.native) { if (built.tx.value > q.amountIn) throw new SwapError("amount", "the router asks for more native value than quoted"); if (dec.srcToken) throw new SwapError("amount", "the router swaps a token but a native swap was quoted"); }
     else { if (built.tx.value !== 0n) throw new SwapError("amount", "a token swap must not send native value"); if (dec.srcToken && dec.srcToken.toLowerCase() !== q.from.id.toLowerCase()) throw new SwapError("amount", "the router swaps a different token than quoted"); }
     if (dec.receiver && dec.receiver.toLowerCase() !== from.toLowerCase()) throw new SwapError("receiver", `the swap output would go to ${dec.receiver}, not to you`);
+    // the output token must be the one quoted: a router that pays out in a worthless token still "guarantees" a minimum
+    if (q.to.native) { if (dec.dstToken) throw new SwapError("amount", "the router pays out a token but a native swap was quoted"); }
+    else if (dec.dstToken && dec.dstToken.toLowerCase() !== q.to.id.toLowerCase()) throw new SwapError("amount", "the router pays out a different token than quoted");
 
     const rpc = evm.rpc(chainId);
     const intel = evm.intelForChain(chainId);

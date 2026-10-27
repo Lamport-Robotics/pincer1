@@ -23,13 +23,20 @@ const VAULT_BTC = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";
 const VAULT_ETH = "0x00000000000000000000000000000000000e7ab1" as Address;
 const THOR_ROUTER = "0x0000000000000000000000000000000000d37c0a" as Address;
 
-/** A Jupiter sharedAccountsRoute instruction with the given tail fields and an empty route plan. */
-function jupiterRouteIx(owner: PublicKey, inAmount: bigint, quotedOut: bigint, slippageBps: number) {
+/** A Jupiter sharedAccountsRoute instruction with the IDL account layout, the given tail fields and an empty route plan. */
+function jupiterRouteIx(owner: PublicKey, inAmount: bigint, quotedOut: bigint, slippageBps: number, legs: { inMint?: string; outMint?: string; userDst?: string } = {}) {
   const data = Buffer.alloc(8 + 1 + 4 + 8 + 8 + 2 + 1);
   Buffer.from(JUPITER_DISCRIMINATORS.sharedAccountsRoute, "hex").copy(data, 0);
   data[8] = 1; data.writeUInt32LE(0, 9);
   data.writeBigUInt64LE(inAmount, 13); data.writeBigUInt64LE(quotedOut, 21); data.writeUInt16LE(slippageBps, 29); data[31] = 0;
-  return new TransactionInstruction({ programId: JUP, keys: [{ pubkey: owner, isSigner: true, isWritable: true }], data });
+  const inMint = legs.inMint ?? SOL, outMint = legs.outMint ?? USDC_SOL;
+  const ata = (mint: string) => new PublicKey([...ownerAtaSet(owner.toBase58(), mint)][0]!);
+  const k = (pubkey: PublicKey, isWritable = false, isSigner = false) => ({ pubkey, isSigner, isWritable });
+  const keys = [
+    k(new PublicKey(TOKEN)), k(PublicKey.default), k(owner, true, true), k(ata(inMint), true), k(PublicKey.default, true), k(PublicKey.default, true),
+    k(legs.userDst ? new PublicKey(legs.userDst) : ata(outMint), true), k(new PublicKey(inMint)), k(new PublicKey(outMint)), k(JUP), k(new PublicKey(TOKEN_2022)), k(PublicKey.default), k(JUP),
+  ];
+  return new TransactionInstruction({ programId: JUP, keys, data });
 }
 
 function oneInchSwapCalldata(o: { src: Address; dst: Address; amount: bigint; minReturn: bigint; receiver: Address }) {
@@ -37,7 +44,7 @@ function oneInchSwapCalldata(o: { src: Address; dst: Address; amount: bigint; mi
   return encodeFunctionData({ abi: ONEINCH_ABI, functionName: "swap", args: [executor, { srcToken: o.src, dstToken: o.dst, srcReceiver: executor, dstReceiver: o.receiver, amount: o.amount, minReturnAmount: o.minReturn, flags: 0n }, "0x"] });
 }
 
-interface FakeNet { oneInchTo?: Address; oneInchMinReturn?: bigint; jupQuotedOut?: bigint; jupSlippage?: number }
+interface FakeNet { oneInchTo?: Address; oneInchMinReturn?: bigint; jupQuotedOut?: bigint; jupSlippage?: number; jupLegs?: { inMint?: string; outMint?: string; userDst?: string }; oneInchDst?: Address; thor2VaultBtc?: string }
 
 function harness(net: FakeNet = {}) {
   const h = E.evmHarness({ rpcState: { code: { [E.ROUTER.toLowerCase()]: "0x60", [E.USDC.toLowerCase()]: "0x60", [E.WETH.toLowerCase()]: "0x60", [THOR_ROUTER.toLowerCase()]: "0x60" }, balance: { }, nonce: { } }, settings: { mode: "online", swapMaxSlippageBps: 100 } });
@@ -53,7 +60,7 @@ function harness(net: FakeNet = {}) {
     const J = (o: unknown) => new Response(JSON.stringify(o), { status: 200 });
     if (u.startsWith("https://jup.test/quote")) return J({ inputMint: SOL, outputMint: USDC_SOL, inAmount: "100000000", outAmount: "20000000", otherAmountThreshold: "19800000", slippageBps: 100, swapMode: "ExactIn" });
     if (u.startsWith("https://jup.test/swap")) {
-      const tx = new Transaction({ feePayer: solOwner, recentBlockhash: F.BLOCKHASH }).add(jupiterRouteIx(solOwner, 100_000_000n, net.jupQuotedOut ?? 20_000_000n, net.jupSlippage ?? 100));
+      const tx = new Transaction({ feePayer: solOwner, recentBlockhash: F.BLOCKHASH }).add(jupiterRouteIx(solOwner, 100_000_000n, net.jupQuotedOut ?? 20_000_000n, net.jupSlippage ?? 100, net.jupLegs));
       return J({ swapTransaction: Buffer.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })).toString("base64") });
     }
     if (u.startsWith("https://oneinch.test/1/quote")) return J({ dstAmount: (5n * 10n ** 17n).toString() });
@@ -93,6 +100,24 @@ describe("swap: Jupiter (Solana)", () => {
     expect(q2.slippageBps).toBe(100); // capped
     await expect(slip.swap.execute(q2.id)).rejects.toMatchObject({ code: "slippage" });
   });
+  it("refuses a route whose mints or output account differ from the quote", async () => {
+    const wrongOut = harness({ jupLegs: { outMint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" } });
+    const q = await wrongOut.swap.quote({ from: { chain: "solana", asset: "SOL" }, to: { chain: "solana", asset: USDC_SOL }, amount: "0.1" });
+    await expect(wrongOut.swap.execute(q.id)).rejects.toMatchObject({ code: "amount" });
+    const wrongIn = harness({ jupLegs: { inMint: USDC_SOL } });
+    const q2 = await wrongIn.swap.quote({ from: { chain: "solana", asset: "SOL" }, to: { chain: "solana", asset: USDC_SOL }, amount: "0.1" });
+    await expect(wrongIn.swap.execute(q2.id)).rejects.toMatchObject({ code: "amount" });
+    const elsewhere = harness({ jupLegs: { userDst: F.strangerUsdc.toBase58() } });
+    const q3 = await elsewhere.swap.quote({ from: { chain: "solana", asset: "SOL" }, to: { chain: "solana", asset: USDC_SOL }, amount: "0.1" });
+    await expect(elsewhere.swap.execute(q3.id)).rejects.toMatchObject({ code: "receiver" });
+    expect(wrongOut.sentSol.length + wrongIn.sentSol.length + elsewhere.sentSol.length).toBe(0);
+    // the same checks, unit level: a route whose authority is not the owner
+    const other = new PublicKey(F.friend);
+    const tx = new Transaction({ feePayer: other, recentBlockhash: F.BLOCKHASH }).add(jupiterRouteIx(other, 1n, 100n, 10));
+    const parsed = parseMessage(tx.serializeMessage(), { owner: other.toBase58() });
+    expect(() => verifyJupiterTx(parsed, 99n, 100, 1n, { owner: F.stranger.toBase58(), inMint: SOL, outMint: USDC_SOL })).toThrow(/authority/);
+    expect(verifyJupiterTx(parsed, 99n, 100, 1n, { owner: other.toBase58(), inMint: SOL, outMint: USDC_SOL }).minOut).toBe(99n);
+  });
   it("decodes Jupiter route tails and refuses exact-out routes", () => {
     const ix = jupiterRouteIx(PublicKey.default, 5n, 100n, 50);
     expect(decodeJupiterRoute(ix.data)).toEqual({ inAmount: 5n, quotedOut: 100n, slippageBps: 50, minOut: 99n });
@@ -121,6 +146,12 @@ describe("swap: 1inch (EVM)", () => {
       "You asked to swap 1,000 USDC for at least 0.495 WETH. First, an exact approval of 1,000 USDC for 1inch. On Ethereum: Lets 1inch spend up to 1,000 USDC. Touch me to sign.",
       "You asked to swap 1,000 USDC for at least 0.495 WETH. On Ethereum: Swap through 1inch. Touch me to sign.",
     ]);
+  });
+  it("rejects a router that pays out a different token than quoted", async () => {
+    const h = harness({ oneInchDst: E.USDC });
+    const q = await h.swap.quote({ from: { chain: "evm", chainId: 1, asset: E.USDC }, to: { chain: "evm", chainId: 1, asset: E.WETH }, amount: "1000" });
+    await expect(h.swap.execute(q.id)).rejects.toMatchObject({ code: "amount" });
+    expect(h.rpc1.st.sent).toHaveLength(0);
   });
   it("rejects a transaction that does not go to the allowlisted router, and one whose minimum output is short", async () => {
     const bad = harness({ oneInchTo: E.CONTRACT });

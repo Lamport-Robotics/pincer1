@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { decodeFunctionData, getAddress, parseAbi, type Address, type Hex } from "viem";
-import type { ParsedTx } from "../tx/parse.js";
+import { ownerAtaSet, type ParsedTx } from "../tx/parse.js";
 import { ATA, COMPUTE_BUDGET, JUPITER_V6, MEMO, MEMO_V1, SYSTEM, TOKEN, TOKEN_2022 } from "../tx/known.js";
 
 export class SwapVerifyError extends Error { constructor(readonly code: string, message: string) { super(message); } }
@@ -47,20 +47,44 @@ export function decodeJupiterRoute(data: Uint8Array): JupiterRoute {
   }
 }
 
-/** The Solana swap tx must call only Jupiter (plus plumbing), with a decodable route whose minimum output is at least `minOut`. */
-export function verifyJupiterTx(parsed: ParsedTx, minOut: bigint, maxSlippageBps: number, maxIn?: bigint): JupiterRoute {
+export interface JupiterLegs { owner: string; inMint: string; outMint: string }
+
+/** Account positions in the Jupiter v6 route instructions (IDL order). */
+const JUP_ACCOUNTS: Record<string, { authority: number; userDst: number; srcMint: number | null; dstMint: number }> = {
+  [JUP_IX.route]: { authority: 1, userDst: 3, srcMint: null, dstMint: 5 },
+  [JUP_IX.routeWithTokenLedger]: { authority: 1, userDst: 3, srcMint: null, dstMint: 5 },
+  [JUP_IX.sharedAccountsRoute]: { authority: 2, userDst: 6, srcMint: 7, dstMint: 8 },
+  [JUP_IX.sharedAccountsRouteWithTokenLedger]: { authority: 2, userDst: 6, srcMint: 7, dstMint: 8 },
+};
+
+/**
+ * The Solana swap tx must call only Jupiter (plus plumbing), with a decodable route whose minimum output is at
+ * least `minOut`. With `legs`, the route's mints and the owner's destination account are checked too: a route that
+ * "guarantees" the minimum in some other token, or pays it into someone else's account, is refused.
+ */
+export function verifyJupiterTx(parsed: ParsedTx, minOut: bigint, maxSlippageBps: number, maxIn?: bigint, legs?: JupiterLegs): JupiterRoute {
   const apps = parsed.programs.filter((p) => !PLUMBING.has(p));
   for (const p of apps) if (p !== JUPITER_V6) throw new SwapVerifyError("router", `transaction calls ${p}, not the Jupiter router`);
   const routeIx = parsed.instructions.filter((ix) => ix.program === JUPITER_V6);
   if (routeIx.length === 0) throw new SwapVerifyError("router", "transaction does not call Jupiter");
-  let found: JupiterRoute | null = null;
+  let found: JupiterRoute | null = null; let foundIx: (typeof routeIx)[number] | null = null;
   for (const ix of routeIx) {
-    try { found = decodeJupiterRoute(ix.data); break; } catch (e) { if ((e as SwapVerifyError).code === "exact_out") throw e; }
+    try { found = decodeJupiterRoute(ix.data); foundIx = ix; break; } catch (e) { if ((e as SwapVerifyError).code === "exact_out") throw e; }
   }
-  if (!found) throw new SwapVerifyError("unknown_route", "no decodable Jupiter route instruction");
+  if (!found || !foundIx) throw new SwapVerifyError("unknown_route", "no decodable Jupiter route instruction");
   if (found.slippageBps > maxSlippageBps) throw new SwapVerifyError("slippage", `route slippage ${found.slippageBps} bps exceeds the cap of ${maxSlippageBps}`);
   if (found.minOut < minOut) throw new SwapVerifyError("min_out", `route guarantees ${found.minOut} but the quote promised at least ${minOut}`);
   if (maxIn != null && found.inAmount != null && found.inAmount > maxIn) throw new SwapVerifyError("amount", `route spends ${found.inAmount}, more than the ${maxIn} quoted`);
+  if (legs) {
+    const pos = JUP_ACCOUNTS[Buffer.from(foundIx.data.subarray(0, 8)).toString("hex")];
+    const acc = foundIx.accounts;
+    if (!pos || acc.length <= pos.dstMint) throw new SwapVerifyError("unknown_route", "Jupiter route instruction has too few accounts");
+    if (acc[pos.authority] !== legs.owner) throw new SwapVerifyError("router", "the route's transfer authority is not you");
+    if (pos.srcMint != null && acc[pos.srcMint] !== legs.inMint) throw new SwapVerifyError("amount", `the route spends mint ${acc[pos.srcMint]}, not the ${legs.inMint} quoted`);
+    if (acc[pos.dstMint] !== legs.outMint) throw new SwapVerifyError("amount", `the route pays out mint ${acc[pos.dstMint]}, not the ${legs.outMint} quoted`);
+    if (!ownerAtaSet(legs.owner, legs.outMint).has(acc[pos.userDst])) throw new SwapVerifyError("receiver", "the route's output account is not your token account");
+    for (const t of parsed.tokenOut) if (t.mint && t.mint !== legs.inMint) throw new SwapVerifyError("amount", `the transaction also moves ${t.mint}, which is not part of the quote`);
+  }
   return found;
 }
 
@@ -85,17 +109,17 @@ const ADDR_MASK = (1n << 160n) - 1n;
 const addrOfUint = (u: bigint) => getAddress(("0x" + (u & ADDR_MASK).toString(16).padStart(40, "0")) as Hex);
 const isNative = (a: string) => a.toLowerCase() === NATIVE_SENTINEL.toLowerCase() || /^0x0{40}$/.test(a);
 
-export interface EvmSwapDecoded { minOut: bigint; amountIn: bigint | null; srcToken: Address | null; receiver: Address | null }
+export interface EvmSwapDecoded { minOut: bigint; amountIn: bigint | null; srcToken: Address | null; receiver: Address | null; /** null: native, or the calldata does not name it */ dstToken: Address | null }
 
 export function decodeOneInch(data: Hex, value: bigint): EvmSwapDecoded {
   let d;
   try { d = decodeFunctionData({ abi: ONEINCH_ABI, data }); } catch { throw new SwapVerifyError("unknown_calldata", "1inch calldata is not a function I can decode"); }
   switch (d.functionName) {
-    case "swap": { const [, desc] = d.args; return { minOut: desc.minReturnAmount, amountIn: desc.amount, srcToken: isNative(desc.srcToken) ? null : getAddress(desc.srcToken), receiver: /^0x0{40}$/.test(desc.dstReceiver) ? null : getAddress(desc.dstReceiver) }; }
-    case "unoswap": case "unoswap2": case "unoswap3": { const [token, amount, minReturn] = d.args; return { minOut: minReturn, amountIn: amount, srcToken: addrOfUint(token), receiver: null }; }
-    case "unoswapTo": case "unoswapTo2": case "unoswapTo3": { const [to, token, amount, minReturn] = d.args; return { minOut: minReturn, amountIn: amount, srcToken: addrOfUint(token), receiver: addrOfUint(to) }; }
-    case "ethUnoswap": case "ethUnoswap2": case "ethUnoswap3": { const [minReturn] = d.args; return { minOut: minReturn, amountIn: value, srcToken: null, receiver: null }; }
-    case "ethUnoswapTo": case "ethUnoswapTo2": case "ethUnoswapTo3": { const [to, minReturn] = d.args; return { minOut: minReturn, amountIn: value, srcToken: null, receiver: addrOfUint(to) }; }
+    case "swap": { const [, desc] = d.args; return { minOut: desc.minReturnAmount, amountIn: desc.amount, srcToken: isNative(desc.srcToken) ? null : getAddress(desc.srcToken), receiver: /^0x0{40}$/.test(desc.dstReceiver) ? null : getAddress(desc.dstReceiver), dstToken: isNative(desc.dstToken) ? null : getAddress(desc.dstToken) }; }
+    case "unoswap": case "unoswap2": case "unoswap3": { const [token, amount, minReturn] = d.args; return { minOut: minReturn, amountIn: amount, srcToken: addrOfUint(token), receiver: null, dstToken: null }; }
+    case "unoswapTo": case "unoswapTo2": case "unoswapTo3": { const [to, token, amount, minReturn] = d.args; return { minOut: minReturn, amountIn: amount, srcToken: addrOfUint(token), receiver: addrOfUint(to), dstToken: null }; }
+    case "ethUnoswap": case "ethUnoswap2": case "ethUnoswap3": { const [minReturn] = d.args; return { minOut: minReturn, amountIn: value, srcToken: null, receiver: null, dstToken: null }; }
+    case "ethUnoswapTo": case "ethUnoswapTo2": case "ethUnoswapTo3": { const [to, minReturn] = d.args; return { minOut: minReturn, amountIn: value, srcToken: null, receiver: addrOfUint(to), dstToken: null }; }
   }
 }
 
@@ -106,8 +130,8 @@ export const ZEROX_ABI = parseAbi([
 export function decodeZeroX(data: Hex, value: bigint): EvmSwapDecoded {
   let d;
   try { d = decodeFunctionData({ abi: ZEROX_ABI, data }); } catch { throw new SwapVerifyError("unknown_calldata", "0x calldata is not transformERC20; refusing a swap I cannot read"); }
-  const [inputToken, , inputTokenAmount, minOutputTokenAmount] = d.args;
-  return { minOut: minOutputTokenAmount, amountIn: isNative(inputToken) ? value : inputTokenAmount, srcToken: isNative(inputToken) ? null : getAddress(inputToken), receiver: null };
+  const [inputToken, outputToken, inputTokenAmount, minOutputTokenAmount] = d.args;
+  return { minOut: minOutputTokenAmount, amountIn: isNative(inputToken) ? value : inputTokenAmount, srcToken: isNative(inputToken) ? null : getAddress(inputToken), receiver: null, dstToken: isNative(outputToken) ? null : getAddress(outputToken) };
 }
 
 // ── THORChain ──
