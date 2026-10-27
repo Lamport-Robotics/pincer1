@@ -35,7 +35,7 @@ import numpy as np
 from . import __version__
 from .airgap import AirGap, make_relay
 from .battery import BatteryMonitor, BatteryState, MockBatterySensor, make_battery_sensor
-from .brain import Brain, BrainError, LocalBrain, NoBrain, make_brain
+from .brain import Brain, BrainError, LocalBrain, NoBrain, clean_speech, make_brain, redact_secrets
 from .config import FeatureFlags, Settings, load_settings
 from .dock import DOCK_ROOM, DockConfig, DockController, DockStore, rear_range_from_scan
 from .duress import DuressDetector
@@ -363,6 +363,7 @@ class RobotApp:
     def on_transcript(self, text: str, audio: np.ndarray | None = None) -> None:
         if not text:
             return
+        log.debug("heard: %s", redact_secrets(text))
         self.duress.scan(text)
 
     def _on_duress(self, source: str) -> None:
@@ -418,6 +419,7 @@ class RobotApp:
 
     # -- ServiceHandlers --------------------------------------------------------------------
     async def say(self, text: str, urgency: float = 0.0) -> None:
+        text = clean_speech(text)  # nothing key-shaped and no control characters reach the speaker
         self.shared.speaking = True
         self.shared.spoke_until = float("inf")
         try:

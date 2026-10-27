@@ -93,10 +93,14 @@ class FakeHandlers:
     async def attention(self) -> None:
         self.attention_calls += 1
 
+    brief_reply = ""  # a brief answer that carries the lines' numbers and nothing else
+
     async def chat(self, text: str, context: dict[str, Any]) -> str:
         self.chat_calls.append((text, dict(context)))
         if self.chat_error:
             raise RuntimeError(self.chat_error)
+        if self.brief_reply and "<<<data" in text:
+            return self.brief_reply
         return f"re: {text}"
 
 
@@ -237,6 +241,7 @@ def test_brief_is_phrased_by_the_brain_or_read_plainly() -> None:
                     "SOL is at $187.12 up 4.5 percent on the day.",
                     "My battery is at 18 percent.",
                 ]
+                h.brief_reply = "Morning. SOL sits at 187.12, up 4.5 percent; battery 18 percent."
                 await ws.send(
                     json.dumps(
                         {
@@ -254,7 +259,15 @@ def test_brief_is_phrased_by_the_brain_or_read_plainly() -> None:
                 prompt = h.chat_calls[0][0]
                 assert "SOL is at $187.12" in prompt and "decrypt.co unreachable" in prompt
                 assert "Do not add facts" in prompt
-                assert h.spoken == [f"re: {prompt}"]
+                # the lines sit inside the data block, after the instructions
+                assert prompt.index("<<<data") < prompt.index("SOL is at") < prompt.index(">>>")
+                assert h.spoken == [h.brief_reply]
+                # a rewrite that invents a number is not spoken: the lines are read plainly
+                h.spoken.clear()
+                h.brief_reply = "SOL at 187.12, up 4.5 percent, battery 18 percent, 3 alerts."
+                await ws.send(json.dumps({"t": "brief", "id": "b1b", "lines": lines}))
+                await _recv_type(ws, "done")
+                assert h.spoken == lines
                 # no brain: the plain lines are read one by one
                 h.spoken.clear()
                 h.chat_error = "no_brain"
@@ -273,6 +286,8 @@ def test_brief_rejects_a_rewrite_that_drops_numbers() -> None:
         lines, "Bitcoin sits at 112346 dollars, off 2.3 percent; 1 payment waits."
     )
     assert not numbers_preserved(lines, "Bitcoin is down a bit and a payment is waiting.")
+    # nothing invented either: a number the daemon never said is not read out as a fact
+    assert not numbers_preserved(lines, "Bitcoin at 112346, down 2.3 percent; 2 payments wait.")
 
 
 def test_speech_is_serialised_and_order_kept() -> None:
