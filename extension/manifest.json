@@ -40,6 +40,6 @@
   "permissions": ["storage", "scripting"],
   "host_permissions": ["<all_urls>"],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https: wss: ws: http://127.0.0.1:* http://localhost:* http://[::1]:*"
   }
 }

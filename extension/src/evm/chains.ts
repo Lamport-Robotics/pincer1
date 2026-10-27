@@ -73,7 +73,8 @@ export function chainIdHex(id: number): string {
 /**
  * JSON-RPC methods a dapp may send straight through to the chain RPC. Everything that needs a
  * key goes to the robot; everything else is refused with 4200 so a dapp cannot use the wallet as
- * an open proxy to arbitrary methods (admin_, debug_, …).
+ * an open proxy to arbitrary methods (admin_, debug_, …). eth_sendRawTransaction is not here on
+ * purpose: broadcasts happen only for transactions the robot just signed (eth_sendTransaction).
  */
 export const EVM_READONLY_METHODS: ReadonlySet<string> = new Set([
   'eth_blockNumber',
@@ -98,7 +99,6 @@ export const EVM_READONLY_METHODS: ReadonlySet<string> = new Set([
   'eth_getUncleCountByBlockHash',
   'eth_getUncleCountByBlockNumber',
   'eth_maxPriorityFeePerGas',
-  'eth_sendRawTransaction',
   'eth_syncing',
   'eth_createAccessList',
   'eth_getFilterChanges',
