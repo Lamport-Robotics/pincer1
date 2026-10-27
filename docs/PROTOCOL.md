@@ -723,7 +723,13 @@ token stored in extension storage.
 ← {"t":"explain","id":"t1","summary":"…","risk":"low"|"medium"|"high"|"block","reasons":[…]}
 ← {"t":"signed","id":"t1","tx":"<base64 signed tx>"}  |  {"t":"denied","id":"t1","reason":"…"}
 → {"t":"signMessage","id":"m1","message":"<base64>"}   ← {"t":"signed","id":"m1","signature":"<base64>"}
+→ {"t":"revoke","token":"…"}                         ← {"t":"revoked","ok":true}      the extension's "Forget pairing"
 ```
+
+A token that has not been used for 90 days is dropped by the daemon; the browser pairs again. Knowing a token is
+the authorisation to revoke it, so `revoke` needs no prior `connect`. `origin` is only ever `scheme://host[:port]`;
+anything else is dropped before it can be spoken. On the extension side a site's first `connect` waits for the
+owner's Approve in the popup; the daemon never sees a `connect` from a site the owner did not approve.
 
 The daemon never forwards a request to the controller before it has (a) parsed and explained it, (b) run the
 scam filter (`block` ⇒ denied without asking), (c) confirmed presence, (d) had the robot speak the summary.
@@ -835,8 +841,13 @@ GET  /status                              → {pubkey, addresses:{solana,evm,bit
 POST /explain {chain?, tx|psbt, chainId?, origin?}  → {chain, summary, lines, risk, reasons, parsed:{nativeOut, nativeUnit, dest, programs, dangers, tokenOut}}
 POST /broadcast {chain, tx}               → {chain, txid}     tx: base64 (solana) or hex (evm, bitcoin)
 GET/POST /settings                        → adds mode ("online"|"offline"), brain ("lamport"|"claude"|"openai"|"deepseek"),
-                                            unlimitedApproveToRouters, swapMaxSlippageBps (≤ 100).
+                                            unlimitedApproveToRouters, swapMaxSlippageBps (≤ 100), twoPersonEvm, twoPersonBtc,
+                                            twoPersonTokens (two owners for any token outflow), knownPrograms.
                                             POST → 400 {error:"offline_mode", detail} when a cloud brain is chosen in offline mode
+GET  /programs                            → {known:[…]}   programs / contracts the owner approved by hand; nothing else is ever "known"
+POST /programs {add?:[…], remove?:[…]}    → {known:[…]}   base58 Solana ids or 0x EVM addresses; 400 {error:"bad_program"} otherwise
+GET  /tokens                              → {tokens:[{id (first 6 chars), createdAt, lastUsed, label}], idleDays:90}
+POST /tokens/revoke {id?}                 → {ok}   local operator: by id; a paired caller (Bearer) with no id: its own token
 GET  /briefing                            → {facts:{date, quotes:[{id,symbol,usd,change24h}], headlines:[{title,source,link,at}], portfolio?, agent?, offlinePending?, inheritance?, battery?, mode, notes}, lines:[…]}
 POST /briefing/now                        → reads it now (same body); the schedule is settings.briefing {enabled, time "HH:MM", coins (CoinGecko ids), topics, feeds, maxHeadlines, portfolio, requirePresence}
 POST /swap/quote {from:{chain,asset,chainId?}, to:{chain,asset,chainId?}, amount, slippageBps?}

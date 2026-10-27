@@ -51,7 +51,12 @@ export interface ServerDeps {
   prod?: boolean;
 }
 
-interface Pairing { tokens: string[] }
+interface TokenRec { token: string; createdAt: number; lastUsed: number; label?: string }
+interface Pairing { tokens: TokenRec[] }
+/** A browser that has not talked to the robot for this long must pair again. */
+const TOKEN_IDLE_MS = 90 * 86_400_000;
+/** Origins are browser-supplied on the wire too; anything that is not scheme://host[:port] is dropped, never spoken. */
+const cleanOrigin = (v: unknown): string | undefined => (typeof v === "string" && /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i.test(v) && v.length <= 253 ? v : undefined);
 
 class HttpError extends Error {
   readonly status: number;
@@ -79,9 +84,38 @@ export class ApiServer {
 
   private pairingPath() { return join(this.d.dataDir, "pairing.json"); }
   private loadPairing(): Pairing {
-    try { return existsSync(this.pairingPath()) ? JSON.parse(readFileSync(this.pairingPath(), "utf8")) : { tokens: [] }; } catch { return { tokens: [] }; }
+    let raw: any = { tokens: [] };
+    try { if (existsSync(this.pairingPath())) raw = JSON.parse(readFileSync(this.pairingPath(), "utf8")); } catch { raw = { tokens: [] }; }
+    const now = Date.now();
+    const tokens: TokenRec[] = (Array.isArray(raw?.tokens) ? raw.tokens : []).map((t: unknown): TokenRec | null => {
+      if (typeof t === "string" && t) return { token: t, createdAt: now, lastUsed: now }; // pre-expiry file
+      const r = t as Partial<TokenRec>;
+      return r && typeof r.token === "string" && r.token ? { token: r.token, createdAt: Number(r.createdAt) || now, lastUsed: Number(r.lastUsed) || now, label: typeof r.label === "string" ? r.label.slice(0, 40) : undefined } : null;
+    }).filter((t: TokenRec | null): t is TokenRec => !!t);
+    return { tokens };
   }
   private savePairing() { writeFileSync(this.pairingPath(), JSON.stringify(this.pairing), { mode: 0o600 }); }
+  private lastSaved = 0;
+  /** The record behind a presented token, or null; idle tokens are dropped on sight. */
+  private tokenRec(t: unknown): TokenRec | null {
+    if (typeof t !== "string" || !t) return null;
+    const b = Buffer.from(t);
+    const now = Date.now();
+    const rec = this.pairing.tokens.find((k) => { const kb = Buffer.from(k.token); return kb.length === b.length && timingSafeEqual(kb, b); });
+    if (!rec) return null;
+    if (now - rec.lastUsed > TOKEN_IDLE_MS) { this.pairing.tokens = this.pairing.tokens.filter((k) => k !== rec); this.savePairing(); return null; }
+    rec.lastUsed = now;
+    if (now - this.lastSaved > 3600_000) { this.savePairing(); this.lastSaved = now; }
+    return rec;
+  }
+  private revokeToken(t: unknown): boolean {
+    const rec = this.tokenRec(t);
+    if (!rec) return false;
+    this.pairing.tokens = this.pairing.tokens.filter((k) => k !== rec); this.savePairing();
+    log.info("pairing token revoked", { id: rec.token.slice(0, 6) });
+    return true;
+  }
+  private tokenList() { return this.pairing.tokens.map((k) => ({ id: k.token.slice(0, 6), createdAt: k.createdAt, lastUsed: k.lastUsed, label: k.label })); }
 
   /** Generate a fresh pairing code and have the robot speak it. Valid 2 minutes. */
   private pairMisses = 0;
@@ -93,11 +127,7 @@ export class ApiServer {
     return this.code;
   }
 
-  private tokenOk(t: unknown) {
-    if (typeof t !== "string" || !t) return false;
-    const b = Buffer.from(t);
-    return this.pairing.tokens.some((k) => { const kb = Buffer.from(k); return kb.length === b.length && timingSafeEqual(kb, b); });
-  }
+  private tokenOk(t: unknown) { return this.tokenRec(t) !== null; }
 
   listen() {
     return new Promise<void>((res) => this.httpServer.listen(this.d.port, this.d.bind, () => { log.info(`api on ${this.d.bind}:${this.d.port}`); res(); }));
@@ -127,14 +157,17 @@ export class ApiServer {
             return send({ t: "error", error: "bad_code" });
           }
           const token = randomBytes(32).toString("base64url");
-          this.pairing.tokens.push(token); this.savePairing(); this.code = null;
+          const now = Date.now();
+          this.pairing.tokens.push({ token, createdAt: now, lastUsed: now, label: remote.replace(/^::ffff:/, "") }); this.savePairing(); this.code = null;
           authed = true;
           await this.d.robot.say("Paired. Your browser can talk to me now.");
           return send({ t: "paired", token, pubkey: this.d.getOwner(), addresses: this.d.signer.addresses() });
         }
+        // the extension's "forget": knowing the token is the authorisation to retire it
+        if (m.t === "revoke") return send({ t: "revoked", ok: this.revokeToken(m.token) });
         if (m.t === "connect") {
           if (!this.tokenOk(m.token)) return send({ t: "error", error: "unauthorized" });
-          authed = true; origin = typeof m.origin === "string" ? m.origin : undefined;
+          authed = true; origin = cleanOrigin(m.origin);
           log.info("extension connected", { remote, origin });
           return send({ t: "connected", pubkey: this.d.getOwner(), addresses: this.d.signer.addresses() });
         }
@@ -201,6 +234,17 @@ export class ApiServer {
     const bearer = /^Bearer\s+(\S+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
     const paired = bearer !== undefined && this.tokenOk(bearer);
     if (!(local && hostLocal) && !paired) return json(403, { error: "local_only" });
+    // a paired browser may retire its own token; the operator on this machine may retire any by id
+    if (req.method === "POST" && url.pathname === "/tokens/revoke") {
+      const b = await body();
+      if (local && hostLocal && typeof b.id === "string" && b.id) {
+        const rec = this.pairing.tokens.find((k) => k.token.startsWith(b.id));
+        if (!rec) return json(404, { error: "no_such_token" });
+        return json(200, { ok: this.revokeToken(rec.token) });
+      }
+      if (!paired) return json(400, { error: "no_token" });
+      return json(200, { ok: this.revokeToken(bearer) });
+    }
 
     if (req.method === "GET" && url.pathname === "/status") {
       const h = await this.d.controller.hello();
