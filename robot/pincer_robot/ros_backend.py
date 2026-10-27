@@ -31,6 +31,86 @@ ScanCallback = Callable[[Scan], None]
 ImuCallback = Callable[[tuple[float, float, float], float, float], None]
 
 
+class SensorNode:
+    """Lidar + IMU only, for the body that walks on its own gait (``PINCER_BODY_BACKEND=bus``):
+    the scan and IMU callbacks are the same as ``HexapodRobot``'s, and tilt / front clearance
+    land in the ``RobotStatus`` the body backend hands out."""
+
+    def __init__(
+        self,
+        *,
+        scan_topic: str = "/scan",
+        imu_topic: str = "/imu",
+        on_scan: ScanCallback | None = None,
+        on_imu: ImuCallback | None = None,
+        status: RobotStatus | None = None,
+        node_name: str = "pincer_sensors",
+    ) -> None:
+        import rclpy  # type: ignore[import-not-found]
+        from rclpy.node import Node  # type: ignore[import-not-found]
+        from sensor_msgs.msg import Imu, LaserScan  # type: ignore[import-not-found]
+
+        if not rclpy.ok():
+            rclpy.init()
+        self._rclpy = rclpy
+        self._node: Node = rclpy.create_node(node_name)
+        self._node.create_subscription(LaserScan, scan_topic, self._on_scan, 10)
+        self._node.create_subscription(Imu, imu_topic, self._on_imu, 50)
+        self._on_scan_cb = on_scan
+        self._on_imu_cb = on_imu
+        self._status = status if status is not None else RobotStatus()
+        self._spinning = True
+        self._thread = threading.Thread(target=self._spin, name="ros-sensors", daemon=True)
+        self._thread.start()
+        log.info("ROS2 sensor node %s up: scan=%s imu=%s", node_name, scan_topic, imu_topic)
+
+    def _spin(self) -> None:
+        while self._spinning and self._rclpy.ok():
+            self._rclpy.spin_once(self._node, timeout_sec=0.1)
+
+    def _on_imu(self, msg) -> None:  # noqa: ANN001
+        tilt, acc = imu_tilt(msg)
+        self._status.tilt_deg = tilt
+        if self._on_imu_cb is not None:
+            self._on_imu_cb(acc, tilt, time.time())
+
+    def _on_scan(self, msg) -> None:  # noqa: ANN001
+        scan = laserscan_to_scan(msg, time.time())
+        clearance = front_clearance(scan)
+        if clearance is not None:
+            self._status.front_clearance_m = clearance
+        if self._on_scan_cb is not None:
+            self._on_scan_cb(scan)
+
+    def shutdown(self) -> None:
+        self._spinning = False
+        self._node.destroy_node()
+
+
+def imu_tilt(msg) -> tuple[float, tuple[float, float, float]]:  # noqa: ANN001
+    """Tilt in degrees (the larger of roll and pitch) and linear acceleration from an Imu."""
+    x, y, z, w = (
+        msg.orientation.x,
+        msg.orientation.y,
+        msg.orientation.z,
+        msg.orientation.w,
+    )
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+    sinp = 2 * (w * y - z * x)
+    pitch = math.asin(max(-1.0, min(1.0, sinp)))
+    acc = msg.linear_acceleration
+    return math.degrees(max(abs(roll), abs(pitch))), (float(acc.x), float(acc.y), float(acc.z))
+
+
+def front_clearance(scan: Scan) -> float | None:
+    """Nearest valid range in a narrow cone around angle 0."""
+    a = scan.angles
+    front = scan.valid_mask() & (abs(a) < math.radians(20))
+    return float(scan.ranges[front].min()) if front.any() else None
+
+
 class HexapodRobot(RobotInterface):
     def __init__(
         self,
@@ -74,30 +154,16 @@ class HexapodRobot(RobotInterface):
             self._rclpy.spin_once(self._node, timeout_sec=0.1)
 
     def _on_imu(self, msg) -> None:  # noqa: ANN001
-        x, y, z, w = (
-            msg.orientation.x,
-            msg.orientation.y,
-            msg.orientation.z,
-            msg.orientation.w,
-        )
-        sinr_cosp = 2 * (w * x + y * z)
-        cosr_cosp = 1 - 2 * (x * x + y * y)
-        roll = math.atan2(sinr_cosp, cosr_cosp)
-        sinp = 2 * (w * y - z * x)
-        pitch = math.asin(max(-1.0, min(1.0, sinp)))
-        tilt = math.degrees(max(abs(roll), abs(pitch)))
+        tilt, acc = imu_tilt(msg)
         self._status.tilt_deg = tilt
-        acc = msg.linear_acceleration
         if self._on_imu_cb is not None:
-            self._on_imu_cb((float(acc.x), float(acc.y), float(acc.z)), tilt, time.time())
+            self._on_imu_cb(acc, tilt, time.time())
 
     def _on_scan(self, msg) -> None:  # noqa: ANN001
         scan = laserscan_to_scan(msg, time.time())
-        # Front clearance: narrow cone around angle 0.
-        a = scan.angles
-        front = scan.valid_mask() & (abs(a) < math.radians(20))
-        if front.any():
-            self._status.front_clearance_m = float(scan.ranges[front].min())
+        clearance = front_clearance(scan)
+        if clearance is not None:
+            self._status.front_clearance_m = clearance
         if self._on_scan_cb is not None:
             self._on_scan_cb(scan)
 

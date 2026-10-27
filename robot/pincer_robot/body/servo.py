@@ -184,6 +184,10 @@ class Bus:
         reply = parse(frame)
         if reply.servo_id != servo_id:
             raise ServoError(f"servo {servo_id}: reply from {reply.servo_id}")
+        if len(reply.params) != reply_params:
+            raise ServoError(
+                f"servo {servo_id}: short reply, {len(reply.params)} of {reply_params} bytes"
+            )
         return reply
 
     def ping(self, servo_id: int) -> bool:

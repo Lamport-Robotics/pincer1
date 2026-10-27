@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     servo_port: str = "/dev/ttyUSB0"
     servo_baud: int = 1_000_000
     gait: Literal["tripod", "ripple", "wave"] = "tripod"
+    # servo health (bus backend): every poll reads temperature and load of each joint; past a
+    # threshold the body refuses to walk for cooldown_s and says why in the log
+    servo_health_poll_s: float = 5.0
+    servo_max_temp_c: int = 70
+    servo_max_load: int = 800  # of ±1000
+    servo_cooldown_s: float = 30.0
 
     # --- compute backend ---------------------------------------------------------
     # auto: CUDA when onnxruntime / torch / ctranslate2 see a GPU (Jetson Orin Nano),

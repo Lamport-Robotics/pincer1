@@ -40,7 +40,7 @@ from .config import FeatureFlags, Settings, load_settings
 from .dock import DOCK_ROOM, DockConfig, DockController, DockStore, rear_range_from_scan
 from .duress import DuressDetector
 from .enroll import Enrolment, build_mock_enrolment, load_enrolment
-from .motion import MockRobot, MotionController, RobotInterface
+from .motion import MockRobot, MotionController, RobotInterface, RobotStatus
 from .nav import FindResult, Navigator, NavResult, RoomRegistry, make_nav_backend
 from .presence.face import (
     FaceObservation,
@@ -216,6 +216,7 @@ class RobotApp:
                 BusActuator,
                 GaitParams,
                 SerialTransport,
+                ServoHealth,
             )
 
             bus = Bus(SerialTransport(self.cfg.servo_port, self.cfg.servo_baud))
@@ -224,7 +225,35 @@ class RobotApp:
             body.actuator.torque(True)  # type: ignore[union-attr]
             body.stand()
             log.info("body: own gait (%s) on %s", self.cfg.gait, self.cfg.servo_port)
-            return BodyBackend(body)
+            status = RobotStatus(note="body: own gait")
+            sensors: Any = None
+            try:
+                from .ros_backend import SensorNode
+
+                sensors = SensorNode(
+                    scan_topic=self.cfg.scan_topic,
+                    imu_topic=self.cfg.imu_topic,
+                    on_scan=self.on_scan,
+                    on_imu=self.on_imu,
+                    status=status,
+                )
+            except ImportError as exc:
+                log.error(
+                    "ROS2 not available (%s): the own-gait body has NO lidar/IMU, so presence is "
+                    "camera and voice only and the moved/tilt checks are inert",
+                    exc,
+                )
+                status.note = "body: own gait, no lidar/imu"
+            health = ServoHealth(
+                bus,
+                actuator.servo_ids(),
+                max_temp_c=self.cfg.servo_max_temp_c,
+                max_load=self.cfg.servo_max_load,
+                cooldown_s=self.cfg.servo_cooldown_s,
+            )
+            backend = BodyBackend(body, status=status, sensors=sensors, health=health)
+            backend.start_health_poll(self.cfg.servo_health_poll_s)
+            return backend
         try:
             from .ros_backend import HexapodRobot
 
