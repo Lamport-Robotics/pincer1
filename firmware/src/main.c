@@ -137,6 +137,13 @@ static struct {
     btcpsbt_t btc;           /* btc_psbt */
 } g_pending_sign;
 static uint8_t g_psbt_out[BTCPSBT_MAX_OUT_BYTES]; /* PSBT with partial signatures, built at signing time */
+/* Parser scratch for the request being handled. The core-0 stack is 4 KB (SCRATCH_Y); a parsed Solana
+ * message alone is ~3.5 KB, so these never live on the stack. One request is handled at a time. */
+static struct {
+    solmsg_t msg;
+    solmsg_summary_t parsed;
+    evmtx_t evm;
+} g_scratch;
 
 static char g_out[PROTO_LINE_MAX];
 
@@ -151,6 +158,11 @@ static void send_line(int n)
 }
 
 static void send_denied(const char *id, const char *reason) { send_line(proto_fmt_denied(g_out, sizeof g_out, id, reason)); }
+
+/* defined below; the update handlers above them use these */
+static void persist(void);
+static void ui_notice(const char *head, const char *line1, const char *line2, uint32_t ms);
+static void reply_pending_or_denied(consent_result_t res, const char *id, consent_reason_t why);
 static void send_event(const char *ev, const char *what) { send_line(proto_fmt_event(g_out, sizeof g_out, ev, what)); }
 
 /* ---- flash backend for storage.c: the last two sectors of whatever flash the board has
@@ -421,6 +433,7 @@ static void persist(void)
 static void clear_pending_sign(void)
 {
     secure_zero(&g_pending_sign, sizeof g_pending_sign);
+    secure_zero(&g_scratch, sizeof g_scratch);
 }
 
 static const uint8_t *owner_pubkey(void)
@@ -1070,9 +1083,9 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     consent_action_t act;
     consent_reason_t why = CONSENT_DENY_NONE;
     consent_result_t res;
-    solmsg_t msg;
-    solmsg_summary_t parsed;
-    evmtx_t evm;
+    solmsg_t *const msg = &g_scratch.msg;
+    solmsg_summary_t *const parsed = &g_scratch.parsed;
+    evmtx_t *const evm = &g_scratch.evm;
     uint32_t eff_danger = 0;
     const uint8_t *owner = owner_pubkey();
     const char *need;
@@ -1082,6 +1095,9 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
 
     if (!g_consent.p.initialized || !owner) { send_denied(r->id, "not_initialized"); return; }
     if (!g_signer_ok) { send_denied(r->id, "policy"); return; }
+    /* Before any parse: a request already waits for the owner and its bytes live in the pending slot. A second
+     * one must not get to overwrite what the coming touch would sign. */
+    if (g_consent.pending.op != CONSENT_OP_NONE) { send_denied(r->id, "busy"); return; }
     memset(&ui, 0, sizeof ui);
 
     switch (r->sign.kind) {
@@ -1092,13 +1108,13 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         break;
     case PROTO_KIND_TX: {
         policy_verdict_t v;
-        if (solmsg_parse(r->sign.bytes, r->sign.len, &msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
-        solmsg_analyze(&msg, owner, &parsed);
+        if (solmsg_parse(r->sign.bytes, r->sign.len, msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
+        solmsg_analyze(msg, owner, parsed);
         have_parsed = true;
-        v = policy_check(&parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
+        v = policy_check(parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
         if (v != POLICY_OK) { send_denied_shown(r->id, policy_verdict_reason(v)); return; }
-        res = consent_begin_sign(&g_consent, r->id, u64_sat_add(parsed.lamports_out, parsed.priority_lamports), (const uint8_t (*)[32])parsed.programs,
-                                 parsed.n_programs, eff_danger != 0 || parsed.n_token_out > 0 || parsed.token_out_overflow || parsed.n_unverified_programs > 0,
+        res = consent_begin_sign(&g_consent, r->id, u64_sat_add(parsed->lamports_out, parsed->priority_lamports), (const uint8_t (*)[32])parsed->programs,
+                                 parsed->n_programs, eff_danger != 0 || parsed->n_token_out > 0 || parsed->token_out_overflow || parsed->n_unverified_programs > 0,
                                  r->sign.ttl_ms, now, &act, &why); /* check 5; tokens never ride the allowance */
         break;
     }
@@ -1106,11 +1122,11 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         policy_verdict_t v;
         const uint8_t *addr = owner_evm_addr();
         if (!addr || !signer_secp256k1_present(consent_active_slot(&g_consent), SIGNER_CHAIN_EVM)) { send_denied(r->id, "not_initialized"); return; }
-        if (evmtx_parse(r->sign.bytes, r->sign.len, &evm) != EVMTX_OK) { send_denied(r->id, "policy"); return; }
-        evmtx_analyze(&evm, addr);
-        v = policy_check_evm(&evm, addr, &r->sign.evm_claims, &g_consent.p.routers, &eff_danger); /* checks 1-5 */
+        if (evmtx_parse(r->sign.bytes, r->sign.len, evm) != EVMTX_OK) { send_denied(r->id, "policy"); return; }
+        evmtx_analyze(evm, addr);
+        v = policy_check_evm(evm, addr, &r->sign.evm_claims, &g_consent.p.routers, &eff_danger); /* checks 1-5 */
         if (v != POLICY_OK) { send_denied_shown(r->id, policy_verdict_reason(v)); return; }
-        res = consent_begin_sign_chain(&g_consent, r->id, CONSENT_CHAIN_EVM, 0, &evm.value, r->sign.ttl_ms, now, &why); /* check 6 */
+        res = consent_begin_sign_chain(&g_consent, r->id, CONSENT_CHAIN_EVM, 0, &evm->value, r->sign.ttl_ms, now, &why); /* check 6 */
         break;
     }
     case PROTO_KIND_BTC_PSBT: {
@@ -1166,7 +1182,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     } else {
         stash_pending(r);
     }
-    if (have_parsed) { g_pending_sign.parsed = parsed; g_pending_sign.has_parsed = true; }
+    if (have_parsed) { g_pending_sign.parsed = *parsed; g_pending_sign.has_parsed = true; }
     if (r->sign.kind == PROTO_KIND_EVM_MSG || r->sign.kind == PROTO_KIND_BTC_MSG) memcpy(g_pending_sign.digest, digest, 32);
 
     if (res == CONSENT_R_DONE) { /* inside the allowance: no touch (Solana only) */
@@ -1176,9 +1192,9 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
 
     /* The trusted screen, from OUR parse (never from claims / summary text), BEFORE the request can be approved. */
     switch (r->sign.kind) {
-    case PROTO_KIND_TX: ui.kind = TUI_SIGN_SOL_TX; ui.sol = &parsed; ui.sol_dangerous = eff_danger; break;
+    case PROTO_KIND_TX: ui.kind = TUI_SIGN_SOL_TX; ui.sol = parsed; ui.sol_dangerous = eff_danger; break;
     case PROTO_KIND_MSG: ui.kind = TUI_SIGN_SOL_MSG; ui.msg = g_pending_sign.bytes; ui.msg_len = g_pending_sign.len; break;
-    case PROTO_KIND_EVM_TX: ui.kind = TUI_SIGN_EVM_TX; ui.evm = &evm; ui.evm_dangerous = eff_danger; break;
+    case PROTO_KIND_EVM_TX: ui.kind = TUI_SIGN_EVM_TX; ui.evm = evm; ui.evm_dangerous = eff_danger; break;
     case PROTO_KIND_BTC_PSBT: ui.kind = TUI_SIGN_BTC_PSBT; ui.btc = &g_pending_sign.btc; ui.btc_dangerous = eff_danger; break;
     case PROTO_KIND_EVM_MSG:
         if (r->sign.typed.present) { ui.kind = TUI_SIGN_EVM_TYPED; ui.digest = g_pending_sign.digest; ui.typed = &r->sign.typed.desc; }
@@ -1200,9 +1216,9 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     ui_sign_page(0); /* -> pending(touch or long touch) */
     need = consent_need_str(consent_pending_need(&g_consent));
     switch (r->sign.kind) {
-    case PROTO_KIND_EVM_TX: send_line(proto_fmt_pending_evm(g_out, sizeof g_out, r->id, need, &evm, eff_danger)); break;
+    case PROTO_KIND_EVM_TX: send_line(proto_fmt_pending_evm(g_out, sizeof g_out, r->id, need, evm, eff_danger)); break;
     case PROTO_KIND_BTC_PSBT: send_line(proto_fmt_pending_btc(g_out, sizeof g_out, r->id, need, &g_pending_sign.btc, eff_danger)); break;
-    case PROTO_KIND_TX: send_line(proto_fmt_pending_sol(g_out, sizeof g_out, r->id, need, &parsed, eff_danger)); break;
+    case PROTO_KIND_TX: send_line(proto_fmt_pending_sol(g_out, sizeof g_out, r->id, need, parsed, eff_danger)); break;
     default: send_line(proto_fmt_pending(g_out, sizeof g_out, r->id, need, NULL)); break;
     }
 }
@@ -1213,8 +1229,8 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
 {
     consent_reason_t why = CONSENT_DENY_NONE;
     consent_result_t res;
-    solmsg_t msg;
-    solmsg_summary_t parsed;
+    solmsg_t *const msg = &g_scratch.msg;
+    solmsg_summary_t *const parsed = &g_scratch.parsed;
     policy_verdict_t v;
     uint8_t nonce_account[32];
     bool durable, replacing;
@@ -1225,13 +1241,13 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
     if (!g_consent.p.initialized || !owner) { send_denied(r->id, "not_initialized"); return; }
     if (!g_signer_ok) { send_denied(r->id, "policy"); return; }
     if (r->sign.len > CONSENT_INH_MSG_MAX) { send_denied(r->id, "policy"); return; }
-    if (solmsg_parse(r->sign.bytes, r->sign.len, &msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
-    if (msg.num_required_signatures > CONSENT_INH_MAX_SIGNERS) { send_denied(r->id, "policy"); return; }
-    solmsg_analyze(&msg, owner, &parsed);
-    v = policy_check(&parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
+    if (solmsg_parse(r->sign.bytes, r->sign.len, msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
+    if (msg->num_required_signatures > CONSENT_INH_MAX_SIGNERS) { send_denied(r->id, "policy"); return; }
+    solmsg_analyze(msg, owner, parsed);
+    v = policy_check(parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
     if (v != POLICY_OK) { send_denied_shown(r->id, policy_verdict_reason(v)); return; }
     replacing = g_consent.ih.inh.armed;
-    durable = solmsg_starts_with_advance_nonce(&msg, nonce_account) && memcmp(nonce_account, owner, 32) != 0;
+    durable = solmsg_starts_with_advance_nonce(msg, nonce_account) && memcmp(nonce_account, owner, 32) != 0;
     {
         consent_inheritance_t req = r->inheritance;
         memcpy(req.signer, g_data.pubkey[CONSENT_SLOT_REAL], 32); /* owner == real key here: gate() refuses duress */
@@ -1242,10 +1258,10 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
     memcpy(g_pending_sign.bytes, r->sign.bytes, r->sign.len);
     g_pending_sign.len = r->sign.len;
     g_pending_sign.valid = true;
-    g_pending_sign.parsed = parsed;
+    g_pending_sign.parsed = *parsed;
     g_pending_sign.has_parsed = true;
     memset(&ui, 0, sizeof ui);
-    ui.kind = TUI_SIGN_INHERITANCE; ui.sol = &parsed; ui.sol_dangerous = eff_danger;
+    ui.kind = TUI_SIGN_INHERITANCE; ui.sol = parsed; ui.sol_dangerous = eff_danger;
     ui.inh_days = r->inheritance.inactivity_days; ui.inh_heir = r->inheritance.heir; ui.inh_replace = replacing;
     tui_build_sign(&ui, &g_doc);
     if (g_doc.truncated || g_doc.n_pages == 0) {

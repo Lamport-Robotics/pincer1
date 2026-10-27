@@ -148,6 +148,8 @@ else()
     target_include_directories(pincer1_consent PRIVATE ${PINCER_CORE_INCLUDES})
     target_compile_definitions(pincer1_consent PRIVATE
         ED25519_NO_SEED=1
+        CJSON_NESTING_LIMIT=32      # a request is a few levels deep; the parser recurses per level
+        PICO_STACK_SIZE=0x1000       # explicit, the whole of SCRATCH_Y; the parsers work in static scratch, not on the stack
         ${PINCER_UECC_DEFINES}
         PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=0
         PICO_FLASH_ASSUME_CORE1_SAFE=1
