@@ -186,13 +186,15 @@ pip install pyserial
 RELAY_PORT=/dev/ttyACM0 NTFY_URL=https://ntfy.sh/<private-topic> python3 base/relay.py
 ```
 
-Environment, all optional: `NTFY_URL` (+ `NTFY_TOKEN`), `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
-(+ `TELEGRAM_COMMANDS=1` to accept `/arm /disarm /ping /ok /status` from that chat only),
-`WEBHOOK_URL`, `RELAY_HTTP` (default `127.0.0.1:7410`), `RELAY_SILENT_AFTER_S` (notify once when an
-armed beacon's heartbeats stop; default 2 h), `RELAY_ALARM_EVERY_S` (re-notify an ongoing alarm at most
-this often, sooner if it moved more than 200 m). Alarms go out as `urgent`; everything else is logged
-and sent at normal priority. `base/relay.service` is a systemd unit; put the variables in
-`/etc/pincer-relay.env`.
+Environment, all optional except the token: `RELAY_TOKEN` (`openssl rand -hex 24`; `POST /cmd` wants it
+as `Authorization: Bearer …` and `relay.py send` reads it; without it the relay takes no commands at
+all, so nothing else on that machine can disarm the beacon), `NTFY_URL` (+ `NTFY_TOKEN`),
+`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` (+ `TELEGRAM_COMMANDS=1` to accept `/arm /disarm /ping /ok
+/status` from that chat only), `WEBHOOK_URL`, `RELAY_HTTP` (default `127.0.0.1:7410`),
+`RELAY_SILENT_AFTER_S` (notify once when an armed beacon's heartbeats stop; default 2 h),
+`RELAY_ALARM_EVERY_S` (re-notify an ongoing alarm at most this often, sooner if it moved more than
+200 m). Alarms go out as `urgent`; everything else is logged and sent at normal priority.
+`base/relay.service` is a systemd unit; put the variables in `/etc/pincer-relay.env`.
 
 The base prints one JSON object per line (`base/src/main.cpp` documents them), so anything else can
 consume it too. It keeps its own counters in flash and drops replays; the relay drops them again from
@@ -248,10 +250,15 @@ flashing until you arm it. The relay sends nothing anywhere unless you set a des
   device id ‖ seq; the direction bit in the seq keeps the two nonce spaces apart. Receivers accept
   only increasing seqs and persist them, so a recorded `disarm` cannot be replayed. The beacon
   reserves counter blocks in flash before use, so a reboot never reuses a nonce.
+- The device id never goes on air. The header carries an 8-byte pseudonym derived from the key, the
+  id and the packet's seq, different for every packet, so a listener without the key cannot tell this
+  beacon's packets from another's or follow one beacon across days; the base derives the same value
+  from the clear seq and drops anything that does not match before it decrypts. Packet version 2:
+  beacon and base must be flashed together.
 - A jammer can stop LoRa. Find My is independent of it.
 - Anyone with a BLE sniffer sees that *something* advertises like a lost AirTag; the key rotates every
   15 min so they cannot follow it across rotations without the seed.
 - The board button and the USB serial can arm/disarm when the beacon is idle or armed, and are ignored
-  while it is in alarm (`trig_command` refuses everything but the owner's radio `ok` then). Both are inside
-  the shell: reaching them means opening it, which trips the tamper switch.
+  while it is in alarm: only an authenticated radio command ends one. Both are inside the shell: reaching
+  them means opening it, which trips the tamper switch.
 
