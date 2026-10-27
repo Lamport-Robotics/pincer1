@@ -1,7 +1,8 @@
 # Pincer1 beacon relay: base station on USB → ntfy / Telegram / webhook.
 #
 #   sudo cp relay.service /etc/systemd/system/pincer-relay.service
-#   sudo install -m 600 /dev/null /etc/pincer-relay.env    # then put RELAY_PORT, NTFY_URL, … in it
+#   sudo install -m 600 /dev/null /etc/pincer-relay.env    # then put RELAY_PORT, RELAY_TOKEN, NTFY_URL, … in it
+#   (RELAY_TOKEN: `openssl rand -hex 24`; POST /cmd and `relay.py send` need it)
 #   sudo useradd -r -G dialout pincer-relay                  # needs the serial port
 #   sudo systemctl enable --now pincer-relay
 #
@@ -22,8 +23,21 @@ Restart=always
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
+ProtectHome=yes
 ReadWritePaths=/opt/pincer1/beacon/base
 PrivateTmp=yes
+DevicePolicy=closed
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
 
 [Install]
 WantedBy=multi-user.target

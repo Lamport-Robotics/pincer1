@@ -3,8 +3,10 @@
 // Wire format, 48 bytes, little-endian integers:
 //
 //   header, 14 bytes, sent in clear and authenticated (AEAD associated data):
-//     0      version        = 1
-//     1..8   device id      8 bytes, from provisioning
+//     0      version        = 2
+//     1..8   pseudonym      8 bytes: SHA-256(key ‖ device id ‖ "pincer1-pid" ‖ seq-with-direction)[0..8].
+//                           Changes with every packet, so a listener without the key cannot tell this
+//                           beacon's packets from any other's; the device id itself never goes on air.
 //     9      type           1 heartbeat · 2 alarm · 3 ack · 4 cmd
 //     10..13 seq            u32; bit 31 = direction (0 beacon→base, 1 base→beacon), bits 0..30 count
 //   body, 18 bytes, encrypted:
@@ -19,10 +21,12 @@
 //     31     cmd            for type cmd/ack: 1 arm · 2 disarm · 3 ping · 4 ok
 //   tag, 16 bytes, Poly1305
 //
-// ChaCha20-Poly1305 (RFC 8439) under the 32-byte shared key; nonce = device id ‖ seq (12 bytes).
-// Each direction has its own counter (the direction bit keeps the two nonce spaces apart; the
-// same key is used both ways). Replay protection: a receiver accepts only a seq strictly greater
-// than the highest it has accepted from that direction. Counters must be persisted by both sides.
+// ChaCha20-Poly1305 (RFC 8439) under the 32-byte shared key; nonce = device id ‖ seq (12 bytes),
+// with the real device id, which both sides know from provisioning. Each direction has its own
+// counter (the direction bit keeps the two nonce spaces apart; the same key is used both ways).
+// Replay protection: a receiver accepts only a seq strictly greater than the highest it has accepted
+// from that direction. Counters must be persisted by both sides. The seq is the one value in clear
+// that moves predictably; it is 31 bits of counter, not an identity.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -31,7 +35,7 @@
 extern "C" {
 #endif
 
-#define PKT_VERSION 1
+#define PKT_VERSION 2
 #define PKT_ID_LEN  8
 #define PKT_HDR_LEN 14
 #define PKT_BODY_LEN 18
@@ -60,7 +64,7 @@ typedef enum {
     PKT_OK = 0,
     PKT_ERR_LEN,       // not 48 bytes
     PKT_ERR_VERSION,
-    PKT_ERR_ID,        // not our device id
+    PKT_ERR_ID,        // pseudonym does not match our key + device id
     PKT_ERR_DIR,       // a packet from our own direction (echo)
     PKT_ERR_AUTH,      // tag mismatch: wrong key or corrupted
     PKT_ERR_REPLAY,    // seq not greater than the last accepted
@@ -100,8 +104,11 @@ int pkt_encode(pkt_ctx_t *c, pkt_msg_t *msg, uint8_t out[PKT_LEN]);
 // Verifies, decrypts and replay-checks in[len]. On PKT_OK, peer_seq is advanced.
 pkt_err_t pkt_decode(pkt_ctx_t *c, const uint8_t *in, size_t len, pkt_msg_t *out);
 
-// Peek at the clear header without any crypto (for logging rejected packets).
+// Peek at the clear header without any crypto (for logging rejected packets). id_out is the pseudonym.
 int pkt_peek(const uint8_t *in, size_t len, uint8_t id_out[PKT_ID_LEN], uint8_t *type, uint32_t *seq_with_dir);
+
+// The on-air pseudonym for one (key, id, seq-with-direction).
+void pkt_pseudonym(const pkt_ctx_t *c, uint32_t seq_with_dir, uint8_t out[PKT_ID_LEN]);
 
 const char *pkt_err_str(pkt_err_t e);
 const char *pkt_type_str(uint8_t t);

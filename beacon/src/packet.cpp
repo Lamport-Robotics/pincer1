@@ -1,5 +1,6 @@
 #include "packet.h"
 #include "aead.h"
+#include "sha256.h"
 #include <string.h>
 
 static void w16(uint8_t *p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
@@ -22,6 +23,21 @@ static void nonce_for(const pkt_ctx_t *c, uint32_t seq_with_dir, uint8_t nonce[1
     w32(nonce + 8, seq_with_dir);
 }
 
+void pkt_pseudonym(const pkt_ctx_t *c, uint32_t seq_with_dir, uint8_t out[PKT_ID_LEN]) {
+    static const uint8_t LABEL[] = "pincer1-pid";
+    uint8_t swd[4], h[32];
+    w32(swd, seq_with_dir);
+    sha256_ctx s;
+    sha256_init(&s);
+    sha256_update(&s, c->key, 32);
+    sha256_update(&s, c->id, PKT_ID_LEN);
+    sha256_update(&s, LABEL, sizeof LABEL - 1);
+    sha256_update(&s, swd, 4);
+    sha256_final(&s, h);
+    memcpy(out, h, PKT_ID_LEN);
+    memset(h, 0, sizeof h);
+}
+
 int pkt_encode(pkt_ctx_t *c, pkt_msg_t *m, uint8_t out[PKT_LEN]) {
     if (c->next_seq > PKT_SEQ_MAX) return 0;
     uint32_t seq = c->next_seq++;
@@ -29,7 +45,7 @@ int pkt_encode(pkt_ctx_t *c, pkt_msg_t *m, uint8_t out[PKT_LEN]) {
     uint32_t swd = seq | (c->dir ? PKT_SEQ_DIR_BIT : 0);
 
     out[0] = PKT_VERSION;
-    memcpy(out + 1, c->id, 8);
+    pkt_pseudonym(c, swd, out + 1);
     out[9] = m->type;
     w32(out + 10, swd);
 
@@ -62,8 +78,10 @@ int pkt_peek(const uint8_t *in, size_t len, uint8_t id_out[PKT_ID_LEN], uint8_t 
 pkt_err_t pkt_decode(pkt_ctx_t *c, const uint8_t *in, size_t len, pkt_msg_t *out) {
     if (len != PKT_LEN) return PKT_ERR_LEN;
     if (in[0] != PKT_VERSION) return PKT_ERR_VERSION;
-    if (memcmp(in + 1, c->id, 8) != 0) return PKT_ERR_ID;
     uint32_t swd = r32(in + 10);
+    uint8_t want[PKT_ID_LEN];
+    pkt_pseudonym(c, swd, want);
+    if (memcmp(in + 1, want, PKT_ID_LEN) != 0) return PKT_ERR_ID;
     uint8_t from_base = (swd & PKT_SEQ_DIR_BIT) ? 1 : 0;
     if (from_base == c->dir) return PKT_ERR_DIR;
     uint8_t type = in[9];

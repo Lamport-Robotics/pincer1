@@ -16,6 +16,8 @@ Environment:
     RELAY_PORT            serial port of the base (default /dev/ttyUSB0; /dev/ttyACM0 on the Heltec V3)
     RELAY_BAUD            115200
     RELAY_HTTP            127.0.0.1:7410   local control endpoint (POST /cmd {"cmd":"disarm"}, GET /status)
+    RELAY_TOKEN           required for POST /cmd: `Authorization: Bearer <token>`; without it the
+                          endpoint only answers GET /status (the CLI `send` reads the same variable)
     RELAY_STATE           relay-state.json next to this file
     RELAY_SILENT_AFTER_S  7200: notify once when an armed beacon's heartbeats stop for this long
     RELAY_ALARM_EVERY_S   600: re-notify an ongoing alarm at most this often (sooner if it moved > 200 m)
@@ -31,6 +33,7 @@ for the beacon to work; it needs it to reach you.
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import math
 import os
@@ -61,8 +64,10 @@ CFG = {
     "tg_chat": os.environ.get("TELEGRAM_CHAT_ID", ""),
     "tg_commands": os.environ.get("TELEGRAM_COMMANDS", "0") == "1",
     "webhook": os.environ.get("WEBHOOK_URL", ""),
+    "token": os.environ.get("RELAY_TOKEN", ""),
 }
 COMMANDS = ("arm", "disarm", "ping", "ok")
+MAX_BODY = 4096
 
 
 def log(msg: str) -> None:
@@ -197,10 +202,16 @@ def handle_event(ev: dict) -> None:
     with STATE.lock:
         STATE.d["last_packet"] = ev
         if t in ("alarm", "heartbeat", "ack"):
-            # replay check (the base already does this; belt and braces across base reboots)
-            key = ev.get("id", "?")
-            last = STATE.d["last_seq"].get(key, 0)
-            seq = int(ev.get("seq", 0))
+            # The base verified the tag and the counter before printing the line; this is the
+            # second counter check, across base reboots and state-file restores, so a line replayed
+            # into the serial stream (or a base re-flashed with a stale counter) changes nothing.
+            key = str(ev.get("id", "?"))
+            last = int(STATE.d["last_seq"].get(key, 0))
+            try:
+                seq = int(ev.get("seq", 0))
+            except (TypeError, ValueError):
+                log(f"drop: bad seq in {ev}")
+                return
             if seq <= last:
                 log(f"drop: seq {seq} ≤ {last} for {key}")
                 return
@@ -297,22 +308,42 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json(404, {"error": "not found"})
 
+    def _authorised(self) -> bool:
+        """Bearer token from RELAY_TOKEN, compared in constant time. No token configured means no
+        command endpoint at all: anything on this machine could otherwise disarm the beacon."""
+        if not CFG["token"]:
+            return False
+        got = self.headers.get("Authorization", "")
+        return got.startswith("Bearer ") and hmac.compare_digest(got[7:].strip(), CFG["token"])
+
     def do_POST(self):
         if self.path != "/cmd":
             return self._json(404, {"error": "not found"})
-        n = int(self.headers.get("Content-Length", "0"))
+        if not self._authorised():
+            return self._json(401 if CFG["token"] else 403, {"error": "unauthorized" if CFG["token"] else "RELAY_TOKEN not set"})
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self._json(400, {"error": "bad length"})
+        if n < 0 or n > MAX_BODY:
+            return self._json(413, {"error": "too large"})
         try:
             req = json.loads(self.rfile.read(n) or b"{}")
         except ValueError:
             return self._json(400, {"error": "bad json"})
-        res = BASE.send(str(req.get("cmd", "")), req.get("repeat_s"))
+        if not isinstance(req, dict):
+            return self._json(400, {"error": "bad json"})
+        repeat = req.get("repeat_s")
+        if repeat is not None and (not isinstance(repeat, int) or isinstance(repeat, bool) or not 0 < repeat <= 86400):
+            return self._json(400, {"error": "bad repeat_s"})
+        res = BASE.send(str(req.get("cmd", "")), repeat)
         self._json(200 if res.get("ok") else 400, res)
 
 
 def http_loop() -> None:
     host, _, port = CFG["http"].rpartition(":")
     srv = HTTPServer((host or "127.0.0.1", int(port)), Handler)
-    log(f"control: http://{CFG['http']}  (POST /cmd, GET /status)")
+    log(f"control: http://{CFG['http']}  (GET /status; POST /cmd {'with RELAY_TOKEN' if CFG['token'] else 'OFF: no RELAY_TOKEN'})")
     srv.serve_forever()
 
 
@@ -359,8 +390,12 @@ def main() -> int:
         url = f"http://{CFG['http']}/" + ("cmd" if args.mode == "send" else "status")
         try:
             if args.mode == "send":
+                if not CFG["token"]:
+                    print("RELAY_TOKEN is not set; the relay refuses commands without it", file=sys.stderr)
+                    return 2
                 body = json.dumps({"cmd": args.cmd, "repeat_s": args.repeat_s}).encode()
-                req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+                headers = {"Content-Type": "application/json", "Authorization": "Bearer " + CFG["token"]}
+                req = urllib.request.Request(url, data=body, headers=headers, method="POST")
             else:
                 req = urllib.request.Request(url)
             with urllib.request.urlopen(req, timeout=5) as r:

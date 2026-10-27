@@ -124,7 +124,7 @@ void test_packet_round_trip(void) {
     TEST_ASSERT_EQUAL(1, pkt_encode(&beacon, &m, wire));
     TEST_ASSERT_EQUAL(1, m.seq);
     TEST_ASSERT_EQUAL(PKT_VERSION, wire[0]);
-    TEST_ASSERT_EQUAL_MEMORY(ID, wire + 1, 8);
+    TEST_ASSERT_TRUE(memcmp(ID, wire + 1, 8) != 0);                   // the device id never goes on air
     TEST_ASSERT_EQUAL(PKT_ALARM, wire[9]);
     TEST_ASSERT_EQUAL(0, wire[13] & 0x80);                       // beacon direction
     TEST_ASSERT_EQUAL(PKT_OK, pkt_decode(&base, wire, PKT_LEN, &out));
@@ -146,6 +146,31 @@ void test_packet_round_trip(void) {
     TEST_ASSERT_EQUAL(-339249000, out.lat_e7);
     TEST_ASSERT_EQUAL(-1511400000, out.lon_e7);
     TEST_ASSERT_EQUAL(PKT_HEARTBEAT, out.type);
+}
+
+void test_packet_pseudonym_changes_every_packet(void) {
+    pkt_ctx_t beacon, base;
+    fresh(&beacon, &base);
+    pkt_msg_t m = sample_alarm();
+    uint8_t w1[PKT_LEN], w2[PKT_LEN], want[8];
+    pkt_encode(&beacon, &m, w1);
+    pkt_encode(&beacon, &m, w2);
+    TEST_ASSERT_TRUE(memcmp(w1 + 1, w2 + 1, 8) != 0);
+    TEST_ASSERT_TRUE(memcmp(w1 + 1, ID, 8) != 0 && memcmp(w2 + 1, ID, 8) != 0);
+    // the base derives the same pseudonym from the clear seq
+    pkt_pseudonym(&base, 2, want);
+    TEST_ASSERT_EQUAL_MEMORY(want, w2 + 1, 8);
+    // a different key gives a different pseudonym for the same seq, so two robots' beacons on the
+    // same channel are not linkable to each other either
+    pkt_ctx_t other; uint8_t key2[32]; memcpy(key2, KEY, 32); key2[0] ^= 1;
+    pkt_init(&other, key2, ID, 0, 1, 0);
+    uint8_t w3[PKT_LEN];
+    pkt_encode(&other, &m, w3);                                           // seq 1, like w1
+    TEST_ASSERT_TRUE(memcmp(w1 + 1, w3 + 1, 8) != 0);
+    // and a forged pseudonym on a real seq is refused before any decryption
+    uint8_t copy[PKT_LEN]; memcpy(copy, w1, PKT_LEN); copy[3] ^= 1;
+    pkt_msg_t out;
+    TEST_ASSERT_EQUAL(PKT_ERR_ID, pkt_decode(&base, copy, PKT_LEN, &out));
 }
 
 void test_packet_body_is_encrypted(void) {
@@ -183,15 +208,17 @@ void test_packet_wrong_key_id_len_version(void) {
 
     uint8_t key2[32]; memcpy(key2, KEY, 32); key2[5] ^= 1;
     pkt_init(&other, key2, ID, 1, 1, 0);
-    TEST_ASSERT_EQUAL(PKT_ERR_AUTH, pkt_decode(&other, wire, PKT_LEN, &out));
+    TEST_ASSERT_EQUAL(PKT_ERR_ID, pkt_decode(&other, wire, PKT_LEN, &out)); // wrong key: pseudonym already off
     TEST_ASSERT_EQUAL(0, other.peer_seq);                                 // a failed packet never advances
+    memcpy(copy, wire, PKT_LEN); pkt_pseudonym(&other, 1, copy + 1);        // right pseudonym, wrong key
+    TEST_ASSERT_EQUAL(PKT_ERR_AUTH, pkt_decode(&other, copy, PKT_LEN, &out));
 
     uint8_t id2[8]; memcpy(id2, ID, 8); id2[0] ^= 1;
     pkt_init(&other, KEY, id2, 1, 1, 0);
     TEST_ASSERT_EQUAL(PKT_ERR_ID, pkt_decode(&other, wire, PKT_LEN, &out));
 
     TEST_ASSERT_EQUAL(PKT_ERR_LEN, pkt_decode(&base, wire, PKT_LEN - 1, &out));
-    memcpy(copy, wire, PKT_LEN); copy[0] = 2;
+    memcpy(copy, wire, PKT_LEN); copy[0] = PKT_VERSION + 1;
     TEST_ASSERT_EQUAL(PKT_ERR_VERSION, pkt_decode(&base, copy, PKT_LEN, &out));
     memcpy(copy, wire, PKT_LEN); copy[9] = PKT_HEARTBEAT;                    // header is authenticated
     TEST_ASSERT_EQUAL(PKT_ERR_AUTH, pkt_decode(&base, copy, PKT_LEN, &out));
@@ -244,7 +271,7 @@ void test_packet_counter_exhaustion_and_peek(void) {
     TEST_ASSERT_EQUAL(0, pkt_encode(&beacon, &m, wire));              // exhausted
     uint8_t id[8]; uint8_t type; uint32_t swd;
     TEST_ASSERT_EQUAL(1, pkt_peek(wire, PKT_LEN, id, &type, &swd));
-    TEST_ASSERT_EQUAL_MEMORY(ID, id, 8);
+    TEST_ASSERT_EQUAL_MEMORY(wire + 1, id, 8);                             // the pseudonym, not ID
     TEST_ASSERT_EQUAL(PKT_ALARM, type);
     TEST_ASSERT_EQUAL(PKT_SEQ_MAX, swd);
     TEST_ASSERT_EQUAL(0, pkt_peek(wire, 5, id, &type, &swd));
@@ -269,6 +296,7 @@ int main(int, char **) {
     RUN_TEST(test_rfc8439_aead_2_8_2);
     RUN_TEST(test_aead_empty_and_multiblock);
     RUN_TEST(test_packet_round_trip);
+    RUN_TEST(test_packet_pseudonym_changes_every_packet);
     RUN_TEST(test_packet_body_is_encrypted);
     RUN_TEST(test_packet_replay_rejected);
     RUN_TEST(test_packet_wrong_key_id_len_version);
