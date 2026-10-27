@@ -1,5 +1,5 @@
 // Board layer for the T-Beam boards: AXP2101 through XPowersLib, QMI8658 through SensorLib,
-// deep sleep with pin + timer wake. Untested on hardware.
+// deep sleep with pin + timer wake.
 #if defined(ARDUINO) && (defined(BOARD_TBEAM_SUPREME) || defined(BOARD_TBEAM_V12))
 #include "board.h"
 #include <Arduino.h>
