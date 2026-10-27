@@ -22,16 +22,40 @@ export const PIN_TTL_MS = 10 * 60_000;
 
 export interface ThorInbound { chain: string; address: string; router?: string; halted: boolean; gasRate?: string; dustThreshold?: string }
 
-/** Live THORChain inbound addresses, pinned. The EVM adapter's router set is extended with the pinned router. */
+export const DEFAULT_THORNODES = ["https://thornode.ninerealms.com", "https://thornode.thorchain.liquify.com"] as const;
+
+/**
+ * Live THORChain inbound addresses, pinned. Two independent thornodes are asked and only entries both report
+ * (same chain, address and router) are pinned: one compromised or spoofed node cannot redirect a deposit. A
+ * disagreement keeps the old pin and fails the refresh. The EVM adapter's router set is extended with the pinned router.
+ */
 export class ThorPins {
   private pinned: { at: number; inbound: ThorInbound[] } | null = null;
-  constructor(private base: string, private fetchImpl: typeof fetch = fetch, private now: () => number = Date.now, private onRouter?: (router: string) => void) {}
+  private readonly bases: string[];
+  constructor(bases: string | readonly string[], private fetchImpl: typeof fetch = fetch, private now: () => number = Date.now, private onRouter?: (router: string) => void) {
+    this.bases = [...new Set((typeof bases === "string" ? [bases] : bases).map((b) => b.replace(/\/$/, "")))];
+  }
+
+  private async fetchInbound(base: string): Promise<ThorInbound[]> {
+    const r = await this.fetchImpl(`${base}/thorchain/inbound_addresses`, { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) throw new Error(`thornode inbound_addresses ${r.status} (${base})`);
+    const j = (await r.json()) as any[];
+    if (!Array.isArray(j)) throw new Error(`thornode inbound_addresses is not a list (${base})`);
+    return j.filter((x) => x && typeof x.chain === "string" && typeof x.address === "string").map((x) => ({ chain: x.chain, address: x.address, router: typeof x.router === "string" && x.router ? x.router : undefined, halted: !!x.halted || !!x.global_trading_paused || !!x.chain_trading_paused, gasRate: x.gas_rate, dustThreshold: x.dust_threshold }));
+  }
 
   async refresh(): Promise<ThorInbound[]> {
-    const r = await this.fetchImpl(`${this.base.replace(/\/$/, "")}/thorchain/inbound_addresses`, { signal: AbortSignal.timeout(4000) });
-    if (!r.ok) throw new Error(`thornode inbound_addresses ${r.status}`);
-    const j = (await r.json()) as any[];
-    const inbound: ThorInbound[] = j.filter((x) => x && typeof x.chain === "string" && typeof x.address === "string").map((x) => ({ chain: x.chain, address: x.address, router: typeof x.router === "string" && x.router ? x.router : undefined, halted: !!x.halted || !!x.global_trading_paused || !!x.chain_trading_paused, gasRate: x.gas_rate, dustThreshold: x.dust_threshold }));
+    if (this.bases.length < 2) throw new Error("THORChain pins need two independent thornode URLs (THORNODE_URL and THORNODE_URL_2)");
+    const [first, ...others] = await Promise.all(this.bases.map((b) => this.fetchInbound(b)));
+    const same = (a: ThorInbound, b: ThorInbound) => a.address.toLowerCase() === b.address.toLowerCase() && (a.router ?? "").toLowerCase() === (b.router ?? "").toLowerCase();
+    const inbound: ThorInbound[] = [];
+    for (const e of first) {
+      const peers = others.map((o) => o.find((x) => x.chain === e.chain)).filter((x): x is ThorInbound => !!x);
+      if (peers.length !== others.length) continue; // a chain only one node lists is not pinned
+      if (!peers.every((p) => same(e, p))) throw new Error(`thornodes disagree on the ${e.chain} inbound address; nothing pinned`);
+      inbound.push({ ...e, halted: e.halted || peers.some((p) => p.halted) });
+    }
+    if (inbound.length === 0) throw new Error("thornodes agree on no inbound address");
     this.pinned = { at: this.now(), inbound };
     for (const i of inbound) if (i.router) this.onRouter?.(i.router);
     return inbound;

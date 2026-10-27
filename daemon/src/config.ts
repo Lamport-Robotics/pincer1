@@ -52,7 +52,9 @@ const Env = z.object({
   // swaps (online mode only)
   ONEINCH_API_KEY: z.string().default(""),
   ZEROX_API_KEY: z.string().default(""),
+  // THORChain inbound addresses are pinned only when two independent thornodes agree
   THORNODE_URL: z.string().url().default("https://thornode.ninerealms.com"),
+  THORNODE_URL_2: z.string().url().default("https://thornode.thorchain.liquify.com"),
   SWAP_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(1).max(100).default(100),
   EVM_ROUTER_ALLOWLIST: z.string().default(""),
 });

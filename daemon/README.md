@@ -40,7 +40,7 @@ room; and locks the controller whenever presence is lost.
 
 See `.env.example`. Multi-chain additions: `EVM_RPC_<chainId>`, `ETHERSCAN_API_KEY`, `DAILY_LIMIT_ETH`,
 `EVM_ROUTER_ALLOWLIST`, `BTC_NETWORK`, `BTC_ESPLORA_URL`, `BTC_MAX_FEE_RATE`, `BTC_FEE_TARGET_BLOCKS`,
-`DAILY_LIMIT_BTC`, `ONEINCH_API_KEY`, `ZEROX_API_KEY`, `THORNODE_URL`, `SWAP_MAX_SLIPPAGE_BPS`.
+`DAILY_LIMIT_BTC`, `ONEINCH_API_KEY`, `ZEROX_API_KEY`, `THORNODE_URL`, `THORNODE_URL_2`, `SWAP_MAX_SLIPPAGE_BPS`.
 
 Pinned: `viem 2.57.4`, `bitcoinjs-lib 6.1.7`, `@noble/curves 1.9.7` (sim signing and signature verification only; the daemon never signs).
 
@@ -124,7 +124,8 @@ quote ("Swapping 1,000 USDC on Ethereum for about 0.5 WETH through 1inch. You'll
 the router, re-verifies it, then runs the normal presence + explain + touch pipeline and broadcasts.
 
 Routes: Solana via Jupiter (lite API, v6 program); EVM via 1inch v6 (`ONEINCH_API_KEY`) with 0x as fallback
-(`ZEROX_API_KEY`); cross-chain Bitcoin ⇄ EVM native coins via THORChain (`THORNODE_URL`).
+(`ZEROX_API_KEY`); cross-chain Bitcoin ⇄ EVM native coins via THORChain (`THORNODE_URL` and `THORNODE_URL_2`:
+an inbound address is pinned only when both nodes agree on it).
 
 Safety rules, every swap, no exceptions (`src/swap/verify.ts`, `src/swap/index.ts`):
 

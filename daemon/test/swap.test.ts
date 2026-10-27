@@ -6,7 +6,9 @@ import * as bitcoin from "bitcoinjs-lib";
 import { SwapService, SwapError } from "../src/swap/index.js";
 import { JupiterProvider, OneInchProvider, ThorchainProvider } from "../src/swap/providers.js";
 import { ThorPins } from "../src/swap/routers.js";
-import { ONEINCH_ABI, JUPITER_DISCRIMINATORS, decodeJupiterRoute, parseThorMemo } from "../src/swap/verify.js";
+import { ONEINCH_ABI, JUPITER_DISCRIMINATORS, decodeJupiterRoute, parseThorMemo, verifyJupiterTx } from "../src/swap/verify.js";
+import { ownerAtaSet, parseMessage } from "../src/tx/parse.js";
+import { TOKEN, TOKEN_2022 } from "../src/tx/known.js";
 import { BitcoinAdapter } from "../src/chains/bitcoin/index.js";
 import { parsePsbt } from "../src/chains/bitcoin/psbt.js";
 import { decodeFunctionData, erc20Abi } from "viem";
@@ -55,15 +57,17 @@ function harness(net: FakeNet = {}) {
       return J({ swapTransaction: Buffer.from(tx.serialize({ requireAllSignatures: false, verifySignatures: false })).toString("base64") });
     }
     if (u.startsWith("https://oneinch.test/1/quote")) return J({ dstAmount: (5n * 10n ** 17n).toString() });
-    if (u.startsWith("https://oneinch.test/1/swap")) return J({ dstAmount: (5n * 10n ** 17n).toString(), tx: { from: owner, to: net.oneInchTo ?? E.ROUTER, data: oneInchSwapCalldata({ src: E.USDC, dst: E.WETH, amount: 1_000_000_000n, minReturn: net.oneInchMinReturn ?? 495n * 10n ** 15n, receiver: owner }), value: "0", gas: 250000, gasPrice: "20000000000" } });
+    if (u.startsWith("https://oneinch.test/1/swap")) return J({ dstAmount: (5n * 10n ** 17n).toString(), tx: { from: owner, to: net.oneInchTo ?? E.ROUTER, data: oneInchSwapCalldata({ src: E.USDC, dst: net.oneInchDst ?? E.WETH, amount: 1_000_000_000n, minReturn: net.oneInchMinReturn ?? 495n * 10n ** 15n, receiver: owner }), value: "0", gas: 250000, gasPrice: "20000000000" } });
     if (u.startsWith("https://thor.test/thorchain/inbound_addresses")) return J([{ chain: "BTC", address: VAULT_BTC, halted: false, gas_rate: "10", dust_threshold: "10000" }, { chain: "ETH", address: VAULT_ETH, router: THOR_ROUTER, halted: false, gas_rate: "30" }]);
+    // the second, independent thornode; `thor2VaultBtc` makes it disagree
+    if (u.startsWith("https://thor2.test/thorchain/inbound_addresses")) return J([{ chain: "BTC", address: net.thor2VaultBtc ?? VAULT_BTC, halted: false, gas_rate: "10", dust_threshold: "10000" }, { chain: "ETH", address: VAULT_ETH, router: THOR_ROUTER, halted: false, gas_rate: "30" }]);
     if (u.startsWith("https://thor.test/thorchain/quote/swap")) { const q = new URL(u); const toBtc = q.searchParams.get("to_asset") === "BTC.BTC"; return J({ inbound_address: toBtc ? VAULT_ETH : VAULT_BTC, router: toBtc ? THOR_ROUTER : undefined, expected_amount_out: toBtc ? "900000" : "50000000", memo: "=:x", expiry: Math.floor(Date.now() / 1000) + 900, dust_threshold: "10000", recommended_min_amount_in: "100000", fees: {} }); }
     return new Response("nope", { status: 404 });
   }) as unknown as typeof fetch;
   const sentSol: string[] = [];
   (h.conn as any).sendRawTransaction = async (raw: Uint8Array) => { sentSol.push(Buffer.from(raw).toString("base64")); return "jupsig111"; };
   const settings = { mode: "online" as const, swapMaxSlippageBps: 100 };
-  const swap = new SwapService({ signer: h.signer, settings: () => settings, evm: h.evm, bitcoin: btc, jupiter: new JupiterProvider("https://jup.test", fetchImpl), aggregators: [new OneInchProvider("key", "https://oneinch.test", fetchImpl)], thorchain: new ThorchainProvider("https://thor.test", fetchImpl), thorPins: new ThorPins("https://thor.test", fetchImpl, Date.now, (r) => h.evm.routers.add(r.toLowerCase())) });
+  const swap = new SwapService({ signer: h.signer, settings: () => settings, evm: h.evm, bitcoin: btc, jupiter: new JupiterProvider("https://jup.test", fetchImpl), aggregators: [new OneInchProvider("key", "https://oneinch.test", fetchImpl)], thorchain: new ThorchainProvider("https://thor.test", fetchImpl), thorPins: new ThorPins(["https://thor.test", "https://thor2.test"], fetchImpl, Date.now, (r) => h.evm.routers.add(r.toLowerCase())) });
   return { ...h, btc, swap, settings, calls, sentSol, esp };
 }
 
@@ -156,6 +160,17 @@ describe("swap: THORChain (cross-chain)", () => {
     const tx = parseTransaction(h.rpc1.st.sent[0]);
     expect(tx.to!.toLowerCase()).toBe(THOR_ROUTER.toLowerCase()); expect(tx.value).toBe(5n * 10n ** 17n);
     expect(tx.data!.startsWith("0x44bc937b") || tx.data!.length > 10).toBe(true);
+  });
+  it("pins nothing when the two thornodes disagree, and needs two sources at all", async () => {
+    const h = harness({ thor2VaultBtc: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq" });
+    const q = await h.swap.quote({ from: { chain: "bitcoin", asset: "BTC" }, to: { chain: "evm", chainId: 1, asset: "ETH" }, amount: "0.01" });
+    await expect(h.swap.execute(q.id)).rejects.toThrow(/disagree/);
+    expect(h.swap.thorPins.isPinned(VAULT_BTC, "BTC")).toBe(false);
+    expect(h.esp.sent).toHaveLength(0);
+    const one = new ThorPins("https://thor.test", (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch);
+    await expect(one.refresh()).rejects.toThrow(/two independent/);
+    const twin = new ThorPins(["https://thor.test", "https://thor.test/"], (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch);
+    await expect(twin.refresh()).rejects.toThrow(/two independent/);
   });
   it("refuses when the quote's inbound address is not the pinned one", async () => {
     const h = harness();

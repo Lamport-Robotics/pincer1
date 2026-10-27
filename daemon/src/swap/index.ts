@@ -25,7 +25,7 @@ import { fmtSol, fmtToken } from "../tx/explain.js";
 import { KNOWN_MINTS } from "../tx/known.js";
 import { CHAIN_NAMES, NATIVE_SYMBOL } from "../chains/evm/rpc.js";
 import { JupiterProvider, OneInchProvider, ThorchainProvider, ZeroXProvider, approveCalldata, buildEvmTx, type EvmAggregator } from "./providers.js";
-import { ROUTER_NAMES, ThorPins } from "./routers.js";
+import { DEFAULT_THORNODES, ROUTER_NAMES, ThorPins } from "./routers.js";
 import { NATIVE_SENTINEL, SwapVerifyError, decodeOneInch, decodeThorDeposit, decodeZeroX, fromThorUnits, parseThorMemo, toThorUnits, verifyJupiterTx } from "./verify.js";
 
 export class SwapError extends Error { constructor(readonly code: string, message: string) { super(message); } }
@@ -91,7 +91,7 @@ export class SwapService {
     this.jupiter = d.jupiter ?? new JupiterProvider(undefined, d.fetchImpl);
     this.aggregators = d.aggregators ?? [new OneInchProvider(process.env.ONEINCH_API_KEY ?? "", undefined, d.fetchImpl), new ZeroXProvider(process.env.ZEROX_API_KEY ?? "", undefined, d.fetchImpl)];
     this.thorchain = d.thorchain ?? new ThorchainProvider(undefined, d.fetchImpl);
-    this.thorPins = d.thorPins ?? new ThorPins(process.env.THORNODE_URL ?? "https://thornode.ninerealms.com", d.fetchImpl, this.now, (router) => d.evm?.routers.add(router.toLowerCase()));
+    this.thorPins = d.thorPins ?? new ThorPins([process.env.THORNODE_URL ?? DEFAULT_THORNODES[0], process.env.THORNODE_URL_2 ?? DEFAULT_THORNODES[1]], d.fetchImpl, this.now, (router) => d.evm?.routers.add(router.toLowerCase()));
   }
 
   private requireOnline() {
