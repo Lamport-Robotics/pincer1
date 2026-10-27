@@ -252,8 +252,8 @@ into `chainId·2+35+recid`) and 0/1 for typed transactions; the daemon assembles
 **Bitcoin** — `kind:"btc_psbt"`, `bytes` = a BIP-174 PSBT (v0; PSBTv2 refused; ≤ 8 inputs, ≤ 8 outputs,
 ≤ 4096 bytes). Parsed on-device: every input the owner's key spends (`bip32_derivation` naming the
 controller's key at `84'/0'/0'/0/0` **and** a `witness_utxo` paying `0014‖hash160(key)`), every output,
-change outputs recognised by key path (`84'/0'/0'/1/i`, re-derived from the account xpub the controller keeps,
-or an output to the controller's own address), fee = inputs − outputs. A PSBT with an input the owner's key
+change = an output back to the controller's own address (the only key the chip holds; an output on a
+`1/i` path would be unspendable there, so it counts as leaving and is shown), fee = inputs − outputs. A PSBT with an input the owner's key
 does not control is refused (`denied:policy`): the controller does not co-sign into transactions it cannot
 account for.
 

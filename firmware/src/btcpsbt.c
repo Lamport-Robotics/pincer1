@@ -217,12 +217,10 @@ static bool path_is(const uint32_t *path, uint8_t len, uint32_t a, uint32_t b, u
     return len == 5 && path[0] == a && path[1] == b && path[2] == c && path[3] == d;
 }
 
-int btcpsbt_analyze(btcpsbt_t *p, const uint8_t owner_pub33[33], const bip32_xpub_t *account)
+int btcpsbt_analyze(btcpsbt_t *p, const uint8_t owner_pub33[33])
 {
     uint8_t owner_spk[22], pkh[20];
     uint8_t i;
-    bool have_change_branch = false;
-    bip32_xpub_t change_branch;
     hash160(owner_pub33, 33, pkh);
     btc_p2wpkh_script(pkh, owner_spk);
     p->n_owner_inputs = 0;
@@ -252,23 +250,11 @@ int btcpsbt_analyze(btcpsbt_t *p, const uint8_t owner_pub33[33], const bip32_xpu
         if (p->sats_in > 2100000000000000ull - in->amount) return BTCPSBT_E_AMOUNTS;
         p->sats_in += in->amount;
     }
-    if (account && bip32_ckd_pub(account, 1, &change_branch)) have_change_branch = true;
+    /* Change is only ever our own receive script (0/0): the chip holds that one key and nothing on a 1/i
+     * path, so coins sent there would be unspendable. Such outputs count as leaving and are shown. */
     for (i = 0; i < p->n_out; i++) {
         btcpsbt_output_t *o = &p->out[i];
-        o->is_change = false;
-        if (o->spk_len == 22 && memcmp(o->spk, owner_spk, 22) == 0) {
-            o->is_change = true; /* paying ourselves */
-        } else if (have_change_branch && o->has_derivation &&
-                   path_is(o->path, o->path_len, BIP32_PATH_BTC[0], BIP32_PATH_BTC[1], BIP32_PATH_BTC[2], 1) &&
-                   o->path[4] < BTCPSBT_MAX_CHANGE_INDEX) {
-            bip32_xpub_t leaf;
-            if (bip32_ckd_pub(&change_branch, o->path[4], &leaf) && memcmp(leaf.pub, o->pubkey, 33) == 0) {
-                uint8_t h[20], spk[22];
-                hash160(leaf.pub, 33, h);
-                btc_p2wpkh_script(h, spk);
-                if (o->spk_len == 22 && memcmp(o->spk, spk, 22) == 0) o->is_change = true;
-            }
-        }
+        o->is_change = o->spk_len == 22 && memcmp(o->spk, owner_spk, 22) == 0;
         if (o->is_change) {
             p->sats_change += o->amount;
         } else {
@@ -284,7 +270,6 @@ int btcpsbt_analyze(btcpsbt_t *p, const uint8_t owner_pub33[33], const bip32_xpu
     if (p->sats_out + p->sats_change > p->sats_in) return BTCPSBT_E_AMOUNTS;
     p->fee = p->sats_in - p->sats_out - p->sats_change;
     if (p->fee > 0 && (p->sats_out == 0 || p->fee >= p->sats_out / 10)) p->dangerous |= BTCPSBT_DANGER_HIGH_FEE;
-    secure_zero(&change_branch, sizeof change_branch);
     return BTCPSBT_OK;
 }
 

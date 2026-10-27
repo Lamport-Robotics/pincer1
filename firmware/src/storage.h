@@ -44,7 +44,6 @@ typedef struct {
     uint8_t pin_hash[32];       /* software signer PIN hash (dev boards only); zero with the SE050 */
     uint8_t evm_addr[2][20];    /* keccak address of m/44'/60'/0'/0/0 per slot; zero until init */
     uint8_t btc_pkh[2][20];     /* hash160 of m/84'/0'/0'/0/0 per slot (bc1q address) */
-    bip32_xpub_t btc_xpub[2];   /* account node m/84'/0'/0' per slot: recognises change outputs by path */
     uint8_t secp_blob[2][2][32]; /* software signer secp256k1 keys [slot][evm,btc] (dev boards only) */
     uint8_t duress_hash[32];     /* software signer: salted hash of the duress rhythm (dev boards only); zero with the SE050 */
     uint8_t duress_salt[16];

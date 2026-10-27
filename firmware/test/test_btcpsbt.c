@@ -122,7 +122,7 @@ static void build_psbt(pb_t *p, int32_t version, uint32_t locktime, const fin_t 
 static const uint32_t PATH_RECV0[5] = {84u | BIP32_HARDENED, 0u | BIP32_HARDENED, 0u | BIP32_HARDENED, 0, 0};
 static const uint32_t PATH_CHANGE0[5] = {84u | BIP32_HARDENED, 0u | BIP32_HARDENED, 0u | BIP32_HARDENED, 1, 0};
 
-/* the standard fixture: two owner inputs (60000 + 40000), dest 50000, change 48000, fee 2000 */
+/* the standard fixture: two owner inputs (60000 + 40000), dest 50000, change 48000 back to the receive address, fee 2000 */
 static void std_fixture(fin_t in[2], fout_t out[2])
 {
     memset(in, 0, 2 * sizeof *in);
@@ -132,7 +132,7 @@ static void std_fixture(fin_t in[2], fout_t out[2])
     memset(in[1].txid, 0xb2, 32); in[1].vout = 0; in[1].seq = 0xfffffffd; in[1].amount = 40000; in[1].spk = OWNER_SPK; in[1].spk_len = 22;
     in[1].pub = OWNER_PUB33; in[1].path = PATH_RECV0; in[1].path_len = 5;
     out[0].amount = 50000; out[0].spk = DEST_SPK; out[0].spk_len = 22;
-    out[1].amount = 48000; out[1].spk = CHANGE0_SPK; out[1].spk_len = 22; out[1].pub = CHANGE0_PUB33; out[1].path = PATH_CHANGE0; out[1].path_len = 5;
+    out[1].amount = 48000; out[1].spk = OWNER_SPK; out[1].spk_len = 22; out[1].pub = OWNER_PUB33; out[1].path = PATH_RECV0; out[1].path_len = 5;
 }
 
 static void test_parse_and_analyze(void)
@@ -154,11 +154,11 @@ static void test_parse_and_analyze(void)
     CHECK_MEM(t.in[0].pubkey, OWNER_PUB33, 33);
     CHECK_U64(t.out[0].amount, 50000);
     CHECK_MEM(t.out[0].spk, DEST_SPK, 22);
-    CHECK(t.out[1].has_derivation && t.out[1].path[3] == 1);
+    CHECK(t.out[1].has_derivation && t.out[1].path[3] == 0);
     CHECK(t.in[0].map_sep > t.in[0].map_off && t.in[1].map_off > t.in[0].map_sep);
     CHECK(btcpsbt_looks_like_psbt(p.b, p.n));
     CHECK(!btcpsbt_looks_like_psbt((const uint8_t *)"psbt", 4));
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_EQ(t.n_owner_inputs, 2);
     CHECK_U64(t.sats_in, 100000);
     CHECK_U64(t.sats_out, 50000);
@@ -172,39 +172,29 @@ static void test_parse_and_analyze(void)
     CHECK_STR(addr, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");
     CHECK_EQ(t.dangerous, 0);
     CHECK_EQ(t.in[0].sighash, BTCPSBT_SIGHASH_ALL);
-    /* without the account xpub, change at 1/0 is not recognised -> it counts as leaving */
+    /* a correctly derived 1/0 output is NOT change: the chip holds only 0/0, coins there would be lost.
+     * It counts as leaving and is shown like any other destination. */
+    out[1].spk = CHANGE0_SPK; out[1].pub = CHANGE0_PUB33; out[1].path = PATH_CHANGE0;
+    build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, NULL), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK(!t.out[1].is_change);
     CHECK_U64(t.sats_out, 98000);
+    CHECK_U64(t.sats_change, 0);
     CHECK_EQ(t.n_non_change, 2);
-    /* change claimed at 1/0 but with a pubkey that is not the derived one -> not change */
-    out[1].pub = OWNER_PUB33;
+    /* our own receive script is change even without any derivation info */
+    out[1].spk = OWNER_SPK; out[1].pub = NULL; out[1].path = NULL; out[1].path_len = 0;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
-    CHECK(!t.out[1].is_change);
-    /* right pubkey, wrong script -> not change */
-    out[1].pub = CHANGE0_PUB33; out[1].spk = DEST_SPK;
-    build_psbt(&p, 2, 0, in, 2, out, 2);
-    CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
-    CHECK(!t.out[1].is_change);
-    /* paying our own receive address is change too, even without derivation */
-    out[1].spk = OWNER_SPK; out[1].pub = NULL;
-    build_psbt(&p, 2, 0, in, 2, out, 2);
-    CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK(t.out[1].is_change);
-    /* change index beyond the bound is not derived */
-    {
-        static const uint32_t far[5] = {84u | BIP32_HARDENED, 0u | BIP32_HARDENED, 0u | BIP32_HARDENED, 1, BTCPSBT_MAX_CHANGE_INDEX};
-        out[1].spk = CHANGE0_SPK; out[1].pub = CHANGE0_PUB33; out[1].path = far;
-        build_psbt(&p, 2, 0, in, 2, out, 2);
-        CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-        CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
-        CHECK(!t.out[1].is_change);
-    }
+    CHECK_U64(t.sats_change, 48000);
+    /* a derivation claiming 0/0 with a foreign script is not change either */
+    out[1].spk = DEST_SPK; out[1].pub = OWNER_PUB33; out[1].path = PATH_RECV0; out[1].path_len = 5;
+    build_psbt(&p, 2, 0, in, 2, out, 2);
+    CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
+    CHECK(!t.out[1].is_change);
 }
 
 static void test_analysis_refusals_and_flags(void)
@@ -220,13 +210,13 @@ static void test_analysis_refusals_and_flags(void)
     in[1].pub = other_pub;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_FOREIGN_INPUT);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_FOREIGN_INPUT);
     /* owner key but the utxo pays someone else */
     std_fixture(in, out);
     in[0].spk = DEST_SPK;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_FOREIGN_INPUT);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_FOREIGN_INPUT);
     /* owner key at a path we do not hold (0/1) */
     {
         static const uint32_t recv1[5] = {84u | BIP32_HARDENED, 0u | BIP32_HARDENED, 0u | BIP32_HARDENED, 0, 1};
@@ -234,56 +224,56 @@ static void test_analysis_refusals_and_flags(void)
         in[0].path = recv1;
         build_psbt(&p, 2, 0, in, 2, out, 2);
         CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-        CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_FOREIGN_INPUT);
+        CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_FOREIGN_INPUT);
     }
     /* no derivation at all */
     std_fixture(in, out);
     in[0].pub = NULL;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_FOREIGN_INPUT);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_FOREIGN_INPUT);
     /* missing witness_utxo */
     std_fixture(in, out);
     in[1].no_utxo = true;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_NO_UTXO);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_NO_UTXO);
     /* outputs exceed inputs */
     std_fixture(in, out);
     out[0].amount = 60001;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_AMOUNTS);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_AMOUNTS);
     /* SIGHASH_NONE is never signed; SINGLE beyond the outputs neither */
     std_fixture(in, out);
     in[0].sighash = BTCPSBT_SIGHASH_NONE;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_SIGHASH);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_SIGHASH);
     std_fixture(in, out);
     in[1].sighash = BTCPSBT_SIGHASH_SINGLE;
     build_psbt(&p, 2, 0, in, 2, out, 1); /* input 1, only 1 output */
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_E_SIGHASH);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_E_SIGHASH);
     /* SINGLE / ANYONECANPAY are flagged */
     std_fixture(in, out);
     in[1].sighash = BTCPSBT_SIGHASH_SINGLE;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_EQ(t.dangerous, BTCPSBT_DANGER_SIGHASH_NOT_ALL);
     std_fixture(in, out);
     in[0].sighash = BTCPSBT_SIGHASH_ALL | BTCPSBT_SIGHASH_ANYONECANPAY;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_EQ(t.dangerous, BTCPSBT_DANGER_SIGHASH_NOT_ALL);
     /* high fee: 90000 of 100000 leaves as fee */
     std_fixture(in, out);
     out[0].amount = 10000;
     build_psbt(&p, 2, 0, in, 2, out, 1);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_U64(t.fee, 90000);
     CHECK_EQ(t.dangerous, BTCPSBT_DANGER_HIGH_FEE);
     /* exactly under 10 %: 50000 out, fee 4999 -> fine; 5000 -> high */
@@ -291,20 +281,20 @@ static void test_analysis_refusals_and_flags(void)
     out[1].amount = 45001;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_U64(t.fee, 4999);
     CHECK_EQ(t.dangerous, 0);
     out[1].amount = 45000;
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_EQ(t.dangerous, BTCPSBT_DANGER_HIGH_FEE);
     /* consolidation: everything is change, any fee is "high" (nothing leaves) */
     std_fixture(in, out);
     out[0] = out[1]; out[0].amount = 99000;
     build_psbt(&p, 2, 0, in, 2, out, 1);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_U64(t.sats_out, 0);
     CHECK(!t.has_dest);
     CHECK_EQ(t.dangerous, BTCPSBT_DANGER_HIGH_FEE);
@@ -312,7 +302,7 @@ static void test_analysis_refusals_and_flags(void)
     out[0].amount = 100000;
     build_psbt(&p, 2, 0, in, 2, out, 1);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK_EQ(t.dangerous, 0);
 }
 
@@ -460,7 +450,7 @@ static void test_sign_and_insert(void)
     std_fixture(in, out);
     build_psbt(&p, 2, 0, in, 2, out, 2);
     CHECK_EQ(btcpsbt_parse(p.b, p.n, &t), BTCPSBT_OK);
-    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33, &ACCT), BTCPSBT_OK);
+    CHECK_EQ(btcpsbt_analyze(&t, OWNER_PUB33), BTCPSBT_OK);
     CHECK(secp256k1_pubkey(LEAF.key, pub));
     for (i = 0; i < 2; i++) {
         CHECK(btcpsbt_sighash(&t, p.b, (uint8_t)i, digest));

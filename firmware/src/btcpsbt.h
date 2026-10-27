@@ -1,10 +1,10 @@
 /* Pincer1 - Bitcoin PSBT (BIP-174, v0) parser, analysis against the owner's P2WPKH key, BIP-143 sighash,
  * partial-signature insertion and BIP-322 "simple" message signing. PURE LOGIC, no hardware.
  *
- * What the controller holds: ONE native-segwit key, m/84'/0'/0'/0/0 (inside the SE050), and the public
- * account node m/84'/0'/0' (xpub, in flash) so that change outputs can be recognised by their key path
- * (m/84'/0'/0'/1/i) and verified by re-deriving the child public key. Bounds: <= 8 inputs, <= 8 outputs,
- * <= BTCPSBT_MAX_BYTES on the wire; every signing digest is 32 bytes.
+ * What the controller holds: ONE native-segwit key, m/84'/0'/0'/0/0 (inside the SE050). Change is therefore
+ * recognised as that one receive script and nothing else: an output on a 1/i path would be unspendable here,
+ * so it counts as leaving and is shown. Bounds: <= 8 inputs, <= 8 outputs, <= BTCPSBT_MAX_BYTES on the
+ * wire; every signing digest is 32 bytes.
  *
  * Owner input = has a bip32_derivation entry whose pubkey is the controller's key AND whose path is
  * 84'/0'/0'/0/0 AND whose witness_utxo pays to 0014<hash160(pubkey)>. Any input that is not an owner
@@ -22,7 +22,6 @@
 #define BTCPSBT_MAX_INPUTS 8
 #define BTCPSBT_MAX_OUTPUTS 8
 #define BTCPSBT_MAX_SCRIPT 42        /* longest standard scriptPubKey: witness v0..16 with 40-byte program */
-#define BTCPSBT_MAX_CHANGE_INDEX 100000u
 #define BTCPSBT_PARTIAL_SIG_MAX (1 + 1 + 1 + 33 + 1 + 73) /* keylen key(type+pubkey) vallen DER+sighash */
 #define BTCPSBT_MAX_OUT_BYTES (BTCPSBT_MAX_BYTES + BTCPSBT_MAX_INPUTS * BTCPSBT_PARTIAL_SIG_MAX)
 
@@ -63,7 +62,7 @@ typedef struct {
     uint8_t pubkey[33];
     uint32_t path[5];
     uint8_t path_len;
-    bool is_change;        /* recognised via the account xpub */
+    bool is_change;        /* pays our own receive script */
 } btcpsbt_output_t;
 
 typedef struct {
@@ -103,7 +102,7 @@ enum {
 
 int btcpsbt_parse(const uint8_t *bytes, size_t len, btcpsbt_t *p);
 /* Classifies inputs and outputs against the owner's leaf pubkey (compressed) and account xpub. */
-int btcpsbt_analyze(btcpsbt_t *p, const uint8_t owner_pub33[33], const bip32_xpub_t *account);
+int btcpsbt_analyze(btcpsbt_t *p, const uint8_t owner_pub33[33]);
 /* BIP-143 digest for owner input `idx` with its sighash type. */
 bool btcpsbt_sighash(const btcpsbt_t *p, const uint8_t *bytes, uint8_t idx, uint8_t digest[32]);
 /* Copies the PSBT to `out`, inserting PSBT_IN_PARTIAL_SIG (pubkey -> DER || sighash byte) for every owner

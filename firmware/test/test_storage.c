@@ -71,8 +71,6 @@ static void fill(storage_data_t *d, int v)
         d->btc_pkh[0][i] = (uint8_t)(0xc0 + i + v);
         d->btc_pkh[1][i] = (uint8_t)(0x10 + i + v);
     }
-    for (i = 0; i < 33; i++) { d->btc_xpub[0].pub[i] = (uint8_t)(2 + i * v); d->btc_xpub[1].pub[i] = (uint8_t)(3 + i + v); }
-    for (i = 0; i < 32; i++) { d->btc_xpub[0].chain[i] = (uint8_t)(i ^ v); d->btc_xpub[1].chain[i] = (uint8_t)(~i + v); }
     for (i = 0; i < 32; i++) {
         d->secp_blob[0][0][i] = (uint8_t)(i * 5 + v); d->secp_blob[0][1][i] = (uint8_t)(i * 7 + v);
         d->secp_blob[1][0][i] = (uint8_t)(i * 11 + v); d->secp_blob[1][1][i] = (uint8_t)(i * 13 + v);
@@ -120,7 +118,6 @@ static void test_encode_decode(void)
     CHECK_U64(back.consent.spent_today_sats, 51);
     CHECK_MEM(back.evm_addr, d.evm_addr, 40);
     CHECK_MEM(back.btc_pkh, d.btc_pkh, 40);
-    CHECK_MEM(&back.btc_xpub, &d.btc_xpub, sizeof d.btc_xpub);
     CHECK_MEM(back.secp_blob, d.secp_blob, 128);
     CHECK_U64(back.consent.rollover_powered_seconds, 72000ull * 3 + 5);
     CHECK_EQ(back.consent.routers.n, 3);

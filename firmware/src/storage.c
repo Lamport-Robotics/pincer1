@@ -36,18 +36,17 @@ static size_t get_allowance(const uint8_t *p, consent_allowance_t *a)
 
 #define PAYLOAD_V3_LEN (1u + 1u + 8u + 8u + 4u + 64u + 64u + (1u + 32u + 1u + 8u * 32u) + 1u + 1u + 32u)
 /* v4 appends: daily_limit_wei(32) spent_today_wei(32) daily_limit_sats(8) spent_today_sats(8) evm_addr(40)
- * btc_pkh(40) btc_xpub(2 x 65) secp_blob(128) */
-#define PAYLOAD_V4_LEN (PAYLOAD_V3_LEN + 32u + 32u + 8u + 8u + 40u + 40u + 2u * 65u + 128u)
+ * btc_pkh(40) secp_blob(128); v8 dropped the account xpubs (change is the receive script only) */
+#define PAYLOAD_V4_LEN (PAYLOAD_V3_LEN + 32u + 32u + 8u + 8u + 40u + 40u + 128u)
 /* v5 appends: rollover_powered_seconds(8) n_routers(1) routers(8 x (chain 1 + addr 32)) */
 #define PAYLOAD_V5_LEN (PAYLOAD_V4_LEN + 8u + 1u + ROUTERS_MAX_OWNER * 33u)
-/* v6 appends: duress_pin_set(1) duress_hash(32) duress_salt(16) */
-#define PAYLOAD_LEN (PAYLOAD_V5_LEN + 1u + 32u + 16u + 1u + 96u)
+/* v6 appends: duress_pin_set(1) duress_hash(32) duress_salt(16); v7: shadow_valid(1) + shadow(96); v8: last_unix(8) */
+#define PAYLOAD_LEN (PAYLOAD_V5_LEN + 1u + 32u + 16u + 1u + 96u + 8u)
 
-size_t storage_encode(const storage_data_t *d, uint32_t seq, uint8_t *out, size_t cap)
+size_t storage_encode(const storage_data_t *d, uint32_t seq, const uint8_t key[32], uint8_t *out, size_t cap)
 {
     size_t o = 0, i;
-    uint32_t crc;
-    if (cap < HDR + PAYLOAD_LEN + 4) return 0;
+    if (cap < HDR + PAYLOAD_LEN + TAIL) return 0;
     memset(out, 0xff, cap);
     wr_le32(out + o, STORAGE_MAGIC); o += 4;
     wr_le16(out + o, STORAGE_VERSION); o += 2;
@@ -70,10 +69,6 @@ size_t storage_encode(const storage_data_t *d, uint32_t seq, uint8_t *out, size_
     wr_le64(out + o, d->consent.spent_today_sats); o += 8;
     memcpy(out + o, d->evm_addr, 40); o += 40;
     memcpy(out + o, d->btc_pkh, 40); o += 40;
-    memcpy(out + o, d->btc_xpub[0].pub, 33); o += 33;
-    memcpy(out + o, d->btc_xpub[0].chain, 32); o += 32;
-    memcpy(out + o, d->btc_xpub[1].pub, 33); o += 33;
-    memcpy(out + o, d->btc_xpub[1].chain, 32); o += 32;
     memcpy(out + o, d->secp_blob, 128); o += 128;
     wr_le64(out + o, d->consent.rollover_powered_seconds); o += 8;
     out[o++] = d->consent.routers.n;
@@ -127,10 +122,6 @@ bool storage_decode(const uint8_t *in, size_t len, storage_data_t *d, uint32_t *
     d->consent.spent_today_sats = rd_le64(in + o); o += 8;
     memcpy(d->evm_addr, in + o, 40); o += 40;
     memcpy(d->btc_pkh, in + o, 40); o += 40;
-    memcpy(d->btc_xpub[0].pub, in + o, 33); o += 33;
-    memcpy(d->btc_xpub[0].chain, in + o, 32); o += 32;
-    memcpy(d->btc_xpub[1].pub, in + o, 33); o += 33;
-    memcpy(d->btc_xpub[1].chain, in + o, 32); o += 32;
     memcpy(d->secp_blob, in + o, 128); o += 128;
     d->consent.rollover_powered_seconds = rd_le64(in + o); o += 8;
     d->consent.routers.n = in[o++];

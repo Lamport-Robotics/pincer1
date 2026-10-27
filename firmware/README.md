@@ -291,8 +291,8 @@ into the SE050 as non-exportable key pairs with the same PIN-gated policy as the
 Any standard wallet restores all three from the words ("abandon ×11 about" gives
 `0x9858EfFD232B4033E47d90003D41EC34EcaEda94` and `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`, the published
 test values; `test_keygen` checks exactly that). `hello` carries `addresses:{solana,evm,bitcoin}` for the
-active slot, so the decoy has its own three. The public account node `m/84'/0'/0'` (xpub, not secret) is
-kept in flash so that change outputs at `m/84'/0'/0'/1/i` can be recognised by re-deriving the child key.
+active slot, so the decoy has its own three. Change in a PSBT is only ever the controller's own receive
+script: the chip holds no `1/i` key, so an output there would be lost and is shown as leaving.
 
 **What the SE050 does for secp256k1.** The Plug & Trust middleware ships curve id `kSE05x_ECCurve_Secp256k1`
 (0x10) and the parameter table for the SE050_E applet; `signer_se050.c` creates the curve on the applet

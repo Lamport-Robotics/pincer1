@@ -740,7 +740,6 @@ static void abort_init(const char *reason)
     memset(g_data.pubkey, 0, sizeof g_data.pubkey);
     memset(g_data.evm_addr, 0, sizeof g_data.evm_addr);
     memset(g_data.btc_pkh, 0, sizeof g_data.btc_pkh);
-    memset(g_data.btc_xpub, 0, sizeof g_data.btc_xpub);
     secure_zero(g_words_real, sizeof g_words_real);
     secure_zero(g_words_decoy, sizeof g_words_decoy);
     g_consent.dirty = true;
@@ -769,7 +768,6 @@ static void do_init(const consent_action_t *a)
         else ok = false;
         if (ok && signer_import_secp256k1(slot, SIGNER_CHAIN_BTC, keys.btc_priv, pub) == 0) btc_pkh_from_pubkey(pub, g_data.btc_pkh[slot]);
         else ok = false;
-        g_data.btc_xpub[slot] = keys.btc_account; /* public: lets the controller recognise change outputs */
         secure_zero(entropy, sizeof entropy);
         secure_zero(&keys, sizeof keys);
         secure_zero(pub, sizeof pub);
@@ -1119,7 +1117,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         btcpsbt_t *p = &g_pending_sign.btc; /* large: parse straight into the static slot */
         if (!owner_btc_pkh() || !owner_btc_pub33(pub33)) { send_denied(r->id, "not_initialized"); return; }
         if (btcpsbt_parse(r->sign.bytes, r->sign.len, p) != BTCPSBT_OK ||
-            btcpsbt_analyze(p, pub33, &g_data.btc_xpub[consent_active_slot(&g_consent)]) != BTCPSBT_OK) {
+            btcpsbt_analyze(p, pub33) != BTCPSBT_OK) {
             clear_pending_sign();
             send_denied(r->id, "policy");
             return;
