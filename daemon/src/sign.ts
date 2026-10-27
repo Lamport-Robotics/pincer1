@@ -191,7 +191,7 @@ export class Signer {
     if (req.source !== "agent") {
       await this.robot.attention();
       const lead = risk.level === "high" ? `Careful. ${risk.reasons[0]} ` : risk.level === "medium" ? `${risk.reasons[0]} ` : "";
-      if (st.speakBeforeSign) await this.robot.say(`${req.preface ? req.preface + " " : ""}${lead}${explanation.spoken} Touch me to sign.`);
+      if (st.speakBeforeSign) await this.robot.say(`${req.preface ? req.preface + " " : ""}${lead}${quoteUntrusted(explanation.spoken, 400)} Touch me to sign.`);
     }
 
     const claims = adapter.claims(parsed);
@@ -246,8 +246,8 @@ export class Signer {
 
   async signMessage(message: Uint8Array, origin?: string): Promise<{ ok: true; signature: Uint8Array } | { ok: false; reason: string }> {
     if (!this.robot.ownerPresent()) { await this.robot.say("Someone wants me to sign a message, but I can't see you."); return { ok: false, reason: "owner_not_present" }; }
-    const text = new TextDecoder().decode(message).replace(/\s+/g, " ").slice(0, 160);
-    await this.robot.say(`${origin ? origin.replace(/^https?:\/\//, "") + " asks me to sign a message: " : "Sign this message: "}${text}. Touch me to sign.`);
+    const text = quoteUntrusted(new TextDecoder().decode(message));
+    await this.robot.say(`${origin ? siteHost(origin) + " asks me to sign a message." : "Someone asks me to sign a message."} The site says: "${text}". Touch me to sign.`);
     const res = await this.controller.sign("msg", message, { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] }, this.touchTtlMs);
     if (!res.ok) { await this.robot.say(res.reason === "timeout" ? "No touch. Not signed." : "Not signing that."); return { ok: false, reason: res.reason }; }
     await this.robot.say("Signed.");
@@ -287,8 +287,8 @@ export class Signer {
       } else if (req.message) {
         bytes = req.message;
         claims = { kind: "eip191" };
-        const text = new TextDecoder().decode(bytes).replace(/\s+/g, " ").slice(0, 160);
-        explanation = { spoken: `${req.origin ? req.origin.replace(/^https?:\/\//, "") + " asks me to sign a message: " : "Sign this message: "}${text}`, lines: [`message: ${text}`] };
+        const text = quoteUntrusted(new TextDecoder().decode(bytes));
+        explanation = { spoken: `${req.origin ? siteHost(req.origin) + " asks me to sign a message." : "Someone asks me to sign a message."} The site says: "${text}"`, lines: [`message: ${text}`] };
         risk = assessPersonalMessage(bytes, looksLikeEvmTx(bytes));
       } else return { ok: false, reason: "parse_error", detail: "message or typedData required" };
     } catch (e) { return { ok: false, reason: "parse_error", detail: String((e as Error).message ?? e) }; }

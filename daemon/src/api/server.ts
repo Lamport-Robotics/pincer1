@@ -178,7 +178,7 @@ export class ApiServer {
           const payload = chain === "bitcoin" ? m.psbt : m.tx;
           if (typeof payload !== "string") return send({ t: "denied", id: m.id, reason: "parse_error", detail: chain === "bitcoin" ? "psbt (base64) required" : "tx (base64) required" });
           const bytes = new Uint8Array(Buffer.from(payload, "base64"));
-          const o = typeof m.origin === "string" ? m.origin : origin;
+          const o = cleanOrigin(m.origin) ?? origin;
           const requestedChainId = chain === "evm" && m.chainId != null ? Number(m.chainId) : undefined;
           // explain first so the popup shows what the robot is reading out
           try {
@@ -198,13 +198,13 @@ export class ApiServer {
         if (m.t === "signMessage") {
           const chain = chainOf(m.chain);
           if (chain === "evm") {
-            const r = await this.d.signer.signEvmMessage({ message: typeof m.message === "string" ? new Uint8Array(Buffer.from(m.message, "base64")) : undefined, typedData: m.typedData, origin: typeof m.origin === "string" ? m.origin : origin, requestedChainId: m.chainId != null ? Number(m.chainId) : undefined });
+            const r = await this.d.signer.signEvmMessage({ message: typeof m.message === "string" ? new Uint8Array(Buffer.from(m.message, "base64")) : undefined, typedData: m.typedData, origin: cleanOrigin(m.origin) ?? origin, requestedChainId: m.chainId != null ? Number(m.chainId) : undefined });
             if (r.ok) return send({ t: "signed", id: m.id, chain, signature: "0x" + Buffer.from(r.signature).toString("hex") });
             return send({ t: "denied", id: m.id, reason: r.reason, detail: r.detail });
           }
           if (chain === "bitcoin") return send({ t: "denied", id: m.id, reason: "unsupported", detail: "Bitcoin message signing (BIP-322) is not available yet" });
           const bytes = new Uint8Array(Buffer.from(String(m.message), "base64"));
-          const r = await this.d.signer.signMessage(bytes, typeof m.origin === "string" ? m.origin : origin);
+          const r = await this.d.signer.signMessage(bytes, cleanOrigin(m.origin) ?? origin);
           if (r.ok) return send({ t: "signed", id: m.id, signature: Buffer.from(r.signature).toString("base64") });
           return send({ t: "denied", id: m.id, reason: r.reason });
         }
