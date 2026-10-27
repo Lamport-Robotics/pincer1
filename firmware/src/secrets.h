@@ -26,4 +26,8 @@ typedef enum { SECRETS_NONE = 0, SECRETS_OTP, SECRETS_DEV } secrets_source_t;
 secrets_source_t secrets_get_scp03_keys(scp03_keys_t *out);
 /* Exposed for tests: 96 hex chars -> keys; false on any other input. */
 bool secrets_parse_hex_keys(const char *hex, scp03_keys_t *out);
+/* Key for the flash record MAC: HMAC-SHA256 over a fixed label under the three SCP03 keys, so a record is
+ * bound to this controller's secrets (OTP in production). Without any keys `out` is all zero and the
+ * return is SECRETS_NONE; the records are then only corruption-checked, like the chip they would unlock. */
+secrets_source_t secrets_storage_key(uint8_t out[32]);
 #endif

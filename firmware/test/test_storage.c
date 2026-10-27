@@ -33,6 +33,15 @@ static int mock_program(uint32_t off, const void *buf, size_t len)
     return 0;
 }
 static const storage_flash_t FL = {mock_read, mock_erase, mock_program};
+static const uint8_t KEY[32] = {0x5a, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+                                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+static const uint8_t OTHER_KEY[32] = {0x5b};
+
+static void init_keyed(storage_t *s)
+{
+    storage_init(s, &FL);
+    storage_set_key(s, KEY);
+}
 
 static void fill(storage_data_t *d, int v)
 {
@@ -89,6 +98,7 @@ static void fill(storage_data_t *d, int v)
     d->consent.shadow.daily_limit = 777; d->consent.shadow.spent_today = 5;
     u256_from_u64(&d->consent.shadow.daily_limit_wei, 123456789ull);
     d->consent.shadow.daily_limit_sats = 4242; d->consent.shadow.spent_today_sats = 1;
+    d->consent.last_unix = 1791650000ull + (uint64_t)v;
 }
 
 static void test_encode_decode(void)
@@ -98,9 +108,9 @@ static void test_encode_decode(void)
     uint32_t seq = 0;
     size_t n;
     fill(&d, 3);
-    n = storage_encode(&d, 42, buf, sizeof buf);
+    n = storage_encode(&d, 42, KEY, buf, sizeof buf);
     CHECK(n > 0 && n <= STORAGE_RECORD_SIZE);
-    CHECK(storage_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_decode(buf, sizeof buf, KEY, &back, &seq));
     CHECK_EQ(seq, 42);
     CHECK_MEM(&back.consent.allowance, &d.consent.allowance, sizeof d.consent.allowance);
     CHECK_U64(back.consent.daily_limit, d.consent.daily_limit);
@@ -127,34 +137,50 @@ static void test_encode_decode(void)
     CHECK_EQ(back.consent.duress_pin_set, 0);
     CHECK_MEM(&back.consent.shadow, &d.consent.shadow, sizeof d.consent.shadow);
     fill(&d, 4);
-    n = storage_encode(&d, 43, buf, sizeof buf);
-    CHECK(storage_decode(buf, sizeof buf, &back, &seq));
+    n = storage_encode(&d, 43, KEY, buf, sizeof buf);
+    CHECK(storage_decode(buf, sizeof buf, KEY, &back, &seq));
     CHECK_EQ(back.consent.duress_pin_set, 1);
     fill(&d, 3);
-    n = storage_encode(&d, 42, buf, sizeof buf);
+    n = storage_encode(&d, 42, KEY, buf, sizeof buf);
     CHECK(n <= STORAGE_RECORD_SIZE && n >= 1100);
     /* records from firmware versions 2 to 5 (no PIN / chain / router / duress fields) are not accepted as-is */
     {
         uint8_t v2[STORAGE_RECORD_SIZE];
         memcpy(v2, buf, sizeof v2);
         v2[4] = 2; v2[5] = 0;
-        CHECK(!storage_decode(v2, sizeof v2, &back, &seq));
+        CHECK(!storage_decode(v2, sizeof v2, KEY, &back, &seq));
         v2[4] = 3;
-        CHECK(!storage_decode(v2, sizeof v2, &back, &seq));
+        CHECK(!storage_decode(v2, sizeof v2, KEY, &back, &seq));
         v2[4] = 4;
-        CHECK(!storage_decode(v2, sizeof v2, &back, &seq));
+        CHECK(!storage_decode(v2, sizeof v2, KEY, &back, &seq));
         v2[4] = 5;
-        CHECK(!storage_decode(v2, sizeof v2, &back, &seq));
+        CHECK(!storage_decode(v2, sizeof v2, KEY, &back, &seq));
     }
     /* flip one byte -> CRC rejects */
     buf[20] ^= 0x01;
-    CHECK(!storage_decode(buf, sizeof buf, &back, &seq));
+    CHECK(!storage_decode(buf, sizeof buf, KEY, &back, &seq));
     buf[20] ^= 0x01;
-    CHECK(storage_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_decode(buf, sizeof buf, KEY, &back, &seq));
     /* corrupted CRC itself */
-    buf[n - 1] ^= 0x80;
-    CHECK(!storage_decode(buf, sizeof buf, &back, &seq));
-    CHECK(storage_encode(&d, 1, buf, 100) == 0);
+    buf[n - 1 - STORAGE_MAC_LEN] ^= 0x80;
+    CHECK(!storage_decode(buf, sizeof buf, KEY, &back, &seq));
+    buf[n - 1 - STORAGE_MAC_LEN] ^= 0x80;
+    /* a flipped MAC byte, or another controller's key: the record is not ours */
+    buf[n - 1] ^= 0x01;
+    CHECK(!storage_decode(buf, sizeof buf, KEY, &back, &seq));
+    buf[n - 1] ^= 0x01;
+    CHECK(!storage_decode(buf, sizeof buf, OTHER_KEY, &back, &seq));
+    /* a record re-sealed with a recomputed CRC but no key (bootloader edit) still fails on the MAC */
+    {
+        uint8_t forged[STORAGE_RECORD_SIZE];
+        memcpy(forged, buf, sizeof forged);
+        forged[20] ^= 0x01;
+        wr_le32(forged + n - STORAGE_MAC_LEN - 4, crc32_buf(forged, n - STORAGE_MAC_LEN - 4));
+        CHECK(!storage_decode(forged, sizeof forged, KEY, &back, &seq));
+    }
+    CHECK(storage_decode(buf, sizeof buf, KEY, &back, &seq));
+    CHECK_U64(back.consent.last_unix, d.consent.last_unix);
+    CHECK(storage_encode(&d, 1, KEY, buf, 100) == 0);
 }
 
 static void test_load_empty(void)
@@ -162,7 +188,7 @@ static void test_load_empty(void)
     storage_t s;
     storage_data_t d;
     memset(g_flash, 0xff, sizeof g_flash);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(!storage_load(&s, &d));
     CHECK(!d.consent.initialized);
     CHECK_EQ(s.newest_slot, -1);
@@ -175,7 +201,7 @@ static void test_save_load_alternating(void)
     int i;
     memset(g_flash, 0xff, sizeof g_flash);
     g_erases = g_programs = 0;
-    storage_init(&s, &FL);
+    init_keyed(&s);
     for (i = 1; i <= 5; i++) {
         fill(&d, i);
         CHECK_EQ(storage_save(&s, &d), 0);
@@ -184,7 +210,13 @@ static void test_save_load_alternating(void)
     }
     CHECK_EQ(g_erases, 5);
     /* fresh boot: newest (seq 5, slot 0) wins over seq 4 in slot 1 */
+    init_keyed(&s);
+    CHECK(storage_load(&s, &back));
+    /* the same flash under another key loads nothing: records are bound to the controller */
     storage_init(&s, &FL);
+    storage_set_key(&s, OTHER_KEY);
+    CHECK(!storage_load(&s, &back));
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK_EQ(s.seq, 5);
     CHECK_EQ(s.newest_slot, 0);
@@ -197,19 +229,19 @@ static void test_pin_fields_persist(void)
     storage_t s;
     storage_data_t d, back;
     memset(g_flash, 0xff, sizeof g_flash);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     fill(&d, 2); /* pin_set, 2 failures */
     CHECK_EQ(storage_save(&s, &d), 0);
     d.consent.pin_failures = 4;
     CHECK_EQ(storage_save(&s, &d), 0);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK(back.consent.pin_set);
     CHECK_EQ(back.consent.pin_failures, 4);
     /* a wipe writes an all-zero record that loads as "fresh device" */
     memset(&d, 0, sizeof d);
     CHECK_EQ(storage_save(&s, &d), 0);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK(!back.consent.initialized && !back.consent.pin_set && back.consent.pin_failures == 0);
     {
@@ -233,19 +265,19 @@ static void test_routers_round_trip(void)
     uint8_t thor[20];
     memset(thor, 0x7c, 20);
     memset(g_flash, 0xff, sizeof g_flash);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     memset(&d, 0, sizeof d);
     d.consent.initialized = true;
     CHECK_EQ(routers_add(&d.consent.routers, ROUTER_CHAIN_EVM, thor), 0);
     CHECK_EQ(storage_save(&s, &d), 0);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK_EQ(back.consent.routers.n, 1);
     CHECK(routers_is_allowed(&back.consent.routers, ROUTER_CHAIN_EVM, thor));
     CHECK(!routers_is_allowed(&back.consent.routers, ROUTER_CHAIN_SOL, thor));
     CHECK(routers_remove(&back.consent.routers, ROUTER_CHAIN_EVM, thor));
     CHECK_EQ(storage_save(&s, &back), 0);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK_EQ(back.consent.routers.n, 0);
     CHECK(!routers_is_allowed(&back.consent.routers, ROUTER_CHAIN_EVM, thor));
@@ -256,21 +288,21 @@ static void test_power_loss_keeps_previous(void)
     storage_t s;
     storage_data_t d, back;
     memset(g_flash, 0xff, sizeof g_flash);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     fill(&d, 1);
     CHECK_EQ(storage_save(&s, &d), 0);
     fill(&d, 2);
     g_fail_program = 1;
     CHECK(storage_save(&s, &d) != 0);
     g_fail_program = 0;
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK_EQ(back.consent.day, 20395u + 1); /* the torn record is ignored, previous one survives */
     CHECK_EQ(s.seq, 1);
     /* and the next save goes to the torn slot and succeeds */
     fill(&d, 3);
     CHECK_EQ(storage_save(&s, &d), 0);
-    storage_init(&s, &FL);
+    init_keyed(&s);
     CHECK(storage_load(&s, &back));
     CHECK_EQ(back.consent.day, 20395u + 3);
 }

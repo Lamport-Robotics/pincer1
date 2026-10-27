@@ -23,12 +23,13 @@
 #define STORAGE_REGION_SIZE (2u * STORAGE_SECTOR_SIZE)
 #define STORAGE_RECORD_SIZE 1536u /* multiple of the page size, <= one sector */
 #define STORAGE_MAGIC 0x31524350u /* "PCR1" */
-#define STORAGE_VERSION 7u /* v7: + the inactive slot's limits and counters (shadow) */
+#define STORAGE_VERSION 8u /* v8: + last accepted host time; record carries an HMAC after the CRC */
+#define STORAGE_MAC_LEN 32u
 
 #define STORAGE_INH_REGION_SIZE (2u * STORAGE_SECTOR_SIZE)
 #define STORAGE_INH_RECORD_SIZE 1280u /* multiple of the page size, <= one sector */
 #define STORAGE_INH_MAGIC 0x31494350u /* "PCI1" */
-#define STORAGE_INH_VERSION 1u
+#define STORAGE_INH_VERSION 2u /* v2: record carries an HMAC after the CRC */
 
 typedef struct {
     /* Offsets are relative to the start of the storage region. */
@@ -53,6 +54,7 @@ typedef struct {
     const storage_flash_t *fl;
     uint32_t seq;       /* seq of the newest valid record */
     int newest_slot;    /* -1 none, else 0/1 */
+    uint8_t key[32];    /* record MAC key (storage_set_key); all-zero until set */
 } storage_t;
 
 /* Inheritance region payload: timer + arrangement (consent.h) + the once-signed transaction. */
@@ -64,18 +66,21 @@ typedef struct {
 } storage_inh_data_t;
 
 void storage_init(storage_t *s, const storage_flash_t *fl);
+/* Key for the record MAC (both regions). Derived from the device secrets at boot (secrets_storage_key);
+ * a record written under another key, or edited through the bootloader, does not load. */
+void storage_set_key(storage_t *s, const uint8_t key[32]);
 /* Loads the newest valid record. Returns false (and zeroes `d`) when flash holds nothing usable. */
 bool storage_load(storage_t *s, storage_data_t *d);
 /* Writes a new record into the other sector. Returns 0 or -1. */
 int storage_save(storage_t *s, const storage_data_t *d);
 /* Serialisation is exposed for tests. */
-size_t storage_encode(const storage_data_t *d, uint32_t seq, uint8_t *out, size_t cap);
-bool storage_decode(const uint8_t *in, size_t len, storage_data_t *d, uint32_t *seq);
+size_t storage_encode(const storage_data_t *d, uint32_t seq, const uint8_t key[32], uint8_t *out, size_t cap);
+bool storage_decode(const uint8_t *in, size_t len, const uint8_t key[32], storage_data_t *d, uint32_t *seq);
 
 /* ---- inheritance region: same engine, its own flash ops (offsets relative to that region) ---- */
 void storage_inh_init(storage_t *s, const storage_flash_t *fl);
 bool storage_inh_load(storage_t *s, storage_inh_data_t *d);
 int storage_inh_save(storage_t *s, const storage_inh_data_t *d);
-size_t storage_inh_encode(const storage_inh_data_t *d, uint32_t seq, uint8_t *out, size_t cap);
-bool storage_inh_decode(const uint8_t *in, size_t len, storage_inh_data_t *d, uint32_t *seq);
+size_t storage_inh_encode(const storage_inh_data_t *d, uint32_t seq, const uint8_t key[32], uint8_t *out, size_t cap);
+bool storage_inh_decode(const uint8_t *in, size_t len, const uint8_t key[32], storage_inh_data_t *d, uint32_t *seq);
 #endif

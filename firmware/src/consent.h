@@ -46,6 +46,7 @@
 #define CONSENT_SECONDS_PER_DAY 86400ull
 #define CONSENT_TIME_MIN_POWERED_S (20ull * 3600ull) /* powered uptime a day rollover needs since the last one */
 #define CONSENT_TIME_MAX_JUMP_S (36ull * 3600ull)    /* a host time further ahead than this is rejected */
+#define CONSENT_TIME_PERSIST_S 3600ull               /* the accepted time is written to flash this often at most */
 #define CONSENT_INIT_WORDS_TTL_MS 600000u            /* the owner gets 10 minutes to copy the words */
 #define CONSENT_MAX_PAGES 32
 
@@ -134,6 +135,7 @@ typedef struct {
     /* The inactive slot's limits and counters. Each slot (real, decoy) has its own; entering or leaving
      * duress swaps the active set with this one, so every policy request works the same way in both slots
      * and nothing in a reply says which slot is live. */
+    uint64_t last_unix; /* newest host time ever accepted (hourly granularity): a reboot cannot turn the clock back */
     bool shadow_valid; /* the decoy slot has limits of its own; until then it inherits the real ones on first use */
     struct {
         uint64_t daily_limit;

@@ -2,10 +2,32 @@
 
 #include <string.h>
 
+#include "sha256.h"
 #include "util.h"
 
-/* Record: magic(4) version(2) len(2) seq(4) payload(len) crc32(4) ; crc covers everything before it. */
+/* Record: magic(4) version(2) len(2) seq(4) payload(len) crc32(4) mac(32); the crc covers everything before
+ * it (cheap corruption check), the HMAC-SHA256 covers header, payload and crc under the storage key. */
 #define HDR 12u
+#define TAIL (4u + STORAGE_MAC_LEN)
+
+static void seal(uint8_t *rec, size_t n, const uint8_t key[32])
+{
+    wr_le32(rec + n, crc32_buf(rec, n));
+    hmac_sha256(key, 32, rec, n + 4, rec + n + 4);
+}
+
+/* crc then mac over the first `n` bytes; the mac compare is constant time. */
+static bool unseal(const uint8_t *rec, size_t n, const uint8_t key[32])
+{
+    uint8_t mac[32];
+    uint8_t diff = 0;
+    size_t i;
+    if (crc32_buf(rec, n) != rd_le32(rec + n)) return false;
+    hmac_sha256(key, 32, rec, n + 4, mac);
+    for (i = 0; i < 32; i++) diff |= mac[i] ^ rec[n + 4 + i];
+    secure_zero(mac, sizeof mac);
+    return diff == 0;
+}
 
 static size_t put_allowance(uint8_t *p, const consent_allowance_t *a)
 {
@@ -86,23 +108,23 @@ size_t storage_encode(const storage_data_t *d, uint32_t seq, const uint8_t key[3
     u256_to_be32(&d->consent.shadow.spent_today_wei, out + o); o += 32;
     wr_le64(out + o, d->consent.shadow.daily_limit_sats); o += 8;
     wr_le64(out + o, d->consent.shadow.spent_today_sats); o += 8;
-    crc = crc32_buf(out, o);
-    wr_le32(out + o, crc); o += 4;
-    return o;
+    wr_le64(out + o, d->consent.last_unix); o += 8;
+    seal(out, o, key);
+    return o + TAIL;
 }
 
-bool storage_decode(const uint8_t *in, size_t len, storage_data_t *d, uint32_t *seq)
+bool storage_decode(const uint8_t *in, size_t len, const uint8_t key[32], storage_data_t *d, uint32_t *seq)
 {
     size_t o = 0, i;
     uint16_t ver, plen;
     memset(d, 0, sizeof *d);
-    if (len < HDR + 4) return false;
+    if (len < HDR + TAIL) return false;
     if (rd_le32(in) != STORAGE_MAGIC) return false;
     ver = rd_le16(in + 4);
     plen = rd_le16(in + 6);
     if (ver != STORAGE_VERSION || plen != PAYLOAD_LEN) return false;
-    if (HDR + plen + 4 > len) return false;
-    if (crc32_buf(in, HDR + plen) != rd_le32(in + HDR + plen)) return false;
+    if (HDR + plen + TAIL > len) return false;
+    if (!unseal(in, HDR + plen, key)) return false;
     *seq = rd_le32(in + 8);
     o = HDR;
     d->consent.initialized = in[o++] != 0;
@@ -140,19 +162,23 @@ bool storage_decode(const uint8_t *in, size_t len, storage_data_t *d, uint32_t *
     u256_from_be(&d->consent.shadow.spent_today_wei, in + o, 32); o += 32;
     d->consent.shadow.daily_limit_sats = rd_le64(in + o); o += 8;
     d->consent.shadow.spent_today_sats = rd_le64(in + o); o += 8;
+    d->consent.last_unix = rd_le64(in + o); o += 8;
     return true;
 }
 
 /* ---- double-slot engine shared by both regions ---- */
 
-typedef bool (*decode_fn)(const uint8_t *in, size_t len, void *d, uint32_t *seq);
+typedef bool (*decode_fn)(const uint8_t *in, size_t len, const uint8_t key[32], void *d, uint32_t *seq);
 
 static void slots_init(storage_t *s, const storage_flash_t *fl)
 {
     s->fl = fl;
     s->seq = 0;
     s->newest_slot = -1;
+    memset(s->key, 0, sizeof s->key);
 }
+
+void storage_set_key(storage_t *s, const uint8_t key[32]) { memcpy(s->key, key, 32); }
 
 static bool slots_load(storage_t *s, uint8_t *buf, size_t rec, void *d, void *cand, size_t dsize, decode_fn dec)
 {
@@ -164,7 +190,7 @@ static bool slots_load(storage_t *s, uint8_t *buf, size_t rec, void *d, void *ca
     s->seq = 0;
     for (slot = 0; slot < 2; slot++) {
         if (s->fl->read((uint32_t)slot * STORAGE_SECTOR_SIZE, buf, rec) != 0) continue;
-        if (!dec(buf, rec, cand, &seq)) continue;
+        if (!dec(buf, rec, s->key, cand, &seq)) continue;
         if (!found || (int32_t)(seq - s->seq) > 0) {
             memcpy(d, cand, dsize);
             s->seq = seq;
@@ -196,8 +222,8 @@ out:
     return rc;
 }
 
-static bool decode_main(const uint8_t *in, size_t len, void *d, uint32_t *seq) { return storage_decode(in, len, d, seq); }
-static bool decode_inh(const uint8_t *in, size_t len, void *d, uint32_t *seq) { return storage_inh_decode(in, len, d, seq); }
+static bool decode_main(const uint8_t *in, size_t len, const uint8_t key[32], void *d, uint32_t *seq) { return storage_decode(in, len, key, d, seq); }
+static bool decode_inh(const uint8_t *in, size_t len, const uint8_t key[32], void *d, uint32_t *seq) { return storage_inh_decode(in, len, key, d, seq); }
 
 void storage_init(storage_t *s, const storage_flash_t *fl) { slots_init(s, fl); }
 
@@ -213,20 +239,20 @@ int storage_save(storage_t *s, const storage_data_t *d)
     uint8_t buf[STORAGE_RECORD_SIZE];
     uint8_t check[STORAGE_RECORD_SIZE];
     uint32_t seq = s->seq + 1;
-    if (storage_encode(d, seq, buf, sizeof buf) == 0) return -1;
+    if (storage_encode(d, seq, s->key, buf, sizeof buf) == 0) return -1;
     return slots_save(s, buf, check, sizeof buf, seq);
 }
 
 /* ---- inheritance region ----
  * Record: magic(4) version(2) len(2) seq(4) | powered_seconds(8) last_touch(8) armed(1) inactivity_days(2)
- * n_warn(1) warn_days(4x2) warned(1) heir(32) signer(32) msg_len(2) msg(860) sig(64) | crc32(4) = 1035 bytes */
+ * n_warn(1) warn_days(4x2) warned(1) heir(32) signer(32) msg_len(2) msg(860) sig(64) | crc32(4) mac(32) = 1067 bytes */
 #define INH_PAYLOAD_LEN (8u + 8u + 1u + 2u + 1u + 2u * CONSENT_INH_MAX_WARN + 1u + 32u + 32u + 2u + CONSENT_INH_MSG_MAX + 64u)
 
-size_t storage_inh_encode(const storage_inh_data_t *d, uint32_t seq, uint8_t *out, size_t cap)
+size_t storage_inh_encode(const storage_inh_data_t *d, uint32_t seq, const uint8_t key[32], uint8_t *out, size_t cap)
 {
     size_t o = 0;
     uint8_t i;
-    if (cap < HDR + INH_PAYLOAD_LEN + 4) return 0;
+    if (cap < HDR + INH_PAYLOAD_LEN + TAIL) return 0;
     if (d->msg_len > CONSENT_INH_MSG_MAX || d->ih.inh.n_warn > CONSENT_INH_MAX_WARN) return 0;
     memset(out, 0xff, cap);
     wr_le32(out + o, STORAGE_INH_MAGIC); o += 4;
@@ -246,23 +272,23 @@ size_t storage_inh_encode(const storage_inh_data_t *d, uint32_t seq, uint8_t *ou
     memset(out + o, 0, CONSENT_INH_MSG_MAX);
     memcpy(out + o, d->msg, d->msg_len); o += CONSENT_INH_MSG_MAX;
     memcpy(out + o, d->sig, 64); o += 64;
-    wr_le32(out + o, crc32_buf(out, o)); o += 4;
-    return o;
+    seal(out, o, key);
+    return o + TAIL;
 }
 
-bool storage_inh_decode(const uint8_t *in, size_t len, storage_inh_data_t *d, uint32_t *seq)
+bool storage_inh_decode(const uint8_t *in, size_t len, const uint8_t key[32], storage_inh_data_t *d, uint32_t *seq)
 {
     size_t o;
     uint16_t ver, plen;
     uint8_t i;
     memset(d, 0, sizeof *d);
-    if (len < HDR + 4) return false;
+    if (len < HDR + TAIL) return false;
     if (rd_le32(in) != STORAGE_INH_MAGIC) return false;
     ver = rd_le16(in + 4);
     plen = rd_le16(in + 6);
     if (ver != STORAGE_INH_VERSION || plen != INH_PAYLOAD_LEN) return false;
-    if (HDR + plen + 4 > len) return false;
-    if (crc32_buf(in, HDR + plen) != rd_le32(in + HDR + plen)) return false;
+    if (HDR + plen + TAIL > len) return false;
+    if (!unseal(in, HDR + plen, key)) return false;
     *seq = rd_le32(in + 8);
     o = HDR;
     d->ih.powered_seconds = rd_le64(in + o); o += 8;
@@ -299,6 +325,6 @@ int storage_inh_save(storage_t *s, const storage_inh_data_t *d)
     uint8_t buf[STORAGE_INH_RECORD_SIZE];
     uint8_t check[STORAGE_INH_RECORD_SIZE];
     uint32_t seq = s->seq + 1;
-    if (storage_inh_encode(d, seq, buf, sizeof buf) == 0) return -1;
+    if (storage_inh_encode(d, seq, s->key, buf, sizeof buf) == 0) return -1;
     return slots_save(s, buf, check, sizeof buf, seq);
 }

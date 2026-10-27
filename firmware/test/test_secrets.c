@@ -52,9 +52,31 @@ static void test_dev_fallback(void)
 #endif
 }
 
+static void test_storage_key(void)
+{
+    uint8_t k1[32], k2[32], zero[32];
+    memset(zero, 0, sizeof zero);
+#ifdef PINCER_DEV_SCP03_KEYS
+    CHECK_EQ(secrets_storage_key(k1), SECRETS_DEV);
+    CHECK_EQ(secrets_storage_key(k2), SECRETS_DEV);
+    CHECK_MEM(k1, k2, 32);                 /* deterministic */
+    CHECK(memcmp(k1, zero, 32) != 0);      /* and not blank */
+    {
+        scp03_keys_t raw;
+        CHECK(secrets_get_scp03_keys(&raw) == SECRETS_DEV);
+        CHECK(memcmp(k1, &raw, 32) != 0);  /* derived, never the SCP03 keys themselves */
+    }
+#else
+    CHECK_EQ(secrets_storage_key(k1), SECRETS_NONE);
+    CHECK_MEM(k1, zero, 32);
+    (void)k2;
+#endif
+}
+
 int main(void)
 {
     RUN(test_parse);
     RUN(test_dev_fallback);
+    RUN(test_storage_key);
     TEST_END();
 }

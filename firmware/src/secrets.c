@@ -1,5 +1,7 @@
 #include "secrets.h"
 
+#include "sha256.h"
+
 #include <string.h>
 
 #include "util.h"
@@ -76,4 +78,15 @@ secrets_source_t secrets_get_scp03_keys(scp03_keys_t *out)
 #endif
     memset(out, 0, sizeof *out);
     return SECRETS_NONE;
+}
+
+secrets_source_t secrets_storage_key(uint8_t out[32])
+{
+    static const uint8_t label[] = "pincer1 storage mac v1";
+    scp03_keys_t k;
+    secrets_source_t src = secrets_get_scp03_keys(&k);
+    memset(out, 0, 32);
+    if (src != SECRETS_NONE) hmac_sha256((const uint8_t *)&k, sizeof k, label, sizeof label - 1, out);
+    secure_zero(&k, sizeof k);
+    return src;
 }

@@ -406,7 +406,9 @@ static void test_day_rollover(void)
     CHECK_EQ(consent_set_time(&c, (T0 / 86400 + 1) * 86400, ms + 120000), CONSENT_TIME_SAME);
     CHECK_U64(c.p.spent_today, SOL);
     CHECK_EQ(c.p.day, (uint32_t)(T0 / 86400));
-    CHECK(!c.dirty);
+    CHECK(c.dirty); /* only the time floor moved (more than an hour on): that alone is written */
+    CHECK_U64(c.p.last_unix, (T0 / 86400 + 1) * 86400);
+    c.dirty = false;
     /* 20 h of powered uptime + the host day change: rollover */
     c.ih.powered_seconds = CONSENT_TIME_MIN_POWERED_S;
     CHECK_EQ(consent_set_time(&c, (T0 / 86400 + 1) * 86400 + 10, ms + 130000), CONSENT_TIME_CHANGED);
@@ -1178,6 +1180,32 @@ static void test_update_apply(void)
     CHECK_EQ(consent_begin_update_apply(&c, "u5", "0.5.0", hash, 1600, &why), CONSENT_R_PENDING);
 }
 
+static void test_time_floor_persists(void)
+{
+    consent_t c;
+    uint32_t ms;
+    ready(&c, &ms); /* T0 accepted */
+    c.dirty = false;
+    CHECK_U64(c.p.last_unix, T0);
+    /* within the hour: the floor stays, nothing to write */
+    CHECK(consent_set_time(&c, T0 + 3599, ms + 3599000) != CONSENT_TIME_REJECTED);
+    CHECK_U64(c.p.last_unix, T0); CHECK(!c.dirty);
+    /* an hour on: floor moves, flash write requested */
+    CHECK(consent_set_time(&c, T0 + 3600, ms + 3600000) != CONSENT_TIME_REJECTED);
+    CHECK_U64(c.p.last_unix, T0 + 3600); CHECK(c.dirty);
+    /* reboot with that record: a host clock behind the floor is refused, the floor itself is fine */
+    {
+        consent_t r;
+        consent_persist_t p = c.p;
+        consent_init(&r, &p, 5);
+        CHECK_EQ(consent_set_time(&r, T0 + 3599, 5), CONSENT_TIME_REJECTED);
+        CHECK(!r.have_time);
+        CHECK_EQ(consent_set_time(&r, T0, 5), CONSENT_TIME_REJECTED);
+        CHECK(consent_set_time(&r, T0 + 3600, 5) != CONSENT_TIME_REJECTED);
+        CHECK(r.have_time);
+    }
+}
+
 int main(void)
 {
     RUN(test_update_apply);
@@ -1203,6 +1231,7 @@ int main(void)
     RUN(test_set_pin_flow);
     RUN(test_unlock_wrong_pin_and_wipe);
     RUN(test_pin_timeout_and_lock_cancel);
+    RUN(test_time_floor_persists);
     RUN(test_chain_limits);
     TEST_END();
 }

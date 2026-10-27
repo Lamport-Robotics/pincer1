@@ -42,8 +42,10 @@
 #include "eip712.h"
 #include "evmtx.h"
 #include "keygen.h"
-#include "secp256k1.h"
 #include "policy.h"
+#include "secp256k1.h"
+#include "secrets.h"
+#include "sha256.h"
 #include "proto.h"
 #include "rng.h"
 #include "signer.h"
@@ -1597,9 +1599,16 @@ int main(void)
     proto_framer_init(&g_framer);
 
     storage_init(&g_storage, &g_flash_ops);
+    storage_inh_init(&g_inh_storage, &g_inh_flash_ops);
+    {
+        uint8_t skey[32];
+        secrets_storage_key(skey); /* records are bound to this controller's secrets */
+        storage_set_key(&g_storage, skey);
+        storage_set_key(&g_inh_storage, skey);
+        secure_zero(skey, sizeof skey);
+    }
     loaded = storage_load(&g_storage, &g_data);
     consent_init(&g_consent, loaded ? &g_data.consent : NULL, now_ms());
-    storage_inh_init(&g_inh_storage, &g_inh_flash_ops);
     if (!storage_inh_load(&g_inh_storage, &g_inh)) memset(&g_inh, 0, sizeof g_inh);
     consent_init_inheritance(&g_consent, &g_inh.ih); /* counter resumes from flash, never rewinds */
 

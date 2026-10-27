@@ -2,6 +2,8 @@
  * lock / duress / wipe, the separate flash record, the durable-nonce check and the protocol messages. */
 #include "consent.h"
 #include "harness.h"
+
+static const uint8_t KEY[32] = {0x5a, 0x01, 0x02};
 #include "msgbuild.h"
 #include "proto.h"
 #include "solmsg.h"
@@ -598,9 +600,9 @@ static void test_storage_round_trip(void)
     CHECK(STORAGE_INH_RECORD_SIZE <= STORAGE_SECTOR_SIZE);
     CHECK(STORAGE_INH_RECORD_SIZE % STORAGE_PAGE_SIZE == 0);
     fill_inh(&d, 5);
-    n = storage_inh_encode(&d, 42, buf, sizeof buf);
+    n = storage_inh_encode(&d, 42, KEY, buf, sizeof buf);
     CHECK(n > 0 && n <= STORAGE_INH_RECORD_SIZE);
-    CHECK(storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     CHECK_EQ(seq, 42);
     CHECK_U64(back.ih.powered_seconds, d.ih.powered_seconds);
     CHECK_U64(back.ih.last_touch_powered_seconds, d.ih.last_touch_powered_seconds);
@@ -616,46 +618,48 @@ static void test_storage_round_trip(void)
     CHECK_MEM(back.sig, d.sig, 64);
     /* the biggest message that fits the chip */
     d.msg_len = CONSENT_INH_MSG_MAX;
-    CHECK(storage_inh_encode(&d, 1, buf, sizeof buf) > 0);
-    CHECK(storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_inh_encode(&d, 1, KEY, buf, sizeof buf) > 0);
+    CHECK(storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     CHECK_EQ(back.msg_len, CONSENT_INH_MSG_MAX);
     d.msg_len = CONSENT_INH_MSG_MAX + 1;
-    CHECK_EQ(storage_inh_encode(&d, 1, buf, sizeof buf), 0);
+    CHECK_EQ(storage_inh_encode(&d, 1, KEY, buf, sizeof buf), 0);
     d.msg_len = 10;
-    CHECK_EQ(storage_inh_encode(&d, 1, buf, 900), 0);
+    CHECK_EQ(storage_inh_encode(&d, 1, KEY, buf, 900), 0);
     /* armed without a transaction loads as disarmed */
     d.msg_len = 0;
-    CHECK(storage_inh_encode(&d, 1, buf, sizeof buf) > 0);
-    CHECK(storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_inh_encode(&d, 1, KEY, buf, sizeof buf) > 0);
+    CHECK(storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     CHECK(!back.ih.inh.armed);
     /* a bare timer record (never armed) round-trips */
     memset(&d, 0, sizeof d);
     d.ih.powered_seconds = 3600;
-    CHECK(storage_inh_encode(&d, 7, buf, sizeof buf) > 0);
-    CHECK(storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_inh_encode(&d, 7, KEY, buf, sizeof buf) > 0);
+    CHECK(storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     CHECK_U64(back.ih.powered_seconds, 3600);
     CHECK(!back.ih.inh.armed);
     /* CRC, magic, version */
     fill_inh(&d, 1);
-    n = storage_inh_encode(&d, 3, buf, sizeof buf);
+    n = storage_inh_encode(&d, 3, KEY, buf, sizeof buf);
     buf[40] ^= 1;
-    CHECK(!storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(!storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     buf[40] ^= 1;
-    CHECK(storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     buf[n - 1] ^= 0x80;
-    CHECK(!storage_inh_decode(buf, sizeof buf, &back, &seq));
+    CHECK(!storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     buf[n - 1] ^= 0x80;
-    buf[4] = 2;
-    CHECK(!storage_inh_decode(buf, sizeof buf, &back, &seq));
+    buf[4] = 1; /* the CRC-only layout */
+    CHECK(!storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
+    buf[4] = 3;
+    CHECK(!storage_inh_decode(buf, sizeof buf, KEY, &back, &seq));
     /* the main-record decoder does not accept an inheritance record and vice versa */
     {
         storage_data_t md;
         uint8_t mbuf[STORAGE_RECORD_SIZE];
         memset(&md, 0, sizeof md);
-        CHECK(storage_encode(&md, 1, mbuf, sizeof mbuf) > 0);
-        CHECK(!storage_inh_decode(mbuf, sizeof mbuf, &back, &seq));
-        buf[4] = 1;
-        CHECK(!storage_decode(buf, sizeof buf, &md, &seq));
+        CHECK(storage_encode(&md, 1, KEY, mbuf, sizeof mbuf) > 0);
+        CHECK(!storage_inh_decode(mbuf, sizeof mbuf, KEY, &back, &seq));
+        buf[4] = STORAGE_INH_VERSION;
+        CHECK(!storage_decode(buf, sizeof buf, KEY, &md, &seq));
     }
 }
 
@@ -665,7 +669,7 @@ static void test_storage_slots_and_power_loss(void)
     storage_inh_data_t d, back;
     int i;
     memset(g_flash, 0xff, sizeof g_flash);
-    storage_inh_init(&s, &FL);
+    storage_inh_init(&s, &FL); storage_set_key(&s, KEY);
     CHECK(!storage_inh_load(&s, &back));
     CHECK(!back.ih.inh.armed);
     for (i = 1; i <= 5; i++) {
@@ -674,7 +678,7 @@ static void test_storage_slots_and_power_loss(void)
         CHECK_EQ(s.newest_slot, (i - 1) % 2);
         CHECK_EQ(s.seq, i);
     }
-    storage_inh_init(&s, &FL);
+    storage_inh_init(&s, &FL); storage_set_key(&s, KEY);
     CHECK(storage_inh_load(&s, &back));
     CHECK_EQ(s.seq, 5);
     CHECK_EQ(back.ih.inh.inactivity_days, 95);
@@ -684,17 +688,17 @@ static void test_storage_slots_and_power_loss(void)
     g_fail_program = 1;
     CHECK(storage_inh_save(&s, &d) != 0);
     g_fail_program = 0;
-    storage_inh_init(&s, &FL);
+    storage_inh_init(&s, &FL); storage_set_key(&s, KEY);
     CHECK(storage_inh_load(&s, &back));
     CHECK_EQ(back.ih.inh.inactivity_days, 95);
     fill_inh(&d, 7);
     CHECK_EQ(storage_inh_save(&s, &d), 0);
-    storage_inh_init(&s, &FL);
+    storage_inh_init(&s, &FL); storage_set_key(&s, KEY);
     CHECK(storage_inh_load(&s, &back));
     CHECK_EQ(back.ih.inh.inactivity_days, 97);
     /* the firmware's wipe writes an all-zero MAIN record; this region is simply not written, so a
      * fresh boot still finds the arrangement and a monotonic counter */
-    storage_inh_init(&s, &FL);
+    storage_inh_init(&s, &FL); storage_set_key(&s, KEY);
     CHECK(storage_inh_load(&s, &back));
     CHECK(back.ih.inh.armed);
     CHECK_U64(back.ih.powered_seconds, 1234567890123ull + 7);

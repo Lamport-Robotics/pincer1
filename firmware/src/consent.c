@@ -188,9 +188,13 @@ consent_time_result_t consent_set_time(consent_t *c, uint64_t unix_now, uint32_t
         if (unix_now < c->unix_at_sync) return CONSENT_TIME_REJECTED;
         if (consent_now_unix(c, now_ms, &cur) && unix_now > u64_sat_add(cur, CONSENT_TIME_MAX_JUMP_S)) return CONSENT_TIME_REJECTED;
     }
+    /* Across reboots: never behind the newest time this controller has ever persisted. A power cycle plus a
+     * stale host clock would otherwise reopen a spent day or an expired allowance. */
+    if (unix_now < c->p.last_unix) return CONSENT_TIME_REJECTED;
     c->have_time = true;
     c->unix_at_sync = unix_now;
     c->ms_at_sync = now_ms;
+    if (unix_now >= u64_sat_add(c->p.last_unix, CONSENT_TIME_PERSIST_S)) { c->p.last_unix = unix_now; c->dirty = true; }
     if (c->p.day == 0) {
         c->p.day = day; /* first time ever: nothing to reset */
         c->dirty = true;
