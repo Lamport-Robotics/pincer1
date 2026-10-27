@@ -39,6 +39,7 @@
 #include "chainaddr.h"
 #include "consent.h"
 #include "display.h"
+#include "ed25519.h"
 #include "eip712.h"
 #include "evmtx.h"
 #include "keygen.h"
@@ -846,14 +847,42 @@ static void do_set_duress_pin(const consent_action_t *a)
 }
 
 /* PIN verified: the decoy slot's public keys, so the owner can fund it. */
+/* Under duress the active slot IS the decoy, so answering decoy_addresses with it would equal `addresses` and
+ * give the slot away. Instead a third set is derived from both public keys: stable across calls and reboots,
+ * real-looking (valid points), and held by nobody. The real addresses never leave the box this way. */
+static void shadow_decoy_addresses(uint8_t sol[32], uint8_t evm[20], uint8_t btc[20])
+{
+    static const uint8_t label[] = "pincer1 shadow decoy v1";
+    uint8_t seed[32], priv[64], pub[64];
+    hmac_sha256_ctx h;
+    hmac_sha256_init(&h, label, sizeof label - 1);
+    hmac_sha256_update(&h, g_data.pubkey[CONSENT_SLOT_REAL], 32);
+    hmac_sha256_update(&h, g_data.pubkey[CONSENT_SLOT_DECOY], 32);
+    hmac_sha256_final(&h, seed);
+    ed25519_create_keypair(sol, priv, seed);
+    seed[0] ^= 0x01;
+    if (secp256k1_pubkey(seed, pub)) evm_address_from_pubkey(pub, evm); else memset(evm, 0, 20);
+    seed[0] ^= 0x03;
+    if (secp256k1_pubkey(seed, pub)) btc_pkh_from_pubkey(pub, btc); else memset(btc, 0, 20);
+    secure_zero(seed, sizeof seed);
+    secure_zero(priv, sizeof priv);
+    secure_zero(pub, sizeof pub);
+}
+
 static void do_decoy_addresses(const consent_action_t *a)
 {
     proto_addrs_t d;
     tui_idle_t st;
     tui_page_t pg;
-    d.pubkey = g_data.pubkey[CONSENT_SLOT_DECOY];
-    d.evm_addr = g_data.evm_addr[CONSENT_SLOT_DECOY];
-    d.btc_pkh = g_data.btc_pkh[CONSENT_SLOT_DECOY];
+    uint8_t sol[32], evm[20], btc[20];
+    if (a->slot == CONSENT_SLOT_DECOY) {
+        shadow_decoy_addresses(sol, evm, btc);
+        d.pubkey = sol; d.evm_addr = evm; d.btc_pkh = btc;
+    } else {
+        d.pubkey = g_data.pubkey[CONSENT_SLOT_DECOY];
+        d.evm_addr = g_data.evm_addr[CONSENT_SLOT_DECOY];
+        d.btc_pkh = g_data.btc_pkh[CONSENT_SLOT_DECOY];
+    }
     send_line(proto_fmt_decoy_addresses(g_out, sizeof g_out, a->id, &d));
     memset(&st, 0, sizeof st);
     st.initialized = true; st.pin_set = true;

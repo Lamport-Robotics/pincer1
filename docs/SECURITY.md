@@ -47,7 +47,9 @@ key is kept safe by the controller + chip, which require a physical touch and an
    next to the real PIN.
    The rhythm path is silent and indistinguishable: the controller answers exactly as it does for a real
    unlock, counts no failure, and never reports to the daemon which wallet is active. The daemon cannot
-   tell the decoy from the real wallet, so neither can anyone reading its screen.
+   tell the decoy from the real wallet, so neither can anyone reading its screen. Every PIN-gated read
+   answers in both slots; `decoy_addresses` under duress returns a third, derived address set that nobody
+   holds, so the reply differs from `addresses` exactly as it does in the real slot.
 7. **The recovery words never cross a wire.** At setup the 24 words (and the decoy's) are shown only on the
    controller's display and advanced by touch. The USB link carries public keys only; the daemon never sees
    or logs the words.
@@ -130,8 +132,10 @@ embedded in the transaction before asking for a touch; approvals are exact-amoun
 the controller treats any other destination as an unknown contract and refuses unless it was declared and
 the owner touched. A compromised daemon can at most route a swap through a listed router at a worse price
 within the slippage cap, never to an arbitrary address. The controller reads Jupiter routes itself and
-refuses one whose output account is not the owner's own associated token account; THORChain inbound
-addresses still come from the configured node and are spoken in full before the touch.
+refuses one whose output account is not the owner's own associated token account; the daemon checks the
+route's mints and output account against the quote too. THORChain inbound addresses are pinned only when two
+independent thornodes (`THORNODE_URL`, `THORNODE_URL_2`) report the same address and router, and are spoken in
+full before the touch.
 
 ## Known gaps in v1
 
