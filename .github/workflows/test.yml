@@ -18,6 +18,39 @@ jobs:
       - run: cmake --build firmware/build-host --parallel
       - run: ctest --test-dir firmware/build-host --output-on-failure
 
+  firmware-m32:
+    # the same tests with a 32-bit size_t / pointers, the controller's shape
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: sudo apt-get install -y --no-install-recommends gcc-multilib
+      - run: cmake -S firmware -B firmware/build-m32 -DBUILD_HOST_TESTS=ON -DCMAKE_C_FLAGS=-m32
+      - run: cmake --build firmware/build-m32 --parallel
+      - run: ctest --test-dir firmware/build-m32 --output-on-failure
+
+  firmware-target:
+    # the real RP2350 image (SE050 signer, trusted display): main.c and the chip driver only compile here
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: firmware/build-target/_deps
+          key: pico-sdk-${{ hashFiles('firmware/CMakeLists.txt') }}
+      - run: cmake -S firmware -B firmware/build-target -DPICO_BOARD=pico2
+      - run: cmake --build firmware/build-target --parallel
+      - run: ls -la firmware/build-target/pincer1_consent.uf2
+
+  firmware-fuzz:
+    # libFuzzer + ASan/UBSan over the wire-facing parsers, a few minutes per push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: cmake -S firmware -B firmware/build-fuzz -DBUILD_HOST_TESTS=ON -DBUILD_FUZZERS=ON -DCMAKE_C_COMPILER=clang
+      - run: cmake --build firmware/build-fuzz --parallel --target fuzz_parsers
+      - run: mkdir -p firmware/build-fuzz/corpus && firmware/build-fuzz/fuzz_parsers -max_total_time=180 -max_len=4096 -timeout=10 firmware/build-fuzz/corpus
+
   daemon:
     runs-on: ubuntu-latest
     defaults:
