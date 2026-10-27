@@ -64,6 +64,24 @@ describe("room lock and two-person rule", () => {
     robot.set({ room_match: 0.95 });
     expect((await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 0.1)]), source: "extension" })).ok).toBe(true);
   });
+  it("room lock on: no room reading at all is not home either", async () => {
+    const { robot, signer } = harness({ roomLock: true });
+    robot.set({ room_match: undefined });
+    const r = await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 0.1)]), source: "extension" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.detail).toBe("room match unknown");
+  });
+  it("two-person rule covers tokens by switch", async () => {
+    const { robot, signer } = harness({ twoPersonTokens: true });
+    robot.set({ persons: 1, owners: ["can"] });
+    expect((await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 1)]), source: "extension" })).ok).toBe(true);
+    const t = await signer.sign({ txBytes: F.legacy([F.usdcTransferChecked(F.strangerUsdc, 1)]), source: "extension" });
+    expect(t.ok).toBe(false);
+    if (!t.ok) expect(t.reason).toBe("two_person_required");
+    expect(robot.spoken.at(-1)).toMatch(/Tokens are leaving/);
+    robot.set({ persons: 2, owners: ["can", "spouse"] });
+    expect((await signer.sign({ txBytes: F.legacy([F.usdcTransferChecked(F.strangerUsdc, 1)]), source: "extension" })).ok).toBe(true);
+  });
   it("two-person rule: big transfers need two bodies and two enrolled faces", async () => {
     const { robot, signer } = harness({ twoPersonSol: 5 });
     robot.set({ persons: 1, owners: ["can"] });

@@ -287,7 +287,7 @@ export class ApiServer {
           if (e instanceof SettingsError) return json(400, { error: e.code, detail: e.message });
           return json(400, { error: "bad_settings", detail: String((e as Error).message ?? e).slice(0, 300) });
         }
-        await this.d.robot.settings({ room_lock: s.roomLock, two_person: s.twoPersonSol > 0, airgap: s.airgap, wake: true, dock: s.dock, mode: s.mode, brain: s.brain });
+        await this.d.robot.settings({ room_lock: s.roomLock, two_person: s.twoPersonSol > 0 || s.twoPersonEvm > 0 || s.twoPersonBtc > 0 || s.twoPersonTokens, airgap: s.airgap, wake: true, dock: s.dock, mode: s.mode, brain: s.brain });
         if (isCloudBrain(s.brain)) log.info("brain", s.brain);
         return json(200, s);
       }

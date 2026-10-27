@@ -174,14 +174,16 @@ export class Signer {
 
     const st = this.settings();
     const pres = this.robot.state();
-    if (req.source !== "agent" && st.roomLock && pres.room_match != null && pres.room_match < st.roomMatchMin) {
+    // room lock: an unknown room match (lidar not reporting) is not home either
+    if (req.source !== "agent" && st.roomLock && (pres.room_match == null || pres.room_match < st.roomMatchMin)) {
       await this.robot.say("This is not my room. I don't sign anywhere but home.");
-      return { ok: false, reason: "not_home", detail: `room match ${pres.room_match.toFixed(2)} below ${st.roomMatchMin}`, parsed, explanation, risk };
+      return { ok: false, reason: "not_home", detail: pres.room_match == null ? "room match unknown" : `room match ${pres.room_match.toFixed(2)} below ${st.roomMatchMin}`, parsed, explanation, risk };
     }
-    if (req.chain === "solana" && req.source !== "agent" && st.twoPersonSol > 0 && Number(parsed.nativeOut) / 1e9 >= st.twoPersonSol) {
+    const twoPerson = req.source === "agent" ? null : this.twoPersonReason(req.chain, parsed, st);
+    if (twoPerson) {
       const owners = pres.owners ?? [];
       if ((pres.persons ?? 0) < 2 || owners.length < 2) {
-        await this.robot.say(`That's ${Number(parsed.nativeOut) / 1e9} SOL. For that much I need both of you in the room.`);
+        await this.robot.say(`${twoPerson} For that I need both of you in the room.`);
         return { ok: false, reason: "two_person_required", detail: `persons=${pres.persons ?? 0} owners=${owners.length}`, parsed, explanation, risk };
       }
     }
@@ -217,6 +219,16 @@ export class Signer {
     }
     if (req.source !== "agent") await this.robot.say("Signed.");
     return { ok: true, signedTx, parsed, explanation, risk };
+  }
+
+  /** Why this request needs two owners present, or null. Native thresholds per chain; tokens by switch (no oracle). */
+  private twoPersonReason(chain: ChainId, parsed: ChainParsed, st: SignerSettings): string | null {
+    const n = Number(parsed.nativeOut);
+    if (chain === "solana" && st.twoPersonSol > 0 && n / 1e9 >= st.twoPersonSol) return `That's ${n / 1e9} SOL.`;
+    if (chain === "evm" && (st.twoPersonEvm ?? 0) > 0 && n / 1e18 >= (st.twoPersonEvm ?? 0)) return `That's ${n / 1e18} of the native coin.`;
+    if (chain === "bitcoin" && (st.twoPersonBtc ?? 0) > 0 && n / 1e8 >= (st.twoPersonBtc ?? 0)) return `That's ${n / 1e8} BTC.`;
+    if (st.twoPersonTokens && parsed.tokenOut.length > 0) return "Tokens are leaving the wallet.";
+    return null;
   }
 
   /** Solana, unchanged contract. */
