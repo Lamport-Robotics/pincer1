@@ -64,6 +64,24 @@ export function permitsOf(td: TypedData): PermitGrant[] {
   return out;
 }
 
+/** Seaport (OrderComponents) and Blur (Order) sell listings: what is offered, and whether anything comes back. */
+export function listingOf(td: TypedData): { market: "Seaport" | "Blur"; drain: boolean } | null {
+  const m = td.message as any;
+  const name = typeof td.domain.name === "string" ? td.domain.name : "";
+  if (td.primaryType === "OrderComponents" || /^seaport$/i.test(name)) {
+    const offer = Array.isArray(m.offer) ? m.offer : [];
+    const consideration = Array.isArray(m.consideration) ? m.consideration : [];
+    const total = consideration.reduce((s: bigint, c: any) => s + (big(c?.startAmount) ?? 0n), 0n);
+    return { market: "Seaport", drain: offer.length > 0 && (consideration.length === 0 || total === 0n) };
+  }
+  if (td.primaryType === "Order" && /blur/i.test(name)) {
+    const price = big(m.price) ?? 0n;
+    const sell = m.side == null || String(m.side) === "1" || String(m.side).toLowerCase() === "sell";
+    return { market: "Blur", drain: sell && price === 0n };
+  }
+  return null;
+}
+
 export interface MsgExplainCtx { origin?: string; intel?: Record<string, ChainAddressIntel>; tokenMeta?: Record<string, ChainTokenMeta>; addressBook?: Record<string, string>; nowUnix?: number }
 
 const who = (a: string, ctx: MsgExplainCtx) => {
@@ -97,6 +115,8 @@ export function explainTypedData(td: TypedData, ctx: MsgExplainCtx = {}): { spok
     if (p.unlimited) lines.push(`DANGER: gives ${who(p.spender, ctx)} unlimited permission to spend your ${tokenName}${fmtDeadline(p.deadline, now)}`);
     else lines.push(`lets ${who(p.spender, ctx)} spend up to ${fmtEvmToken(p.amount, p.token, meta(p.token), chainId)}${fmtDeadline(p.deadline, now)}`);
   }
+  const listing = listingOf(td);
+  if (listing) lines.push(listing.drain ? `DANGER: a ${listing.market} listing that gives your items away for nothing` : `lists your items for sale on ${listing.market}`);
   if (lines.length === 0) lines.push(`signs a "${td.primaryType}" message${app ? ` for ${app}` : ""}`);
   if (td.domain.chainId != null) lines.push(`note: on chain ${td.domain.chainId}`);
   const spokenParts = lines.filter((l) => !l.startsWith("note:")).slice(0, 3);
@@ -122,6 +142,15 @@ export function assessTypedData(td: TypedData, ctx: { intel?: Record<string, Cha
     if (p.deadline != null && Number(p.deadline) < now) raise("medium", "the permit is already expired, so it does nothing.");
     if (i && i.isContract && i.ageDays != null && i.ageDays < 3 && !isRouter) raise("high", `the spender is a contract deployed ${i.ageDays < 1 ? "today" : Math.floor(i.ageDays) + " days ago"}.`);
     if (!p.unlimited && isRouter) raise("low", "a limited permit to a known router.");
+  }
+  // a typed message "for" a plain wallet: nothing can verify it, so nothing legitimate asks for it
+  const vc = addr(td.domain.verifyingContract);
+  const vi = vc ? ctx.intel?.[vc] ?? ctx.intel?.[vc.toLowerCase()] : undefined;
+  if (vi && vi.exists && !vi.isContract) raise("block", `the message names ${shortAddr(vc!)}, a plain wallet, as its contract. Nothing can verify it; it is bait.`);
+  const listing = listingOf(td);
+  if (listing) {
+    if (listing.drain) raise("block", `it gives away what you offer for nothing: a ${listing.market} listing with no price is a drain.`);
+    else raise("high", `it lists your NFT or tokens for sale on ${listing.market}; a zero or near-zero price is a drain, so check the amount on my screen.`);
   }
   if (ctx.requestedChainId != null && td.domain.chainId != null && Number(td.domain.chainId) !== ctx.requestedChainId) raise("block", `the message is for chain ${td.domain.chainId} but the site is on chain ${ctx.requestedChainId}.`);
   if (permits.length === 0 && typeof td.message === "object" && JSON.stringify(td.message).length > 4000) raise("medium", "it is a very long structured message I cannot summarise.");

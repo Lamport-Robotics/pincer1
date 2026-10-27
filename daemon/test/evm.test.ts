@@ -13,7 +13,7 @@ const own = E.evmHarness().owner;
 const intel = (address: string, o: Partial<ChainAddressIntel>): ChainAddressIntel => ({ address, exists: true, isContract: false, ageDays: 400, txCount: 50, txCountIsLowerBound: true, balance: 10n * E.ETH, verified: null, fetchedAt: 0, ...o });
 const routers = new Set([E.ROUTER.toLowerCase()]);
 const parse = (bytes: Uint8Array, requestedChainId?: number) => parseEvmTx(bytes, { owner: own, requestedChainId }, { routers });
-const ctx = (o: Partial<Parameters<typeof assessEvm>[1]> = {}) => ({ intel: {}, tokenMeta: {}, addressBook: {}, ownerBalance: 10n * E.ETH, owner: own, originAllowlist: [], dailyLimit: E.ETH, seenPrograms: new Set<string>(), routers, unlimitedApproveToRouters: false, ...o });
+const ctx = (o: Partial<Parameters<typeof assessEvm>[1]> = {}) => ({ intel: {}, tokenMeta: {}, addressBook: {}, ownerBalance: 10n * E.ETH, owner: own, originAllowlist: [], dailyLimit: E.ETH, knownPrograms: new Set<string>(), routers, unlimitedApproveToRouters: false, ...o });
 
 describe("EVM parse", () => {
   it("reads an EIP-1559 value transfer", () => {
@@ -128,6 +128,31 @@ describe("EIP-712", () => {
     const ok = parseTypedData(permit(1_000_000n, BigInt(now + 600)));
     expect(explainTypedData(ok, { nowUnix: now }).spoken).toBe("Lets 1inch spend up to 1 USDC for 1 hours.");
     expect(assessTypedData(ok, { nowUnix: now, routers }).level).toBe("low");
+  });
+});
+
+describe("EIP-712 listings", () => {
+  const seaport = (consideration: object[]) => ({
+    domain: { name: "Seaport", version: "1.6", chainId: 1, verifyingContract: "0x0000000000000068F116a894984e2DB1123eB395" },
+    types: { OrderComponents: [{ name: "offerer", type: "address" }, { name: "offer", type: "OfferItem[]" }, { name: "consideration", type: "ConsiderationItem[]" }], OfferItem: [{ name: "token", type: "address" }, { name: "startAmount", type: "uint256" }], ConsiderationItem: [{ name: "token", type: "address" }, { name: "startAmount", type: "uint256" }, { name: "recipient", type: "address" }] },
+    primaryType: "OrderComponents", message: { offerer: own, offer: [{ token: E.USDC, startAmount: "1" }], consideration },
+  });
+  it("a Seaport or Blur listing is high; one that asks nothing in return is blocked", () => {
+    const paid = assessTypedData(parseTypedData(seaport([{ token: E.WETH, startAmount: "1000000000000000000", recipient: own }])), { routers });
+    expect(paid.level).toBe("high"); expect(paid.reasons[0]).toMatch(/lists your NFT/);
+    expect(explainTypedData(parseTypedData(seaport([{ token: E.WETH, startAmount: "1", recipient: own }]))).lines[0]).toMatch(/for sale on Seaport/);
+    const free = assessTypedData(parseTypedData(seaport([])), { routers });
+    expect(free.level).toBe("block"); expect(free.reasons[0]).toMatch(/for nothing/);
+    const zero = assessTypedData(parseTypedData(seaport([{ token: E.WETH, startAmount: "0", recipient: own }])), { routers });
+    expect(zero.level).toBe("block");
+    const blur = (price: string) => parseTypedData({ domain: { name: "Blur Exchange", version: "1.0", chainId: 1, verifyingContract: E.ROUTER }, types: { Order: [{ name: "trader", type: "address" }, { name: "side", type: "uint8" }, { name: "price", type: "uint256" }] }, primaryType: "Order", message: { trader: own, side: 1, price } });
+    expect(assessTypedData(blur("0"), { routers }).level).toBe("block");
+    expect(assessTypedData(blur("500000000000000000"), { routers }).level).toBe("high");
+  });
+  it("a typed message whose verifying contract is a plain wallet is blocked", () => {
+    const td = parseTypedData({ ...permit(1_000_000n, 1_800_000_000n), domain: { name: "USD Coin", version: "2", chainId: 1, verifyingContract: E.STRANGER } });
+    const v = assessTypedData(td, { nowUnix: 1_700_000_000, routers, intel: { [getAddress(E.STRANGER)]: intel(E.STRANGER, { isContract: false, exists: true }) } });
+    expect(v.level).toBe("block"); expect(v.reasons.join(" ")).toMatch(/plain wallet, as its contract/);
   });
 });
 

@@ -263,6 +263,8 @@ export class Signer {
         const evm = adapter as unknown as { intelForChain?: (id: number) => { address(a: string): Promise<ChainAddressIntel>; token(a: string): Promise<ChainTokenMeta | null> }; hasChain?: (id: number) => boolean };
         const svc = chainId != null && evm.hasChain?.(chainId) ? evm.intelForChain?.(chainId) : undefined;
         if (svc) {
+          const vc = typeof td.domain.verifyingContract === "string" ? td.domain.verifyingContract : null;
+          if (vc) { try { intel[vc] = await svc.address(vc); } catch { /* best effort */ } }
           await Promise.all(permitsOf(td).flatMap((p) => [
             (async () => { try { intel[p.spender] = await svc.address(p.spender); } catch { /* best effort */ } })(),
             (async () => { if (p.token) { const m = await svc.token(p.token).catch(() => null); if (m) tokenMeta[p.token] = m; } })(),
