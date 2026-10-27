@@ -71,8 +71,10 @@ if [ -z "${PINCER_SKIP_CUDA:-}" ]; then
     echo "warning: no CUDA ctranslate2 on $INDEX; faster-whisper will run int8 on CPU" >&2
 fi
 
-# 6. the package + the Jetson extra (everything on PyPI)
-(cd "$APP" && $PIP install -q ".[jetson]")
+# 6. the runtime pins first, hash-checked (robot/requirements.lock), then the package + the Jetson
+#    extra (everything on PyPI; the extras' pins are exact in pyproject.toml, the big ML wheels have no
+#    lock of their own because their CUDA builds come from NVIDIA's index)
+(cd "$APP" && $PIP install -q --require-hashes -r requirements.lock && $PIP install -q ".[jetson]")
 
 # config + unit
 [ -f /etc/pincer1/robot.env ] || sudo install -m 600 -o pincer -g pincer "$REPO/deploy/jetson/robot/robot.env.example" /etc/pincer1/robot.env

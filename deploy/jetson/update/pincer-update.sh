@@ -62,7 +62,7 @@ chmod 755 "$dest"
 if [ -z "${PINCER_SKIP_DEPS:-}" ]; then
   (cd "$dest/daemon" && pnpm install --prod --frozen-lockfile) || { log "pnpm install failed"; rm -rf "$dest"; exit 3; }
   if [ -x "$ROOT/robot-venv/bin/pip" ]; then
-    (cd "$dest/robot" && "$ROOT/robot-venv/bin/pip" install -q ".[jetson]") || { log "pip install failed"; rm -rf "$dest"; exit 3; }
+    (cd "$dest/robot" && "$ROOT/robot-venv/bin/pip" install -q --require-hashes -r requirements.lock && "$ROOT/robot-venv/bin/pip" install -q ".[jetson]") || { log "pip install failed"; rm -rf "$dest"; exit 3; }
   fi
 fi
 

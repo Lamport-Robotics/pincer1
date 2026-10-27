@@ -126,9 +126,11 @@ What the script does with the Python packages, because it matters on this board:
   aarch64/Tegra builds of these: PyPI's `onnxruntime-gpu` will not install, PyPI's
   `onnxruntime` and `ctranslate2` are CPU-only, and PyPI's `torch` is a CPU wheel. If you
   skip this step everything still runs, silently on the CPU.
-* Then `pip install ".[jetson]"` fills in `insightface`, `faster-whisper`, `resemblyzer`,
-  `opencv-python-headless`, `sounddevice`, `elevenlabs`, `anthropic` from PyPI (see the
-  `[jetson]` extra in `pyproject.toml` for the per-package notes).
+* Then `pip install --require-hashes -r requirements.lock` puts in the runtime pins with their
+  wheel hashes checked, and `pip install ".[jetson]"` fills in `insightface`, `faster-whisper`,
+  `resemblyzer`, `opencv-python-headless`, `sounddevice`, `elevenlabs`, `anthropic` from PyPI at
+  the exact versions in `pyproject.toml` (see the `[jetson]` extra for the per-package notes).
+  `tools/lock.sh` regenerates the lock after a version bump.
 
 Check the backend it picked:
 
