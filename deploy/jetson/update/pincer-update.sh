@@ -51,7 +51,7 @@ if bad or extra:
     print("[pincer-update] manifest mismatch: bad=%s extra=%s" % (bad[:5], extra[:5]), file=sys.stderr); sys.exit(1)
 PY
 ver=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$tmp/manifest.json")
-[[ $ver =~ ^[0-9A-Za-z.+-]+$ ]] || { log "bad version string"; exit 2; }
+[[ $ver =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]] && [[ $ver != *..* ]] || { log "bad version string: $ver"; exit 2; }
 dest="$ROOT/releases/$ver"
 [ -e "$dest" ] && { log "release $ver is already installed at $dest (remove it to reinstall)"; exit 2; }
 

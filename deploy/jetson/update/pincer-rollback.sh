@@ -6,7 +6,13 @@ set -euo pipefail
 ROOT=${PINCER_ROOT:-/opt/pincer1}; SYSTEMCTL=${PINCER_SYSTEMCTL:-systemctl}
 SERVICES=(pincer-robot pincerd)
 log() { echo "[pincer-rollback] $*" >&2; }
-if [ -n "${1:-}" ]; then target="$ROOT/releases/$1"; else target=$(cat "$ROOT/.previous" 2>/dev/null || true); fi
+if [ -n "${1:-}" ]; then
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] && [[ $1 != *..* ]] || { log "bad release name"; exit 2; }
+  target="$ROOT/releases/$1"
+else
+  target=$(cat "$ROOT/.previous" 2>/dev/null || true)
+  case "$target" in "$ROOT"/releases/*) ;; "") ;; *) log "refusing .previous outside $ROOT/releases: $target"; exit 2 ;; esac
+fi
 [ -n "$target" ] && [ -d "$target" ] || { log "no previous release to roll back to (installed: $(ls "$ROOT/releases" 2>/dev/null | tr '\n' ' '))"; exit 2; }
 cur=$(readlink "$ROOT/current" 2>/dev/null || true)
 [ "$cur" = "$target" ] && { log "already on $target"; exit 0; }

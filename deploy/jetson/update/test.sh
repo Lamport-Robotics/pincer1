@@ -39,4 +39,7 @@ PINCER_HEALTH=true "$here/pincer-update.sh" "$r2" 2>/dev/null || fail "second in
 [ "$(readlink "$PINCER_ROOT/current")" = "$PINCER_ROOT/releases/0.0.1" ] || fail "rollback target"
 "$here/pincer-rollback.sh" 0.0.2 2>/dev/null || fail "named rollback"
 [ "$(readlink "$PINCER_ROOT/current")" = "$PINCER_ROOT/releases/0.0.2" ] || fail "named rollback target"
-echo "ok: sign, verify, tamper-refuse, install, auto-rollback, manual rollback"
+"$here/pincer-rollback.sh" "../etc" 2>/dev/null && fail "rollback accepted a path"
+"$here/pincer-rollback.sh" "0.0.1/../0.0.2" 2>/dev/null && fail "rollback accepted a traversal"
+[ "$(readlink "$PINCER_ROOT/current")" = "$PINCER_ROOT/releases/0.0.2" ] || fail "bad names moved current"
+echo "ok: sign, verify, tamper-refuse, install, auto-rollback, manual rollback, bad names refused"
