@@ -1,7 +1,7 @@
 /** Firmware update flow against the sim: the same checks as firmware/src/update.c, then the long touch. */
 import { describe, it, expect } from "vitest";
 import { SimController } from "../src/controller/sim.js";
-import { checkImage, flashFirmware, confirmFirmware, padImage, inspectImage, sha256Hex } from "../src/firmware.js";
+import { checkImage, cmpSemver, flashFirmware, confirmFirmware, padImage, inspectImage, semverOf, sha256Hex } from "../src/firmware.js";
 
 const seed = new Uint8Array(32).fill(9);
 
@@ -53,6 +53,14 @@ describe("flash flow on the sim", () => {
     expect(h.update).toEqual({ partition: 1, staged: false, trial: true, secure_boot: false });
     expect(await confirmFirmware(sim)).toEqual({ ok: true, was_trial: true, bought: false });
     expect((await sim.hello()).update?.trial).toBe(false);
+  });
+  it("refuses an image older than what the controller runs, before any byte is sent", async () => {
+    const sim = new SimController({ seed, autoTouch: true }); // runs sim-0.2.0
+    const r = await flashFirmware(sim, makeImage(4096, { version: [0, 1] }), "0.1.9");
+    expect(r).toMatchObject({ ok: false, step: "check", reason: expect.stringContaining("downgrade") });
+    expect((await sim.hello()).update?.staged).toBe(false);
+    expect(semverOf("pincer1-fw 1.4.2 (abc)")).toBe("1.4.2"); expect(semverOf("sim")).toBeNull();
+    expect(cmpSemver("0.10.0", "0.9.9")).toBe(1); expect(cmpSemver("1.0.0", "1.0.0")).toBe(0);
   });
   it("refuses without the touch and leaves nothing staged after a bad hash or image", async () => {
     const sim = new SimController({ seed, autoTouch: false });

@@ -77,6 +77,14 @@ export function padImage(img: Uint8Array): Uint8Array {
 
 export const sha256Hex = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 
+/** "1.2.3" out of a firmware string such as "sim-0.2.0" or "pincer1-fw 0.5.1 (abc)"; null when there is none. */
+export const semverOf = (s: string | undefined): string | null => /(\d+)\.(\d+)\.(\d+)/.exec(s ?? "")?.[0] ?? null;
+export function cmpSemver(a: string, b: string): number {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) < (pb[i] ?? 0) ? -1 : 1;
+  return 0;
+}
+
 export type FlashOutcome = { ok: true; version: string; bytes: number } | { ok: false; step: "check" | "begin" | "chunk" | "end" | "apply"; reason: string };
 
 /**
@@ -89,6 +97,9 @@ export async function flashFirmware(ctrl: ControllerClient, image: Uint8Array, v
   if (!c.ok) return { ok: false, step: "check", reason: c.reason };
   if (!/^\d+\.\d+\.\d+$/.test(version)) return { ok: false, step: "check", reason: "version must be major.minor.patch" };
   if (c.info.embedded && !version.startsWith(c.info.embedded + ".")) return { ok: false, step: "check", reason: `image says ${c.info.embedded}.x, caller says ${version}` };
+  // the controller refuses downgrades itself; refusing here spares the owner a long touch for nothing
+  const running = semverOf((await ctrl.hello()).fw);
+  if (running && cmpSemver(version, running) < 0) return { ok: false, step: "check", reason: `downgrade: the controller runs ${running}, the image is ${version}` };
   const img = padImage(image);
   const b = await ctrl.updateBegin(img.length, sha256Hex(img), version);
   if (!b.ok) return { ok: false, step: "begin", reason: b.reason };
