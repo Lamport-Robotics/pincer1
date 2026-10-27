@@ -50,7 +50,7 @@ static size_t rlp_item(const uint8_t *in, size_t len, rlp_item_t *it)
         hdr = 1 + ll;
         it->is_list = true;
     }
-    if (hdr + plen > len) return 0;
+    if (plen > len - hdr) return 0; /* hdr <= len here; the sum could wrap on a 32-bit size_t */
     it->p = in + hdr;
     it->len = plen;
     return hdr + plen;
