@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parseMessage, looksLikeMessage, claimsFor } from "../src/tx/parse.js";
+import { ownerAtaSet, parseMessage, looksLikeMessage, claimsFor } from "../src/tx/parse.js";
 import { explain } from "../src/tx/explain.js";
 import * as F from "./fixtures.js";
+import { createTransferCheckedInstruction } from "@solana/spl-token";
 import { ComputeBudgetProgram, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { SYSTEM, TOKEN, TOKEN_2022, U64_MAX } from "../src/tx/known.js";
 
@@ -27,6 +28,18 @@ describe("parseMessage", () => {
   it("ignores transfers that are not from the owner", () => {
     const p = parseMessage(F.messageOf(F.legacy([F.transfer(F.stranger, 1)])), { owner: F.friend.toBase58() });
     expect(p.lamportsOut).toBe(0n);
+  });
+
+  it("counts an inflow only when it lands in the owner's own token account", () => {
+    const mine = new PublicKey([...ownerAtaSet(own, F.usdc.toBase58())][0]!);
+    const intoMine = createTransferCheckedInstruction(F.strangerUsdc, F.usdc, mine, F.stranger, 5_000_000n, 6);
+    const intoTheirs = createTransferCheckedInstruction(F.strangerUsdc, F.usdc, F.friend, F.stranger, 5_000_000n, 6);
+    const a = parseMessage(F.messageOf(F.legacy([intoMine])), { owner: own });
+    expect(a.tokenIn).toHaveLength(1); expect(a.tokenOut).toHaveLength(0);
+    const b = parseMessage(F.messageOf(F.legacy([intoTheirs])), { owner: own });
+    expect(b.tokenIn).toHaveLength(0); // "you receive" must not be said for someone else's account
+    const c = parseMessage(F.messageOf(F.legacy([intoTheirs])), { owner: own, ownerTokenAccounts: new Set([F.friend.toBase58()]) });
+    expect(c.tokenIn).toHaveLength(1);
   });
 
   it("reads SPL transferChecked with mint and amount", () => {
@@ -75,6 +88,9 @@ describe("parseMessage", () => {
     expect(c.token_out[0]).toEqual({ mint: F.usdc.toBase58(), amount: "1000000", dest: F.strangerUsdc.toBase58() });
     expect(c.programs).toEqual([SYSTEM, TOKEN]);
     expect(c.dangerous).toEqual([]);
+    // a program the controller does not know is declared so the controller's own rule can bite
+    expect(claimsFor(parseMessage(F.messageOf(F.legacy([F.callUnknown()])), { owner: own })).dangerous).toEqual(["unknown_program"]);
+    expect(claimsFor(parseMessage(F.messageOf(F.legacy([F.jupiterLike()])), { owner: own })).dangerous).toEqual([]);
   });
 
   it("looksLikeMessage distinguishes messages from arbitrary bytes", () => {

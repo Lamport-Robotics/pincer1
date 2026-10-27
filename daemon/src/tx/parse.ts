@@ -7,7 +7,7 @@
  * agree or the controller denies with `claims_mismatch`.
  */
 import { PublicKey, VersionedMessage, type MessageV0, type Message } from "@solana/web3.js";
-import { ATA, COMPUTE_BUDGET, LOOKUP_TABLE, SYSTEM, TOKEN, TOKEN_2022, U64_MAX } from "./known.js";
+import { ATA, COMPUTE_BUDGET, JUPITER_V6, LOOKUP_TABLE, MEMO, SYSTEM, TOKEN, TOKEN_2022, U64_MAX } from "./known.js";
 
 export interface TokenMove {
   mint: string | null; // null when the instruction does not carry the mint (plain `transfer`)
@@ -71,6 +71,8 @@ const u32 = (d: Uint8Array, o: number) => (o + 4 <= d.length ? new DataView(d.bu
 export interface ParseOptions {
   /** The owner whose perspective we take. Defaults to the fee payer. */
   owner?: string;
+  /** Token accounts known to belong to the owner (for plain Token.transfer, which names no mint). */
+  ownerTokenAccounts?: Set<string>;
   /** Resolved address-lookup-table contents for v0 messages: table pubkey → addresses. */
   lookupTables?: Record<string, string[]>;
 }
@@ -114,6 +116,15 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
   const feePayer = staticKeys[0];
   const owner = opts.owner ?? feePayer;
   const signers = staticKeys.slice(0, header.numRequiredSignatures);
+  // an inflow is only an inflow when it lands in the owner's own account: a transfer into a stranger's token
+  // account must never be read out as "you receive"
+  const ownerAtas = new Map<string, string>();
+  const ownsDest = (dest: string, mint: string | null): boolean => {
+    if (dest === owner || opts.ownerTokenAccounts?.has(dest)) return true;
+    if (!mint) return false;
+    return ownerAtaSet(owner, mint, ownerAtas).has(dest);
+  };
+  const inflow = (mv: TokenMove) => { if (mv.dest && ownsDest(mv.dest, mv.mint)) out.tokenIn.push(mv); };
 
   const instructions: ParsedInstruction[] = msg.compiledInstructions.map((ci, index) => ({
     index,
@@ -219,13 +230,13 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
         case 3: { // transfer: [source, dest, authority] amount u64 @1
           ix.label = "Token.transfer";
           const mv: TokenMove = { mint: null, amount: u64(d, 1), source: ix.accounts[0], dest: ix.accounts[1] };
-          if (ix.accounts[2] === owner) out.tokenOut.push(mv); else out.tokenIn.push(mv);
+          if (ix.accounts[2] === owner) out.tokenOut.push(mv); else inflow(mv);
           break;
         }
         case 12: { // transferChecked: [source, mint, dest, authority] amount u64 @1, decimals u8 @9
           ix.label = "Token.transferChecked";
           const mv: TokenMove = { mint: ix.accounts[1], amount: u64(d, 1), source: ix.accounts[0], dest: ix.accounts[2] };
-          if (ix.accounts[3] === owner) out.tokenOut.push(mv); else out.tokenIn.push(mv);
+          if (ix.accounts[3] === owner) out.tokenOut.push(mv); else inflow(mv);
           break;
         }
         case 4: // approve: [source, delegate, owner] amount @1
@@ -278,7 +289,7 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
           if (d[1] === 1) {
             ix.label = "Token2022.transferCheckedWithFee";
             const mv: TokenMove = { mint: ix.accounts[1], amount: u64(d, 2), source: ix.accounts[0], dest: ix.accounts[2] };
-            if (ix.accounts[3] === owner) out.tokenOut.push(mv); else out.tokenIn.push(mv);
+            if (ix.accounts[3] === owner) out.tokenOut.push(mv); else inflow(mv);
           } else {
             ix.label = `Token2022.transferFee.${d[1]}`;
             out.dangers.push({ kind: "unknown_instruction", program: prog, detail: `transfer-fee instruction ${d[1]} is not understood` });
@@ -363,9 +374,7 @@ export function claimsFor(p: ParsedTx, routers: ReadonlySet<string> = new Set([J
     token_out: p.tokenOut.map((t) => ({ mint: t.mint ?? "", amount: t.amount.toString(), dest: t.dest ?? "" })),
     dest: p.dest ?? "",
     programs: p.programs,
-    // the controller knows these names (solmsg.c DANGER_NAMES); its parser sees a nonce handover as set_authority
-    // and a burn as a token outflow, so those are translated or dropped rather than sent as words it would refuse
-    dangerous: [...new Set(p.dangers.map((d) => (d.kind === "nonce" ? "set_authority" : d.kind)).filter((k) => k !== "burn"))],
+    dangerous: [...dangerous],
     fee_lamports: p.feeLamports.toString(),
   };
 }

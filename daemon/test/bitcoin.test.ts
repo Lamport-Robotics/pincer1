@@ -57,7 +57,7 @@ describe("PSBT build", () => {
 });
 
 describe("PSBT explain and scam filter", () => {
-  const ctx = (o: Partial<Parameters<typeof assessBtc>[1]> = {}) => ({ intel: {}, tokenMeta: {}, addressBook: {}, ownerBalance: 10_000_000n, owner: "", originAllowlist: [], dailyLimit: 5_000_000n, seenPrograms: new Set<string>(), routers: new Set<string>(), unlimitedApproveToRouters: false, ...o });
+  const ctx = (o: Partial<Parameters<typeof assessBtc>[1]> = {}) => ({ intel: {}, tokenMeta: {}, addressBook: {}, ownerBalance: 10_000_000n, owner: "", originAllowlist: [], dailyLimit: 5_000_000n, knownPrograms: new Set<string>(), routers: new Set<string>(), unlimitedApproveToRouters: false, ...o });
   it("sends 0.0015 BTC to bc1q…, fee 2,100 sats (1.4%)", async () => {
     const { btc, owner } = harness({ fee: { "3": 1 } });
     const r = await btc.buildPayment(owner, DEST, 150_000n);
