@@ -10,15 +10,16 @@ Type=simple
 User=pincer
 Group=pincer
 # video: CSI/USB camera and the Tegra GPU nodes (/dev/nvhost-*, /dev/nvmap are root:video)
-# audio: USB mic/speaker through ALSA/portaudio   dialout: USB lidar serial (/dev/pincer-lidar)
-# The consent controller (/dev/pincer-consent) is group pincer-consent: this service is not in that group,
-# so only pincerd can open it. dialout here is for the lidar.
+# audio: USB mic/speaker through ALSA/portaudio   dialout: USB lidar serial (/dev/pincer-lidar) and the
+# leg servo bus. The consent controller (/dev/pincer-consent) is group pincer-consent: this service is
+# not in that group and the device list below does not name it, so only pincerd can open it.
 SupplementaryGroups=video audio dialout render
 WorkingDirectory=/opt/pincer1/current/robot
 EnvironmentFile=/etc/pincer1/robot.env
-# Model caches (~/.insightface, ~/.cache/huggingface) and the enrolment live under /var/lib/pincer1.
+# Model caches (~/.insightface, ~/.cache/huggingface, ~/.nv) and the enrolment live under /var/lib/pincer1.
 Environment=HOME=/var/lib/pincer1
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
 # ROS2 Humble must be sourced in the service's own shell; rclpy comes from apt, not the venv.
 ExecStart=/bin/bash -c 'if [ -f /opt/ros/humble/setup.bash ]; then source /opt/ros/humble/setup.bash; fi; exec /opt/pincer1/robot-venv/bin/pincer-robot'
 Restart=always
@@ -28,14 +29,31 @@ TimeoutStartSec=180
 TimeoutStopSec=15
 KillSignal=SIGINT
 
-# Containment. Kept lighter than pincerd's: the GPU, camera and audio device nodes must stay
-# reachable, so no DeviceAllow list and no ProtectSystem=strict (CUDA opens files under /usr).
+# Containment: same shape as pincerd's. The filesystem is read-only except the state directory,
+# and only the device nodes the robot needs are reachable.
 NoNewPrivileges=true
-PrivateTmp=true
+ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/pincer1
+PrivateTmp=true
+UMask=0077
+DevicePolicy=closed
+# camera (V4L2, also the CSI path on JetPack 6), sound (ALSA), lidar + servo bus (USB serial)
+DeviceAllow=char-video4linux rw
+DeviceAllow=char-alsa rw
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=/dev/pincer-lidar rw
+# Tegra GPU: /dev/nvhost-*, /dev/nvmap, /dev/nvgpu/* and /dev/dri/* for CUDA, nvargus and the
+# display-less EGL path. A group that does not exist on your kernel is logged and skipped; check
+# `cat /proc/devices` against `journalctl -u pincer-robot | grep -i device` after the first start.
+DeviceAllow=char-misc rw
+DeviceAllow=char-nvhost rw
+DeviceAllow=char-nvgpu rw
+DeviceAllow=char-drm rw
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
 LockPersonality=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -44,7 +62,11 @@ ProtectControlGroups=true
 ProtectClock=true
 ProtectHostname=true
 SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
 CapabilityBoundingSet=
+# MemoryDenyWriteExecute stays off: CUDA, onnxruntime and ctranslate2 JIT into writable+executable
+# pages and would fail to initialise. Everything else above holds without it.
 # Jetson GPU memory is shared with the CPU; cap the service so a model-load spike cannot take
 # the daemon down with it (8 GB board). Raise if you move to larger models.
 MemoryMax=4G

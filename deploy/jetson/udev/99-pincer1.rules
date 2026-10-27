@@ -3,3 +3,4 @@
 SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000a", SYMLINK+="pincer-consent", MODE="0660", GROUP="pincer-consent"
 # examples for the other USB devices, fill in your ids from `lsusb`:
 # SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", SYMLINK+="pincer-lidar", MODE="0660", GROUP="dialout"
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="pincer-servo", MODE="0660", GROUP="dialout"
