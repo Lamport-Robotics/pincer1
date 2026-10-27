@@ -95,7 +95,7 @@ if(BUILD_HOST_TESTS)
 
     add_library(pincer_core STATIC ${PINCER_CORE_SOURCES} ${PINCER_ED25519_SOURCES} src/signer_soft.c)
     target_include_directories(pincer_core PUBLIC ${PINCER_CORE_INCLUDES})
-    target_compile_definitions(pincer_core PUBLIC ED25519_NO_SEED=1 ${PINCER_UECC_DEFINES})
+    target_compile_definitions(pincer_core PUBLIC ED25519_NO_SEED=1 CJSON_NESTING_LIMIT=32 ${PINCER_UECC_DEFINES})
     target_compile_options(pincer_core PRIVATE -Wall -Wextra)
     set_source_files_properties(third_party/micro-ecc/uECC.c third_party/bech32/segwit_addr.c
                                 PROPERTIES COMPILE_OPTIONS "-w") # vendored as-is

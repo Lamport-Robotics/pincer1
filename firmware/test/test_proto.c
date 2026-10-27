@@ -29,6 +29,23 @@ static void test_framer(void)
     CHECK_STR(line, "ok");
 }
 
+static void test_nesting_limit(void)
+{
+    /* 40 levels of arrays inside a valid request: cJSON gives up at CJSON_NESTING_LIMIT, the request is refused
+     * instead of eating stack */
+    char line[256];
+    proto_req_t r;
+    int i, n = 0;
+    n += snprintf(line + n, sizeof line - n, "{\"t\":\"hello\",\"x\":");
+    for (i = 0; i < 40; i++) line[n++] = '[';
+    for (i = 0; i < 40; i++) line[n++] = ']';
+    line[n++] = '}'; line[n] = 0;
+    CHECK(proto_parse_request(line, &r) != PROTO_OK);
+    n = snprintf(line, sizeof line, "{\"t\":\"hello\",\"x\":[[[[[[[[]]]]]]]]}");
+    (void)n;
+    CHECK_EQ(proto_parse_request(line, &r), PROTO_OK); /* a few levels are fine */
+}
+
 static void test_parse_requests(void)
 {
     proto_req_t r;
@@ -473,6 +490,7 @@ int main(void)
     RUN(test_update_requests);
     RUN(test_framer);
     RUN(test_parse_requests);
+    RUN(test_nesting_limit);
     RUN(test_parse_sign);
     RUN(test_parse_allowance);
     RUN(test_format);
