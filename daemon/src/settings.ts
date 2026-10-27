@@ -15,6 +15,16 @@ export const SettingsSchema = z.object({
   roomMatchMin: z.number().min(0).max(1).default(0.85),
   /** Two-person rule: transfers at or above this many SOL need two enrolled owners in the room. 0 = off. */
   twoPersonSol: z.number().min(0).default(0),
+  /** Same rule for the other key families: ETH (or the chain's native coin) and BTC thresholds, 0 = off. */
+  twoPersonEvm: z.number().min(0).default(0),
+  twoPersonBtc: z.number().min(0).default(0),
+  /** Two-person rule for any token leaving the wallet, whatever the amount (no oracle, so no threshold). */
+  twoPersonTokens: z.boolean().default(false),
+  /**
+   * Programs / contracts the owner approved once, by hand (POST /programs). Anything else is "unknown" on every
+   * request, not just the first: a program is never promoted by having been signed before.
+   */
+  knownPrograms: z.array(z.string().min(1)).max(200).default([]),
   /** Dead-man's switch: armed on the controller via /inheritance/arm; this only records the owner's intent. */
   inheritance: z.object({ enabled: z.boolean().default(false), heir: z.string().default(""), inactivityDays: z.number().int().min(7).default(90), warnDays: z.array(z.number().int().positive()).default([14, 7, 1]), resignPromptPct: z.number().default(20) }).default({}),
   /** Air-gap relay: off = radio always on; strict = radio only while the owner is present; night = also during the agent's window. */

@@ -87,10 +87,10 @@ export class SolanaAdapter implements ChainAdapter<SolanaParsed> {
   assess(parsed: SolanaParsed, ctx: AssessCtx): RiskVerdict {
     const intel: Record<string, AddressIntel> = {};
     for (const [k, v] of Object.entries(ctx.intel)) intel[k] = fromChainIntel(v);
-    return assess({ tx: parsed.tx, owner: ctx.owner, ownerLamports: ctx.ownerBalance != null ? Number(ctx.ownerBalance) : undefined, intel, addressBook: ctx.addressBook, origin: ctx.origin, originAllowlist: ctx.originAllowlist, dailyLimitLamports: ctx.dailyLimit, seenPrograms: ctx.seenPrograms });
+    return assess({ tx: parsed.tx, owner: ctx.owner, ownerLamports: ctx.ownerBalance != null ? Number(ctx.ownerBalance) : undefined, intel, addressBook: ctx.addressBook, origin: ctx.origin, originAllowlist: ctx.originAllowlist, dailyLimitLamports: ctx.dailyLimit, knownPrograms: ctx.knownPrograms });
   }
 
-  claims(parsed: SolanaParsed): SolanaClaims { return claimsFor(parsed.tx); }
+  claims(parsed: SolanaParsed): SolanaClaims { return claimsFor(parsed.tx, this.routers); }
 
   async assemble(unsignedBytes: Uint8Array, sig: Uint8Array, _parsed: SolanaParsed, owner: string): Promise<Uint8Array> {
     const tx = VersionedTransaction.deserialize(unsignedBytes);

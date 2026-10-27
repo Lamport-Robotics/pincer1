@@ -222,6 +222,22 @@ export class ApiServer {
     }
     if (!(local && hostLocal)) return json(403, { error: "local_only" }); /* the rest is the operator's, on this machine */
     if (req.method === "POST" && url.pathname === "/pair/new") return json(200, { code: await this.newPairingCode() });
+    if (req.method === "GET" && url.pathname === "/tokens") return json(200, { tokens: this.tokenList(), idleDays: TOKEN_IDLE_MS / 86_400_000 });
+    // ── programs the owner approved by hand; nothing else ever stops being "unknown" ──
+    if (url.pathname === "/programs" && this.d.settings) {
+      if (req.method === "GET") return json(200, { known: this.d.settings.get().knownPrograms });
+      if (req.method === "POST") {
+        const b = await body();
+        const idOk = (p: unknown): p is string => typeof p === "string" && (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(p) || /^0x[0-9a-fA-F]{40}$/.test(p));
+        const add = (Array.isArray(b.add) ? b.add : []).filter(idOk).map((p: string) => (p.startsWith("0x") ? p.toLowerCase() : p));
+        const remove = new Set((Array.isArray(b.remove) ? b.remove : []).filter(idOk).map((p: string) => (p.startsWith("0x") ? p.toLowerCase() : p)));
+        if ((Array.isArray(b.add) ? b.add : []).length !== add.length) return json(400, { error: "bad_program", detail: "programs are base58 Solana ids or 0x EVM addresses" });
+        const cur = this.d.settings.get().knownPrograms;
+        const known = [...new Set([...cur.filter((p) => !remove.has(p)), ...add])];
+        try { this.d.settings.update({ knownPrograms: known }); } catch (e) { return json(400, { error: "bad_settings", detail: String((e as Error).message ?? e).slice(0, 300) }); }
+        return json(200, { known });
+      }
+    }
     if (req.method === "POST" && url.pathname === "/pair/revoke") { this.pairing = { tokens: [] }; this.savePairing(); return json(200, { ok: true }); }
     if (req.method === "GET" && url.pathname === "/agent") return json(200, this.d.agent?.status() ?? { enabled: false });
     if (req.method === "GET" && url.pathname === "/agent/report") return json(200, this.d.agent?.lastReport() ?? { items: [] });

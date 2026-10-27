@@ -91,7 +91,8 @@ export interface AssessCtx extends ExplainCtx {
   owner: string;
   originAllowlist: string[];
   dailyLimit: bigint;
-  seenPrograms: Set<string>;
+  /** Programs / contracts the owner approved by hand; everything else is unknown on every request. */
+  knownPrograms: Set<string>;
   /** Routers the owner (or the swap module) allowlisted for this chain. */
   routers: Set<string>;
   /** Owner setting: unlimited approvals are tolerated when the spender is an allowlisted router. */

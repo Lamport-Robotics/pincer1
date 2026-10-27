@@ -332,7 +332,32 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
 }
 
 /** The `claims` object the daemon sends to the controller alongside the bytes. */
-export function claimsFor(p: ParsedTx) {
+/** The programs the controller treats as core (solmsg.c): everything else is "unknown_program" unless it is a router. */
+export const CONTROLLER_CORE_PROGRAMS = new Set([SYSTEM, TOKEN, TOKEN_2022, ATA, COMPUTE_BUDGET, MEMO]);
+
+/** The owner's associated token accounts for a mint under both token programs (web3.js only, no spl-token). */
+export function ownerAtaSet(owner: string, mint: string, cache?: Map<string, string>): Set<string> {
+  const out = new Set<string>();
+  let o: PublicKey, m: PublicKey;
+  try { o = new PublicKey(owner); m = new PublicKey(mint); } catch { return out; }
+  for (const prog of [TOKEN, TOKEN_2022]) {
+    const key = `${owner}:${mint}:${prog}`;
+    let ata = cache?.get(key);
+    if (!ata) {
+      try { ata = PublicKey.findProgramAddressSync([o.toBytes(), new PublicKey(prog).toBytes(), m.toBytes()], new PublicKey(ATA))[0].toBase58(); } catch { continue; }
+      cache?.set(key, ata);
+    }
+    out.add(ata);
+  }
+  return out;
+}
+
+export function claimsFor(p: ParsedTx, routers: ReadonlySet<string> = new Set([JUPITER_V6])) {
+  // the controller knows these names (solmsg.c DANGER_NAMES); its parser sees a nonce handover as set_authority
+  // and a burn as a token outflow, so those are translated or dropped rather than sent as words it would refuse
+  const dangerous = new Set<string>(p.dangers.map((d) => (d.kind === "nonce" ? "set_authority" : d.kind)).filter((k) => k !== "burn"));
+  // a program that is neither core nor an allowlisted router is "unknown_program" on the controller and must be declared
+  if (p.programs.some((x) => !CONTROLLER_CORE_PROGRAMS.has(x) && !routers.has(x))) dangerous.add("unknown_program");
   return {
     lamports_out: p.lamportsOut.toString(),
     token_out: p.tokenOut.map((t) => ({ mint: t.mint ?? "", amount: t.amount.toString(), dest: t.dest ?? "" })),

@@ -49,6 +49,19 @@ describe("api: multi-chain status, settings and signTransaction", () => {
     expect(s.mode).toBe("online"); expect(s.brain).toBe("lamport");
     expect(s.controller.policy.daily_limit_wei).toBeDefined();
   });
+  it("known programs are an owner-kept list: add, remove, shape-checked; nothing else is ever known", async () => {
+    const get = () => fetch(`http://127.0.0.1:${port}/programs`).then((r) => r.json());
+    expect(await get()).toEqual({ known: [] });
+    const r = await post("/programs", { add: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", "0x111111125421cA6dc452d289314280a0f8842A65"] });
+    expect(r.status).toBe(200);
+    expect(r.body.known).toEqual(["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", "0x111111125421ca6dc452d289314280a0f8842a65"]);
+    expect((await post("/programs", { add: ["not a program"] })).status).toBe(400);
+    const r2 = await post("/programs", { remove: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"] });
+    expect(r2.body.known).toEqual(["0x111111125421ca6dc452d289314280a0f8842a65"]);
+    expect((await get()).known).toEqual(["0x111111125421ca6dc452d289314280a0f8842a65"]);
+    await post("/programs", { remove: ["0x111111125421cA6dc452d289314280a0f8842A65"] });
+    expect(await get()).toEqual({ known: [] });
+  });
   it("offline mode: cloud brain refused (400), swaps refused (403); settings are pushed to the robot", async () => {
     expect((await post("/settings", { mode: "offline" })).status).toBe(200);
     expect(robotSettings.at(-1)).toMatchObject({ mode: "offline", brain: "lamport" });

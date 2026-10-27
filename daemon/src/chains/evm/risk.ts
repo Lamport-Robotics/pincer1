@@ -60,7 +60,7 @@ export function assessEvm(p: EvmParsed, ctx: AssessCtx): RiskVerdict {
     if (c.fn === "unknown" && c.selector) {
       if (!isRouter(p.to) && ti?.isContract && ti.ageDays == null && ti.verified !== true) raise("high", `it calls ${shortAddr(p.to)}, a contract I know nothing about: no verified source, no known age.`);
       else if (!isRouter(p.to) && ti?.isContract && ti.ageDays != null && ti.ageDays < 7) raise("high", `it calls a contract deployed ${Math.floor(ti.ageDays)} days ago that I don't know.`);
-      else if (!isRouter(p.to) && !ctx.seenPrograms.has(p.to.toLowerCase())) raise("medium", `it calls ${shortAddr(p.to)}, a contract you haven't used before.`);
+      else if (!isRouter(p.to) && !ctx.knownPrograms.has(p.to.toLowerCase())) raise(p.value > 0n ? "high" : "medium", `it calls ${shortAddr(p.to)}, a contract you haven't approved${p.value > 0n ? ", and value leaves your wallet" : ""}.`);
     }
   }
 

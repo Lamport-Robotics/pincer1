@@ -58,13 +58,21 @@ export type ChainSignOutcome<P extends ChainParsed = ChainParsed> =
 export interface Explained { parsed: ParsedTx; explanation: Explanation; risk: RiskVerdict }
 export interface ChainExplained<P extends ChainParsed = ChainParsed> { chain: ChainId; owner: string; parsed: P; explanation: Explanation; risk: RiskVerdict; signingBytes: Uint8Array; adapter: ChainAdapter<P> }
 
-type SignerSettings = Pick<Settings, "roomLock" | "roomMatchMin" | "twoPersonSol" | "speakBeforeSign"> & Partial<Pick<Settings, "unlimitedApproveToRouters" | "mode">>;
+type SignerSettings = Pick<Settings, "roomLock" | "roomMatchMin" | "twoPersonSol" | "speakBeforeSign"> & Partial<Pick<Settings, "unlimitedApproveToRouters" | "mode" | "twoPersonEvm" | "twoPersonBtc" | "twoPersonTokens" | "knownPrograms">>;
+
+/**
+ * Text a site chose (a message to sign, a memo, an origin) is quoted to the owner, never spoken as if the robot
+ * meant it: control characters out, whitespace folded, length capped. The robot's own brain sees it the same way.
+ */
+export function quoteUntrusted(s: string, max = 120): string {
+  const t = s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim();
+  return t.length > max ? t.slice(0, max - 1) + "…" : t;
+}
+const siteHost = (origin?: string) => (origin ? quoteUntrusted(origin.replace(/^https?:\/\//, ""), 60) : "");
 
 const DENY_WORDS: Record<string, string> = { timeout: "No touch. Not signed.", claims_mismatch: "The transaction doesn't match what I read. Not signing.", over_daily_limit: "That's over your daily limit. Hold your hand on me for three seconds to raise it.", locked: "I'm locked. Tap your PIN rhythm on my head to unlock first.", policy: "That transaction asks for something I won't do.", duress: "Not now.", user: "Cancelled.", not_initialized: "I don't have a key yet.", pin_not_set: "Set your PIN rhythm first.", busy: "One thing at a time.", wrong_pin: "That's not your rhythm.", wiped: "I've been wiped. Only the 24 words can bring the wallet back." };
 
 export class Signer {
-  private seenPrograms = new Set<string>();
-  private seenByChain: Record<ChainId, Set<string>>;
   readonly intel: Intel;
   readonly solana: SolanaAdapter;
   private adapters = new Map<ChainId, ChainAdapter<any>>();
@@ -86,7 +94,6 @@ export class Signer {
     this.intel = intel ?? new Intel(conn);
     this.solana = new SolanaAdapter(conn, this.intel);
     this.adapters.set("solana", this.solana);
-    this.seenByChain = { solana: this.seenPrograms, evm: new Set(), bitcoin: new Set() };
     this.addresses = () => ({ solana: getOwner() });
   }
 
@@ -125,7 +132,9 @@ export class Signer {
     const st = this.settings();
     const ctx = { origin, intel, tokenMeta, addressBook: labels ? { ...this.cfg.addressBook, ...labels } : this.cfg.addressBook, ownerBalance };
     const explanation = adapter.explain(parsed, ctx);
-    const risk = adapter.assess(parsed, { ...ctx, owner, originAllowlist: this.cfg.originAllowlist, dailyLimit: this.dailyLimitFor(chain), seenPrograms: this.seenByChain[chain], routers: adapter.routers ?? new Set(), unlimitedApproveToRouters: !!st.unlimitedApproveToRouters });
+    // the owner's hand-approved list is the only thing that makes a program "known"; signing once does not
+    const knownPrograms = new Set((st.knownPrograms ?? []).map((p) => (chain === "evm" ? p.toLowerCase() : p)));
+    const risk = adapter.assess(parsed, { ...ctx, owner, originAllowlist: this.cfg.originAllowlist, dailyLimit: this.dailyLimitFor(chain), knownPrograms, routers: adapter.routers ?? new Set(), unlimitedApproveToRouters: !!st.unlimitedApproveToRouters });
     return { chain, owner, parsed, explanation, risk, signingBytes: adapter.signingBytes(bytes, parsed), adapter };
   }
 
@@ -206,7 +215,6 @@ export class Signer {
       await this.robot.say("The controller's signature doesn't fit the transaction. Nothing was sent.");
       return { ok: false, reason: "assemble_error", detail: String((e as Error).message ?? e), parsed, explanation, risk };
     }
-    for (const p of parsed.programs) this.seenByChain[req.chain].add(req.chain === "evm" ? p.toLowerCase() : p);
     if (req.source !== "agent") await this.robot.say("Signed.");
     return { ok: true, signedTx, parsed, explanation, risk };
   }

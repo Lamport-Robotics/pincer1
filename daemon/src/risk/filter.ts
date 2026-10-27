@@ -27,8 +27,8 @@ export interface RiskInput {
   origin?: string;
   originAllowlist?: string[];
   dailyLimitLamports?: bigint;
-  /** Programs this owner has interacted with before (from the daemon's history). */
-  seenPrograms?: Set<string>;
+  /** Programs the owner approved by hand (settings.knownPrograms). Nothing else counts as known. */
+  knownPrograms?: Set<string>;
   nowUnix?: number;
 }
 
@@ -109,14 +109,16 @@ export function assess(input: RiskInput): RiskVerdict {
     if (i && i.ageDays != null && i.ageDays < 3 && !book[t.dest]) raise("high", `tokens go to a wallet created ${i.ageDays < 1 ? "today" : Math.floor(i.ageDays) + " days ago"}.`);
   }
 
-  // ── programs ──
+  // ── programs: unknown stays unknown until the owner lists it; with value leaving it is a warning, not a caveat ──
+  const valueOut = tx.lamportsOut > 0n || tx.tokenOut.length > 0;
   for (const p of tx.programs) {
     if (TRUSTED_PROGRAMS.has(p)) continue;
     const i = intelOf(p);
-    const seen = input.seenPrograms?.has(p);
+    const known = input.knownPrograms?.has(p);
     if (i && !i.isProgram) raise("block", `${short(p)} is invoked as a program but is not executable. The transaction is malformed or hostile.`);
     else if (i && i.ageDays != null && i.ageDays < 7) raise("high", `it calls a program deployed ${Math.floor(i.ageDays)} days ago that I don't know.`);
-    else if (!seen) raise("medium", `it calls ${short(p)}, a program you haven't used before.`);
+    else if (!known && valueOut) raise("high", `it calls ${short(p)}, a program you haven't approved, and value leaves your wallet.`);
+    else if (!known) raise("medium", `it calls ${short(p)}, a program you haven't approved.`);
   }
 
   // ── origin ──

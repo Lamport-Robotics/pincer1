@@ -61,7 +61,11 @@ describe("scam filter", () => {
     expect(assess({ tx, owner: own }).level).toBe("medium");
     expect(assess({ tx, owner: own, intel: { [u]: intel(u, { isProgram: true, ageDays: 2 }) } }).level).toBe("high");
     expect(assess({ tx, owner: own, intel: { [u]: intel(u, { isProgram: false }) } }).level).toBe("block");
-    expect(assess({ tx, owner: own, seenPrograms: new Set([u]) }).level).toBe("low");
+    expect(assess({ tx, owner: own, knownPrograms: new Set([u]) }).level).toBe("low");
+    // with value leaving the wallet an unapproved program is a warning, every time
+    const withValue = parse([F.transfer(F.stranger, 0.1), F.callUnknown()]);
+    expect(assess({ tx: withValue, owner: own }).level).toBe("high");
+    expect(assess({ tx: withValue, owner: own, knownPrograms: new Set([u]) }).level).toBe("low");
   });
 
   it("flags durable-nonce transactions from dapps", () => {

@@ -13,13 +13,13 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { getAddress, hashMessage, keccak256, type Hex } from "viem";
 import { publicKeyToAddress } from "viem/accounts";
 import * as bitcoin from "bitcoinjs-lib";
-import { parseMessage, looksLikeMessage } from "../tx/parse.js";
+import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage } from "../tx/parse.js";
 import { looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
 import { parseTypedData, typedDataDigest } from "../chains/evm/message.js";
 import { netOf, parsePsbt, type BtcNetwork } from "../chains/bitcoin/psbt.js";
 import type { Addresses, Allowance, AnyClaims, BtcClaims, Claims, ControllerClient, ControllerEvent, DenyReason, EvmClaims, Hello, InheritanceStatus, MsgClaims, PendingHook, Policy, PolicyChain, SignKind, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
 import { FW_CHUNK, FW_PAGE, checkImage } from "../firmware.js";
-import { SYSTEM } from "../tx/known.js";
+import { JUPITER_V6, SYSTEM } from "../tx/known.js";
 import { EVM_ROUTERS } from "../swap/routers.js";
 
 export interface SimOptions {
@@ -75,6 +75,7 @@ export class SimController implements ControllerClient {
   private elevatedUntil = 0;
   /** router allowlist lives here, not on the host */
   readonly routers = new Set<string>(EVM_ROUTERS.map((r) => r.toLowerCase()));
+  readonly solRouters = new Set<string>([JUPITER_V6]);
   private elevatedLimit = 0n;
   private pend: Pending | null = null;
   private listeners: ((e: ControllerEvent) => void)[] = [];
@@ -249,8 +250,9 @@ export class SimController implements ControllerClient {
       }
       // 3. every program claimed
       if (!parsed.programs.every((p) => claims.programs.includes(p))) return { ok: false, reason: "claims_mismatch" };
-      // 4. dangerous instructions must be declared
-      const kinds = new Set(parsed.dangers.map((d) => d.kind));
+      // 4. dangerous instructions must be declared; a program that is neither core nor a router counts as one
+      const kinds = new Set<string>(parsed.dangers.map((d) => d.kind));
+      if (parsed.programs.some((p) => !CONTROLLER_CORE_PROGRAMS.has(p) && !this.solRouters.has(p))) kinds.add("unknown_program");
       for (const k of kinds) if (!claims.dangerous.includes(k)) return { ok: false, reason: "policy" };
       // 5. daily limit / elevation / allowance
       if (this.spentFor("solana") + lamportsOut > this.limitFor("solana")) return { ok: false, reason: "over_daily_limit" };
