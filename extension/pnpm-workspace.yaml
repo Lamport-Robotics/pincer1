@@ -1,0 +1,9 @@
+# pnpm settings (pnpm 11 reads them here, not from package.json)
+ignoredBuiltDependencies:
+  - bufferutil
+  - esbuild
+  - utf-8-validate
+# jayson (via @solana/web3.js) pins old uuid / stream-json; the newer ones keep the same API
+overrides:
+  uuid: ">=11.1.1"
+  stream-json: ">=3.6.0"

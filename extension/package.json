@@ -2,7 +2,7 @@
   "name": "pincer1-extension",
   "version": "0.2.0",
   "private": true,
-  "description": "Pincer1 browser extension — Solana (Wallet Standard), EVM (EIP-1193/6963) and Bitcoin wallets whose keys live on the robot. Signs only after physical consent.",
+  "description": "Pincer1 browser extension \u2014 Solana (Wallet Standard), EVM (EIP-1193/6963) and Bitcoin wallets whose keys live on the robot. Signs only after physical consent.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -30,12 +30,5 @@
     "typescript": "5.9.3",
     "vite": "7.3.7",
     "vitest": "5.0.3"
-  },
-  "pnpm": {
-    "ignoredBuiltDependencies": [
-      "bufferutil",
-      "esbuild",
-      "utf-8-validate"
-    ]
   }
 }

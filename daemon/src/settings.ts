@@ -26,7 +26,7 @@ export const SettingsSchema = z.object({
    */
   knownPrograms: z.array(z.string().min(1)).max(200).default([]),
   /** Dead-man's switch: armed on the controller via /inheritance/arm; this only records the owner's intent. */
-  inheritance: z.object({ enabled: z.boolean().default(false), heir: z.string().default(""), inactivityDays: z.number().int().min(7).default(90), warnDays: z.array(z.number().int().positive()).default([14, 7, 1]), resignPromptPct: z.number().default(20) }).default({}),
+  inheritance: z.object({ enabled: z.boolean().default(false), heir: z.string().default(""), inactivityDays: z.number().int().min(7).default(90), warnDays: z.array(z.number().int().positive()).default([14, 7, 1]), resignPromptPct: z.number().default(20) }).prefault({}),
   /** Air-gap relay: off = radio always on; strict = radio only while the owner is present; night = also during the agent's window. */
   airgap: z.enum(["off", "strict", "night"]).default("off"),
   /** Offline payments: allow signing without broadcasting (durable nonce). */
@@ -58,7 +58,7 @@ export const SettingsSchema = z.object({
     maxHeadlines: z.number().int().min(1).max(12).default(5),
     portfolio: z.boolean().default(true),
     requirePresence: z.boolean().default(true),
-  }).default({}),
+  }).prefault({}),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

@@ -4,3 +4,8 @@ patchedDependencies:
 auditConfig:
   ignoreGhsas:
     - GHSA-3gc7-fjrx-p6mg
+
+# jayson (via @solana/web3.js) pins old uuid / stream-json; the newer ones keep the same API
+overrides:
+  uuid: ">=11.1.1"
+  stream-json: ">=3.6.0"
