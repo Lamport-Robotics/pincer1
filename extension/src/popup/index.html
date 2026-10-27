@@ -4,12 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pincer1</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
@@ -25,6 +19,14 @@
     </header>
 
     <main>
+      <section class="card ask" id="approvalCard" hidden>
+        <div class="card-head">
+          <span class="eyebrow">Site wants to connect</span>
+        </div>
+        <ul class="asks" id="approvals"></ul>
+        <p class="hint">Approved sites can see your addresses and ask the robot to sign. Every signature still needs the touch.</p>
+      </section>
+
       <section class="card" id="pendingCard" hidden>
         <div class="card-head">
           <span class="head-left">
@@ -89,6 +91,7 @@
             <span class="k">sites</span>
             <span class="v mono" id="origins">—</span>
           </div>
+          <ul class="sites" id="sites"></ul>
           <button class="ghost danger" id="forget">Forget pairing</button>
         </div>
       </section>

@@ -9,8 +9,8 @@
   --lime-dim: rgba(138, 212, 20, 0.14);
   --red: #ff5a5a;
   --amber: #ffb547;
-  --sans: 'Manrope', system-ui, sans-serif;
-  --mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -247,3 +247,13 @@ select:focus { border-color: var(--lime); }
 .toggle-text .hint { font-weight: 500; }
 
 .log .m .chain { font-size: 9px; padding: 0 4px; margin-right: 2px; }
+
+/* ── per-site approval ── */
+#approvalCard.ask { border-color: var(--amber); background: linear-gradient(180deg, rgba(255, 181, 71, 0.12), var(--panel) 60%); }
+.asks, .sites { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.asks li, .sites li { display: flex; align-items: center; gap: 8px; }
+.asks li .site, .sites li .site { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+.asks li .site { font-weight: 700; font-size: 13px; }
+.sites li .site { color: var(--muted); }
+.sites:empty { display: none; }
+button.small { padding: 4px 9px; font-size: 12px; }

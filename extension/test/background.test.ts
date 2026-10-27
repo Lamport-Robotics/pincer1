@@ -13,11 +13,12 @@ function req<M extends PageRequest['method']>(method: M, params: PageRequest<M>[
 
 function harness(initial: Partial<Settings> = {}) {
   const storage = new MemoryStorage();
-  Object.assign(storage.data, initial);
+  Object.assign(storage.data, { approvedOrigins: [ORIGIN] }, initial);
   const sockets: MockSocket[] = [];
   const badges: string[] = [];
   const states: StateView[] = [];
   const sendRaw = vi.fn(async (_rpc: string, _tx: Uint8Array) => 'SIG'.repeat(10));
+  const popups: number[] = [];
   const core = new BackgroundCore({
     createSocket: (url) => {
       const s = new MockSocket(url);
@@ -27,9 +28,12 @@ function harness(initial: Partial<Settings> = {}) {
     storage,
     setBadge: (t) => badges.push(t),
     sendRawTransaction: sendRaw,
+    openPopup: async () => {
+      popups.push(1);
+    },
   });
   core.onState((s) => states.push(s));
-  return { core, storage, sockets, badges, states, sendRaw, sock: () => sockets.at(-1)! };
+  return { core, storage, sockets, badges, states, sendRaw, popups, sock: () => sockets.at(-1)! };
 }
 
 /** Bring a fresh core to "paired + socket open" using the real pair handshake. */
@@ -249,14 +253,91 @@ describe('BackgroundCore', () => {
     expect(await again).toEqual({ tx: 'ok' });
   });
 
-  it('forget clears the token, tells pages to disconnect, and keeps the socket', async () => {
+  it('forget revokes the token on the daemon, drops site approvals, tells pages to disconnect, and keeps the socket', async () => {
     const h = await pairedCore();
     const events: string[] = [];
     h.core.onPageEvent((e) => events.push(e));
     await h.core.forget();
     expect(events).toEqual(['disconnected']);
+    expect(h.sock().frames.at(-1)).toEqual({ t: 'revoke', token: 'tok-1' });
     expect(h.storage.data.token).toBeUndefined();
-    expect(h.core.getState()).toMatchObject({ paired: false, pubkey: null, socket: 'open' });
+    expect(h.storage.data.approvedOrigins).toBeUndefined();
+    expect(h.core.getState()).toMatchObject({ paired: false, pubkey: null, socket: 'open', approvedOrigins: [] });
+  });
+
+  describe('per-site approval', () => {
+    const NEW = 'https://new.dapp.example';
+
+    it('a first connect waits for Approve in the popup, then handshakes; later connects are silent', async () => {
+      const h = await pairedCore();
+      const connecting = h.core.handlePageRequest(NEW, req('connect', {}));
+      await flush();
+      expect(h.popups).toHaveLength(1);
+      expect(h.core.getState().pendingApprovals).toEqual([NEW]);
+      expect(h.sock().frames.filter((f) => f.t === 'connect')).toHaveLength(0);
+      // a second tab of the same site shares the one question
+      const again = h.core.handlePageRequest(NEW, req('connect', {}));
+      await flush();
+      expect(h.core.getState().pendingApprovals).toEqual([NEW]);
+      await h.core.approveOrigin(NEW);
+      await flush();
+      // both waiters handshake once the answer is in
+      expect(h.sock().frames.filter((f) => f.t === 'connect')).toEqual([
+        { t: 'connect', token: 'tok-1', origin: NEW },
+        { t: 'connect', token: 'tok-1', origin: NEW },
+      ]);
+      h.sock().receive({ t: 'connected', pubkey: 'PUBKEY1' });
+      h.sock().receive({ t: 'connected', pubkey: 'PUBKEY1' });
+      expect(await connecting).toEqual({ pubkey: 'PUBKEY1' });
+      expect(await again).toEqual({ pubkey: 'PUBKEY1' });
+      expect(h.storage.data.approvedOrigins).toEqual([ORIGIN, NEW]);
+      expect(h.core.getState()).toMatchObject({ pendingApprovals: [], approvedOrigins: [ORIGIN, NEW] });
+    });
+
+    it('Deny rejects with DENIED (4001 for dapps) and nothing reaches the daemon', async () => {
+      const h = await pairedCore();
+      const connecting = h.core.handlePageRequest(NEW, req('connect', {}));
+      await flush();
+      h.core.denyOrigin(NEW);
+      await expect(connecting).rejects.toMatchObject({ code: 'DENIED' });
+      expect(h.sock().frames.filter((f) => f.t === 'connect')).toHaveLength(0);
+      expect(h.core.getState().approvedOrigins).toEqual([ORIGIN]);
+    });
+
+    it('no answer in two minutes is a denial; a silent connect never asks', async () => {
+      const h = await pairedCore();
+      await expect(h.core.handlePageRequest(NEW, req('connect', { silent: true }))).rejects.toMatchObject({ code: 'NOT_CONNECTED' });
+      expect(h.popups).toHaveLength(0);
+      const connecting = h.core.handlePageRequest(NEW, req('connect', {}));
+      await flush();
+      vi.advanceTimersByTime(120_001);
+      await expect(connecting).rejects.toMatchObject({ code: 'DENIED' });
+      expect(h.core.getState().pendingApprovals).toEqual([]);
+    });
+
+    it('Remove drops the approval and the connection; signing asks again', async () => {
+      const h = await pairedCore();
+      const c = h.core.handlePageRequest(ORIGIN, req('connect', {}));
+      await flush();
+      h.sock().receive({ t: 'connected', pubkey: 'PUBKEY1' });
+      await c;
+      await h.core.removeOrigin(ORIGIN);
+      expect(h.core.getState()).toMatchObject({ connectedOrigins: [], approvedOrigins: [] });
+      expect(h.storage.data.approvedOrigins).toEqual([]);
+      const signing = h.core.handlePageRequest(ORIGIN, req('signMessage', { message: 'AA==' }));
+      await flush();
+      expect(h.core.getState().pendingApprovals).toEqual([ORIGIN]);
+      h.core.denyOrigin(ORIGIN);
+      await expect(signing).rejects.toMatchObject({ code: 'DENIED' });
+    });
+
+    it('approval needs a pairing and a real origin', async () => {
+      const h = harness();
+      await h.core.init();
+      await expect(h.core.approveOrigin(NEW)).rejects.toMatchObject({ code: 'NOT_PAIRED' });
+      const p = await pairedCore();
+      await expect(p.core.approveOrigin('javascript:alert(1)')).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
   });
 
   it('setDaemonUrl validates, persists, and reopens the socket', async () => {

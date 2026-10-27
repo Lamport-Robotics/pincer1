@@ -64,6 +64,8 @@ export interface CoreDeps {
   broadcastBitcoin?(apiUrl: string, txHex: string): Promise<string>;
   /** Called when the "take over window.ethereum" toggle changes (registers the MAIN-world script). */
   applyTakeover?(on: boolean): Promise<void>;
+  /** Brings the popup up so the owner can answer a site's first `connect`. */
+  openPopup?(): Promise<void>;
   now?: () => number;
   setTimeout?: (fn: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
@@ -71,6 +73,7 @@ export interface CoreDeps {
   handshakeTimeoutMs?: number;
   openTimeoutMs?: number;
   maxBackoffMs?: number;
+  approvalTimeoutMs?: number;
 }
 
 export class CoreError extends Error implements WalletError {
@@ -95,6 +98,13 @@ interface Pending {
   startedAt: number;
   explain: Explain | null;
   resolve: (m: DaemonMessage & { t: 'signed' }) => void;
+  reject: (e: CoreError) => void;
+  timer: unknown;
+}
+
+interface Approval {
+  promise: Promise<void>;
+  resolve: () => void;
   reject: (e: CoreError) => void;
   timer: unknown;
 }
@@ -135,6 +145,8 @@ export class BackgroundCore {
   private readonly expectations: Expectation[] = [];
   private readonly pending = new Map<string, Pending>();
   private readonly connectedOrigins = new Set<string>();
+  private readonly approvedOrigins = new Set<string>();
+  private readonly approvals = new Map<string, Approval>();
   private readonly stateListeners = new Set<(s: StateView) => void>();
   private readonly pageEventListeners = new Set<(name: PageEventName, ev: PageEvent) => void>();
   private lastError: string | null = null;
@@ -146,6 +158,7 @@ export class BackgroundCore {
   private readonly handshakeTimeoutMs: number;
   private readonly openTimeoutMs: number;
   private readonly maxBackoffMs: number;
+  private readonly approvalTimeoutMs: number;
 
   constructor(private readonly deps: CoreDeps) {
     this.now = deps.now ?? (() => Date.now());
@@ -155,6 +168,7 @@ export class BackgroundCore {
     this.handshakeTimeoutMs = deps.handshakeTimeoutMs ?? 15_000;
     this.openTimeoutMs = deps.openTimeoutMs ?? 10_000;
     this.maxBackoffMs = deps.maxBackoffMs ?? 30_000;
+    this.approvalTimeoutMs = deps.approvalTimeoutMs ?? 120_000;
   }
 
   // ───────────── lifecycle ─────────────
@@ -172,8 +186,11 @@ export class BackgroundCore {
       evmRpcUrls: stored.evmRpcUrls && typeof stored.evmRpcUrls === 'object' ? stored.evmRpcUrls : {},
       btcApiUrl: stored.btcApiUrl || DEFAULT_BTC_API_URL,
       takeoverEthereum: stored.takeoverEthereum === true,
+      approvedOrigins: Array.isArray(stored.approvedOrigins) ? stored.approvedOrigins.filter((o) => typeof o === 'string') : [],
       log: Array.isArray(stored.log) ? stored.log.slice(0, LOG_LIMIT) : [],
     };
+    this.approvedOrigins.clear();
+    for (const o of this.settings.approvedOrigins ?? []) this.approvedOrigins.add(o);
     // Keep the dynamically registered takeover script in step with the stored toggle.
     void this.deps.applyTakeover?.(this.settings.takeoverEthereum === true).catch((e: Error) => {
       this.lastError = `window.ethereum takeover: ${e.message}`;
@@ -197,6 +214,8 @@ export class BackgroundCore {
       btcApiUrl: this.settings.btcApiUrl ?? DEFAULT_BTC_API_URL,
       takeoverEthereum: this.settings.takeoverEthereum === true,
       connectedOrigins: [...this.connectedOrigins],
+      approvedOrigins: [...this.approvedOrigins],
+      pendingApprovals: [...this.approvals.keys()],
       pending: p
         ? { id: p.id, kind: p.kind, chain: p.chain, origin: p.origin, startedAt: p.startedAt, explain: p.explain }
         : null,
@@ -527,11 +546,26 @@ export class BackgroundCore {
   }
 
   async forget(): Promise<void> {
+    // tell the daemon first: a token left behind in a storage backup must not keep working
+    if (this.settings.token && this.socket && this.status === 'open') {
+      try {
+        this.send({ t: 'revoke', token: this.settings.token });
+      } catch {
+        /* offline: the daemon's own expiry covers it */
+      }
+    }
     this.settings.token = undefined;
     this.settings.pubkey = undefined;
     this.settings.addresses = undefined;
+    this.settings.approvedOrigins = [];
     this.connectedOrigins.clear();
-    await this.deps.storage.set({ token: undefined, pubkey: undefined, addresses: undefined });
+    this.approvedOrigins.clear();
+    for (const [o, a] of [...this.approvals]) {
+      this.approvals.delete(o);
+      this.clearT(a.timer);
+      a.reject(new CoreError('NOT_PAIRED', 'robot was unpaired'));
+    }
+    await this.deps.storage.set({ token: undefined, pubkey: undefined, addresses: undefined, approvedOrigins: undefined });
     for (const p of [...this.pending.values()]) {
       this.settle(p, 'error', new CoreError('NOT_PAIRED', 'robot was unpaired'));
     }
@@ -547,8 +581,11 @@ export class BackgroundCore {
   ): Promise<PageResults[M]> {
     type R = PageResults[M];
     switch (req.method) {
-      case 'connect':
+      case 'connect': {
+        const p = req.params as PageParams['connect'];
+        if (p.silent && !this.approvedOrigins.has(origin)) throw new CoreError('NOT_CONNECTED', 'this site has not been approved in the Pincer1 popup');
         return (await this.connectOrigin(origin)) as R;
+      }
       case 'disconnect':
         this.connectedOrigins.delete(origin);
         this.emit();
@@ -813,6 +850,7 @@ export class BackgroundCore {
     if (this.connectedOrigins.has(origin) && this.status === 'open' && this.settings.pubkey) {
       return { pubkey: this.settings.pubkey };
     }
+    if (!this.approvedOrigins.has(origin)) await this.askApproval(origin);
     await this.waitForOpen();
     const reply = this.expect('connected');
     this.send({ t: 'connect', token: this.settings.token, origin });
@@ -835,6 +873,67 @@ export class BackgroundCore {
     this.connectedOrigins.add(origin);
     this.emit();
     return { pubkey };
+  }
+
+  // ───────────── per-site approval ─────────────
+
+  /** First `connect` from a site: the popup shows Approve / Deny; the promise settles with the answer. */
+  private askApproval(origin: string): Promise<void> {
+    const existing = this.approvals.get(origin);
+    if (existing) return existing.promise;
+    let resolve!: () => void;
+    let reject!: (e: CoreError) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    const a: Approval = { promise, resolve, reject, timer: null };
+    a.timer = this.setT(() => {
+      if (this.approvals.get(origin) !== a) return;
+      this.approvals.delete(origin);
+      a.reject(new CoreError('DENIED', 'nobody approved this site in time'));
+      this.emit();
+    }, this.approvalTimeoutMs);
+    this.approvals.set(origin, a);
+    this.emit();
+    void this.deps.openPopup?.().catch(() => {
+      /* no popup API (older Chrome): the badge/state still shows the request */
+    });
+    return promise;
+  }
+
+  async approveOrigin(origin: string): Promise<void> {
+    if (!this.settings.token) throw new CoreError('NOT_PAIRED', 'pair with the robot first');
+    if (!/^https?:\/\/[^\s/]+$/.test(origin)) throw new CoreError('BAD_REQUEST', 'origin must look like https://site');
+    this.approvedOrigins.add(origin);
+    this.settings.approvedOrigins = [...this.approvedOrigins];
+    await this.deps.storage.set({ approvedOrigins: this.settings.approvedOrigins });
+    const a = this.approvals.get(origin);
+    if (a) {
+      this.approvals.delete(origin);
+      this.clearT(a.timer);
+      a.resolve();
+    }
+    this.emit();
+  }
+
+  denyOrigin(origin: string): void {
+    const a = this.approvals.get(origin);
+    if (a) {
+      this.approvals.delete(origin);
+      this.clearT(a.timer);
+      a.reject(new CoreError('DENIED', 'the owner declined to connect this site'));
+    }
+    this.emit();
+  }
+
+  /** Drops the approval; the next request from that site asks again. */
+  async removeOrigin(origin: string): Promise<void> {
+    this.approvedOrigins.delete(origin);
+    this.connectedOrigins.delete(origin);
+    this.settings.approvedOrigins = [...this.approvedOrigins];
+    await this.deps.storage.set({ approvedOrigins: this.settings.approvedOrigins });
+    this.emit();
   }
 
   private async roundTrip(

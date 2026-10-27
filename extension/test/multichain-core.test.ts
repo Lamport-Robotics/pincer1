@@ -58,7 +58,7 @@ function fakeEvmNode() {
 
 function harness(initial: Partial<Settings> = {}) {
   const storage = new MemoryStorage();
-  Object.assign(storage.data, initial);
+  Object.assign(storage.data, { approvedOrigins: [ORIGIN] }, initial);
   const sockets: MockSocket[] = [];
   const pageEvents: PageEvent[] = [];
   const node = fakeEvmNode();

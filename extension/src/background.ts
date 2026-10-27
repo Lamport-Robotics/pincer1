@@ -28,6 +28,7 @@ const STORAGE_KEYS: (keyof Settings)[] = [
   'evmRpcUrls',
   'btcApiUrl',
   'takeoverEthereum',
+  'approvedOrigins',
   'log',
 ];
 
@@ -115,6 +116,7 @@ const core = new BackgroundCore({
   jsonRpc: (url, method, params) => jsonRpc(url, method, params),
   broadcastBitcoin: (api, hex) => broadcastBitcoinTx(api, hex),
   applyTakeover,
+  openPopup: () => chrome.action.openPopup(),
 });
 
 // ── MV3 keep-alive: Chrome kills an idle worker after 30 s, which would drop the WebSocket while
@@ -215,6 +217,15 @@ async function runPopupCommand(cmd: PopupCommand): Promise<string | null> {
     case 'setRpcUrl':
       await core.setRpcUrl(cmd.url);
       return 'Solana RPC saved';
+    case 'approveOrigin':
+      await core.approveOrigin(cmd.origin);
+      return `${cmd.origin.replace(/^https?:\/\//, '')} can connect`;
+    case 'denyOrigin':
+      core.denyOrigin(cmd.origin);
+      return null;
+    case 'removeOrigin':
+      await core.removeOrigin(cmd.origin);
+      return `${cmd.origin.replace(/^https?:\/\//, '')} removed`;
     case 'setEvmChain':
       await core.setEvmChain(cmd.chainId);
       return `switched to ${findEvmChain(cmd.chainId)?.name ?? cmd.chainId}`;

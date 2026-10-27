@@ -46,8 +46,10 @@ the new `inpage.js`.
 2. On the robot, start pairing. It speaks a 6-digit code.
 3. Type the code into the popup and press **Pair**. The extension sends `{"t":"pair","code":"…"}` once and
    stores the returned token and pubkey in `chrome.storage.local`. The code is never stored.
-4. The popup now shows the **three addresses** (click any to copy) and **Forget pairing**, which drops the
-   token, the addresses, and disconnects every site. The EVM and bitcoin addresses arrive with the daemon's
+4. The popup now shows the **three addresses** (click any to copy) and **Forget pairing**, which revokes the
+   token on the robot, drops it and the addresses, forgets every site approval, and disconnects every site.
+5. The first time a site calls connect, the popup asks **Approve / Deny** for that origin (deny = `4001`);
+   approved sites are listed with a **Remove** button and never asked again until removed. The EVM and bitcoin addresses arrive with the daemon's
    `connected` reply, so they appear after the first dapp connect (or at pairing, if the daemon includes
    `addresses` in `paired`).
 
@@ -138,7 +140,8 @@ testnet/signet, Stacks methods.
 
 ### Popup
 
-- the three addresses with copy; connected sites; *Forget pairing*
+- the three addresses with copy; connected sites; approved sites with *Remove*; the *Site wants to connect*
+  card with *Approve* / *Deny*; *Forget pairing*
 - **EVM chain & RPC**: the active chain (changing it switches every tab and fires `chainChanged`), and the
   RPC URL for the selected chain (empty = the built-in default); the *take over `window.ethereum`* toggle
 - **Solana RPC** for mainnet sends; **Bitcoin API** (Esplora base URL) for broadcasts

@@ -42,6 +42,9 @@ const ui = {
   addrBitcoin: $<HTMLButtonElement>('addrBitcoin'),
   addrHint: $('addrHint'),
   origins: $('origins'),
+  sites: $('sites'),
+  approvalCard: $('approvalCard'),
+  approvals: $('approvals'),
   forget: $<HTMLButtonElement>('forget'),
   evmChain: $<HTMLSelectElement>('evmChain'),
   evmChainId: $('evmChainId'),
@@ -207,7 +210,9 @@ function render(): void {
     renderAddress(ui.addrBitcoin, state.addresses.bitcoin);
     ui.addrHint.hidden = Boolean(state.addresses.evm && state.addresses.bitcoin);
     ui.origins.textContent = state.connectedOrigins.length ? state.connectedOrigins.map(originLabel).join(', ') : 'none connected';
+    renderSites(state.approvedOrigins);
   }
+  renderApprovals(state.pendingApprovals);
 
   const p = state.pending;
   ui.pendingCard.hidden = !p;
@@ -242,6 +247,47 @@ function render(): void {
   }
 
   renderLog(state.log);
+}
+
+function siteButton(text: string, cls: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = cls;
+  b.textContent = text;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderApprovals(origins: string[]): void {
+  ui.approvalCard.hidden = origins.length === 0;
+  ui.approvals.replaceChildren(
+    ...origins.map((origin) => {
+      const li = document.createElement('li');
+      const site = document.createElement('span');
+      site.className = 'site';
+      site.textContent = originLabel(origin);
+      site.title = origin;
+      li.append(
+        site,
+        siteButton('Deny', 'small', () => send({ t: 'denyOrigin', origin })),
+        siteButton('Approve', 'small accent', () => send({ t: 'approveOrigin', origin })),
+      );
+      return li;
+    }),
+  );
+}
+
+function renderSites(origins: string[]): void {
+  ui.sites.replaceChildren(
+    ...origins.map((origin) => {
+      const li = document.createElement('li');
+      const site = document.createElement('span');
+      site.className = 'site';
+      site.textContent = originLabel(origin);
+      site.title = origin;
+      li.append(site, siteButton('Remove', 'small ghost', () => send({ t: 'removeOrigin', origin })));
+      return li;
+    }),
+  );
 }
 
 function renderLog(log: LogEntry[]): void {
@@ -341,7 +387,7 @@ ui.code.addEventListener('input', () => {
 ui.reconnect.addEventListener('click', () => send({ t: 'reconnect' }));
 
 ui.forget.addEventListener('click', () => {
-  if (confirm('Forget this robot? Sites will be disconnected and you will need a new pairing code.')) {
+  if (confirm('Forget this robot? The token is revoked on the robot, every site approval is dropped, and you will need a new pairing code.')) {
     send({ t: 'forget' });
   }
 });

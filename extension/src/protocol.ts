@@ -36,6 +36,8 @@ export interface DaemonAddresses {
 export type DaemonRequest =
   | { t: 'pair'; code: string }
   | { t: 'connect'; token: string; origin: string }
+  // forget: the daemon drops this token so a copy of extension storage cannot reuse it
+  | { t: 'revoke'; token: string }
   // solana: `tx` is the base64 serialized (legacy or v0) transaction
   | { t: 'signTransaction'; id: string; chain: 'solana'; tx: string; origin: string }
   // evm: `tx` is the 0x-hex RLP of the UNSIGNED typed (0x02) or EIP-155 legacy transaction
@@ -293,6 +295,8 @@ export interface Settings {
   evmRpcUrls?: Record<string, string>;
   btcApiUrl?: string;
   takeoverEthereum?: boolean;
+  /** Sites the owner approved in the popup; any other origin's `connect` waits for an answer. */
+  approvedOrigins?: string[];
   log: LogEntry[];
 }
 
@@ -309,6 +313,9 @@ export interface StateView {
   btcApiUrl: string;
   takeoverEthereum: boolean;
   connectedOrigins: string[];
+  approvedOrigins: string[];
+  /** Origins whose first `connect` is waiting for Approve / Deny in the popup. */
+  pendingApprovals: string[];
   pending: PendingView | null;
   log: LogEntry[];
   lastError: string | null;
@@ -323,7 +330,10 @@ export type PopupCommand =
   | { t: 'setTakeoverEthereum'; on: boolean }
   | { t: 'pair'; code: string }
   | { t: 'forget' }
-  | { t: 'reconnect' };
+  | { t: 'reconnect' }
+  | { t: 'approveOrigin'; origin: string }
+  | { t: 'denyOrigin'; origin: string }
+  | { t: 'removeOrigin'; origin: string };
 
 export type PopupMessage = { t: 'state'; state: StateView } | { t: 'toast'; text: string; kind: 'ok' | 'err' };
 
