@@ -1,0 +1,6 @@
+patchedDependencies:
+  bigint-buffer@1.1.5: patches/bigint-buffer@1.1.5.patch
+# bigint-buffer: the native binding is patched out (pure JS path), so the advisory no longer applies
+auditConfig:
+  ignoreGhsas:
+    - GHSA-3gc7-fjrx-p6mg

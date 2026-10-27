@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  bigint-buffer@1.1.5: f1fda2fe8c97b0e42966d4b6abaa0d4edf7953b316cac3a38b2bbbdce48b30f7
+
 importers:
 
   .:
@@ -1617,7 +1620,7 @@ snapshots:
     dependencies:
       '@solana/buffer-layout': 4.0.1
       '@solana/web3.js': 1.95.8(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      bigint-buffer: 1.1.5
+      bigint-buffer: 1.1.5(patch_hash=f1fda2fe8c97b0e42966d4b6abaa0d4edf7953b316cac3a38b2bbbdce48b30f7)
       bignumber.js: 9.3.1
     transitivePeerDependencies:
       - bufferutil
@@ -1720,7 +1723,7 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@solana/buffer-layout': 4.0.1
       agentkeepalive: 4.6.0
-      bigint-buffer: 1.1.5
+      bigint-buffer: 1.1.5(patch_hash=f1fda2fe8c97b0e42966d4b6abaa0d4edf7953b316cac3a38b2bbbdce48b30f7)
       bn.js: 5.2.5
       borsh: 0.7.0
       bs58: 4.0.1
@@ -1838,7 +1841,7 @@ snapshots:
 
   bech32@2.0.0: {}
 
-  bigint-buffer@1.1.5:
+  bigint-buffer@1.1.5(patch_hash=f1fda2fe8c97b0e42966d4b6abaa0d4edf7953b316cac3a38b2bbbdce48b30f7):
     dependencies:
       bindings: 1.5.0
 

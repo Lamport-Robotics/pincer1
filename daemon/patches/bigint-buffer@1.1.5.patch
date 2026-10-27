@@ -1,0 +1,22 @@
+diff --git a/dist/node.js b/dist/node.js
+index 513168c89e387668a79b6beb109587b3eb41a7d0..0ecbaf1978ff10e26b7048bdbcdc1f878f71b465 100644
+--- a/dist/node.js
++++ b/dist/node.js
+@@ -1,15 +1,9 @@
+ 'use strict';
+ 
+ Object.defineProperty(exports, "__esModule", { value: true });
++// pincer1: the native binding reads past the end of short buffers (GHSA-3gc7-fjrx-p6mg); the pure-JS path is
++// bounds-safe, fast enough for u64 layouts, and the only one this daemon runs.
+ let converter;
+-{
+-    try {
+-        converter = require('bindings')('bigint_buffer');
+-    }
+-    catch (e) {
+-        console.warn('bigint: Failed to load bindings, pure JS will be used (try npm run rebuild?)');
+-    }
+-}
+ /**
+  * Convert a little-endian buffer into a BigInt.
+  * @param buf The little-endian buffer to convert
