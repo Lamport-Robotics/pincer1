@@ -27,6 +27,9 @@ int signer_import(uint8_t slot, const uint8_t priv[32], uint8_t pubkey[32]);
 int signer_pubkey(uint8_t slot, uint8_t pubkey[32]);
 int signer_sign(uint8_t slot, const uint8_t *msg, size_t len, uint8_t sig[64]);
 bool signer_slot_present(uint8_t slot);
+/* Proves the key policy at boot: a signature asked WITHOUT the PIN session must be refused by the back-end.
+ * false = the policy does not hold (wrong applet, provisioning bug); the caller stops signing. */
+bool signer_policy_selftest(void);
 
 /* ---- secp256k1 (EVM + Bitcoin), one key per slot per chain, same PIN gating as the ed25519 key ----
  * Imports a 32-byte BIP32 private key as a non-exportable secp256k1 key pair; returns the 64-byte X||Y

@@ -61,6 +61,7 @@ static bool may_sign(uint8_t slot)
 
 int signer_init(void) { return 0; }
 bool signer_is_hardware(void) { return false; }
+bool signer_policy_selftest(void) { return true; } /* no chip, no policy to prove */
 bool signer_keys_from_otp(void) { return false; }
 
 int signer_import(uint8_t slot, const uint8_t priv[32], uint8_t pubkey[32])

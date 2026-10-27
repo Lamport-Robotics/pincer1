@@ -1302,7 +1302,7 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
     g_doc_foot = tui_sign_footer(&ui);
     g_doc_cancelable = replacing; /* arming waits for the long touch; a replace can be cancelled by holding */
     ui_sign_page(0);
-    send_line(proto_fmt_pending_sol(g_out, sizeof g_out, r->id, consent_need_str(consent_pending_need(&g_consent)), &parsed, eff_danger));
+    send_line(proto_fmt_pending_sol(g_out, sizeof g_out, r->id, consent_need_str(consent_pending_need(&g_consent)), parsed, eff_danger));
 }
 
 static void handle_inheritance_status(const char *id)
@@ -1673,6 +1673,10 @@ int main(void)
         }
         if (g_consent.p.initialized && !signer_slot_present(CONSENT_SLOT_REAL)) {
             /* Flash says initialised but the key is gone (chip swapped / erased): refuse to sign. */
+            g_signer_ok = false;
+        }
+        if (g_signer_ok && !signer_policy_selftest()) {
+            /* the chip would sign without the PIN session: the policy we rely on is not there */
             g_signer_ok = false;
         }
         if (g_consent.p.pin_set && !signer_pin_present()) {

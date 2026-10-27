@@ -465,6 +465,25 @@ int signer_sign(uint8_t slot, const uint8_t *msg, size_t len, uint8_t sig[64])
 
 bool signer_slot_present(uint8_t slot) { return slot < SIGNER_SLOTS && g_present[slot]; }
 
+bool signer_policy_selftest(void)
+{
+    static const uint8_t probe[] = "pincer1 policy self-test: this must never be signed";
+    uint8_t sig[64];
+    size_t sigLen = sizeof sig;
+    uint8_t slot;
+    if (!g_open || !g_scp.open) return false;
+    for (slot = 0; slot < SIGNER_SLOTS; slot++) {
+        smStatus_t st;
+        if (!g_present[slot]) continue;
+        /* platform session only: the policy grants SIGN to the PIN auth object, not to "all sessions" */
+        st = Se05x_API_EdDSASign(&g_plat, SLOT_OBJ_ID[slot], kSE05x_EDSignatureAlgo_ED25519PURE_SHA_512, probe,
+                                 sizeof probe - 1, sig, &sigLen);
+        secure_zero(sig, sizeof sig);
+        if (st == SM_OK) return false; /* the chip signed for anyone: policy not in force */
+    }
+    return true;
+}
+
 int signer_import_secp256k1(uint8_t slot, uint8_t chain, const uint8_t priv[32], uint8_t pub[64])
 {
     uint8_t pub65[65], polbuf[32];
