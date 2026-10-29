@@ -65,6 +65,7 @@ The sim controller reproduces step 7 in software, so the tests exercise the full
 pnpm test        # parse, explain, scam filter, full pipeline with sim + mock robot, extension ws contract, agent rules,
                  # EVM parse/explain/risk/EIP-712/pipeline, Bitcoin PSBT build/risk/finalise, swaps with fake routers, sim chain policy, mode gating
 pnpm typecheck
+pnpm check:programs   # every id in PROGRAM_NAMES is a live executable program on mainnet (needs network)
 ```
 
 ## Overnight agent
