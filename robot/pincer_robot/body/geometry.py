@@ -6,8 +6,9 @@ Frames (right-handed, metres, radians):
 * leg frame i: origin at leg i's coxa axis, x pointing outward along the mount yaw, z up.
 
 Legs are numbered clockwise from the front right: 0 FR, 1 MR, 2 RR, 3 RL, 4 ML, 5 FL. The default
-numbers fit a six-legged body on 3 mm plates with 30 kg·cm bus servos (docs/HARDWARE.md); a
-different
+numbers are the v1 chassis as measured: axis-to-axis segment lengths and coxa positions about the
+centre of the leg mounts. The knee servo sits 22° off the femur line and the foot 5° off the tibia; both
+are absorbed by the servo zero in `Calibration`, so the kinematics see straight segments. A different
 build changes the dataclass, not the code.
 """
 
@@ -31,16 +32,16 @@ class JointLimits:
 @dataclass(frozen=True)
 class BodyGeometry:
     coxa_m: float = 0.045
-    femur_m: float = 0.080
-    tibia_m: float = 0.120
+    femur_m: float = 0.077
+    tibia_m: float = 0.116
     # coxa axis positions in the body frame (x, y) and the mount yaw, per leg
     mounts: tuple[tuple[float, float, float], ...] = (
-        (0.085, -0.065, -math.radians(50)),  # FR
-        (0.000, -0.095, -math.radians(90)),  # MR
-        (-0.085, -0.065, -math.radians(130)),  # RR
-        (-0.085, 0.065, math.radians(130)),  # RL
-        (0.000, 0.095, math.radians(90)),  # ML
-        (0.085, 0.065, math.radians(50)),  # FL
+        (0.093, -0.051, -math.radians(45)),  # FR
+        (0.000, -0.074, -math.radians(90)),  # MR
+        (-0.093, -0.051, -math.radians(135)),  # RR
+        (-0.093, 0.051, math.radians(135)),  # RL
+        (0.000, 0.074, math.radians(90)),  # ML
+        (0.093, 0.051, math.radians(45)),  # FL
     )
     limits: JointLimits = field(default_factory=JointLimits)
     # neutral stance: foot this far out along the mount yaw, body this high above the ground
