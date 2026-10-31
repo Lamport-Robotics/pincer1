@@ -26,8 +26,9 @@ What's in here: `firmware/` (pico-sdk, C), `daemon/` (TypeScript), `robot/` (Pyt
 `brand/`, `deploy/jetson/`, `docs/`.
 
 The legs are in `robot/pincer_robot/body/`: leg kinematics, tripod / ripple / wave gaits, the serial
-bus driver for the servos and a simulator the tests walk (`docs/BODY.md`). Not in here: the CAD. v1
-bodies are built from the parts in `docs/HARDWARE.md`.
+bus driver for the servos and a simulator the tests walk (`docs/BODY.md`). `sim/` has the robot as
+URDF and MJCF for MuJoCo, Isaac and the browser simulators. Not in here: the CAD. v1 bodies are built
+from the parts in `docs/HARDWARE.md`.
 
 ## features
 
