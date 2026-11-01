@@ -87,6 +87,20 @@ class RobotInterface(ABC):
         self._drive(lin_x=sign * speed, ang_z=0.0, duration_s=duration)
         return f"OK: walked {direction} {distance_m:.2f} m."
 
+    def climb(
+        self,
+        riser_m: float,
+        tread_m: float = 0.28,
+        steps: int = 1,
+        *,
+        distance_m: float | None = None,
+        yaw_rad: float | None = None,
+    ) -> str:
+        """Climb ``steps`` risers of ``riser_m`` ahead. Only a body with its own legs can; the
+        others refuse. ``distance_m`` / ``yaw_rad`` are the first riser as the floor watch saw it,
+        used to square up and close in before the cycle starts."""
+        return "REFUSED: this body cannot climb."
+
     def turn(self, direction: str, angle_deg: float, speed: float = 0.4) -> str:
         angle_deg = _clamp(angle_deg, 0.0, MAX_TURN_DEG)
         speed = _clamp(speed, 0.1, MAX_SPEED)
@@ -146,6 +160,24 @@ class MotionController:
             return
         async with self._lock:
             await asyncio.to_thread(self._sway_blocking)
+
+    async def climb(
+        self,
+        riser_m: float,
+        tread_m: float = 0.28,
+        steps: int = 1,
+        *,
+        distance_m: float | None = None,
+        yaw_rad: float | None = None,
+    ) -> str:
+        async with self._lock:
+            result = await asyncio.to_thread(
+                lambda: self.robot.climb(
+                    riser_m, tread_m, steps, distance_m=distance_m, yaw_rad=yaw_rad
+                )
+            )
+        log.info("climb: %s", result)
+        return result
 
     async def run_exclusive(self, fn: Callable[..., T], *args: Any) -> T:
         """Run a blocking drive routine in a thread while holding the motion lock

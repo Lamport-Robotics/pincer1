@@ -131,6 +131,10 @@ the landing within 3° of roll, nose up to 32° on the way; joint torque stays a
 climb against the 3 N m the servos have, with one brush of the underside on a step edge. Twelve and
 thirteen centimetre runs climb the same way.
 
+On the robot the cycle is `BodyBackend.climb`: it squares up to the riser the floor watch reported
+(turn by its angle, walk to the cycle's standoff), then plays the keyframes at the gait tick. The
+daemon asks for it with the `climb` message (`docs/PROTOCOL.md` §2), with or without naming the riser.
+
 ## the floor ahead
 
 `robot/pincer_robot/terrain.py` is what the climb and the walk look at before moving. The depth

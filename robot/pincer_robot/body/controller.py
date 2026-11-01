@@ -19,7 +19,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Callable, Protocol
 
 from ..motion import GAIT_SPEED_MPS, TURN_RATE_DPS, RobotInterface, RobotStatus
 from .gait import GaitParams, GaitState, Velocity, feet_down, step
@@ -277,6 +277,75 @@ class BodyBackend(RobotInterface):
                         break
                     time.sleep(period)
                 self._moving = False
+
+    def climb(
+        self,
+        riser_m: float,
+        tread_m: float = 0.28,
+        steps: int = 1,
+        *,
+        distance_m: float | None = None,
+        yaw_rad: float | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> str:
+        """Square up to the first riser, close in to the cycle's standoff, then play the stair
+        cycle from ``climb.py`` at the gait tick. Refused with the planner's reason when the
+        geometry cannot do the riser, or when the body is resting."""
+        from .climb import (
+            ClimbError,
+            ClimbParams,
+            Terrain,
+            angles_at,
+            climb_cycle,
+            duration,
+            interpolate,
+        )
+
+        why = self.resting()
+        if why is not None:
+            return f"REFUSED: not climbing ({why})."
+        if self._status.tilt_deg > 10.0:
+            return f"REFUSED: body tilted {self._status.tilt_deg:.0f} deg before the stairs."
+        params = ClimbParams(riser_m=riser_m, tread_m=tread_m, steps=max(1, int(steps)))
+        try:
+            keyframes = climb_cycle(self.body.geometry, params)
+        except ClimbError as e:
+            return f"REFUSED: {e.phase}: {e.reason}."
+        notes: list[str] = []
+        if yaw_rad is not None and abs(yaw_rad) > math.radians(3.0):
+            notes.append(
+                self.turn("left" if yaw_rad > 0 else "right", abs(math.degrees(yaw_rad)), speed=0.4)
+            )
+        if distance_m is not None:
+            gap = distance_m - Terrain(riser_m, tread_m).edge0_m
+            if gap > 0.02:
+                notes.append(self.walk("forward", gap, speed=0.4))
+            elif gap < -0.05:
+                notes.append(self.walk("backward", -gap, speed=0.4))
+        if any(n.startswith("REFUSED") for n in notes):
+            return "; ".join(notes)
+        period = 1.0 / TICK_HZ
+        with self._lock:
+            self._moving = True
+            try:
+                for feet, pose in interpolate(keyframes, period):
+                    t0 = time.monotonic()
+                    angles = angles_at(self.body.geometry, feet, pose)
+                    self.body.angles = angles
+                    if self.body.actuator is not None:
+                        self.body.actuator.apply(angles)
+                    sleep(max(0.0, period - (time.monotonic() - t0)))
+            except ReachError as e:
+                self.body.stop()
+                return f"STOPPED: {e}"
+            finally:
+                self._moving = False
+        self.body.stop()
+        total = steps * riser_m
+        return (
+            f"OK: climbed {steps} step(s) of {riser_m * 100:.0f} cm, {total * 100:.0f} cm up, "
+            f"in {duration(keyframes):.0f} s."
+        )
 
     def stop(self) -> None:
         self.body.stop()

@@ -637,6 +637,23 @@ class RobotApp:
     async def goto(self, room: str) -> NavResult:
         return await self.nav.goto(room)
 
+    async def climb(self, riser_m: float | None, tread_m: float = 0.28, steps: int = 1) -> str:
+        """Climb the riser the floor watch sees, or the one the caller names."""
+        distance = yaw = None
+        if riser_m is None:
+            with self.shared.lock:
+                floor = self.shared.floor
+            step = getattr(floor, "step", None)
+            if step is None or time.time() - floor.ts > 3.0:
+                return "REFUSED: no riser in view."
+            riser_m, distance, yaw = step.riser_m, step.distance_m, step.yaw
+            if step.tread_m is not None:
+                tread_m = step.tread_m
+        await self.dock.leave_dock_for("climb")
+        return await self.motion.climb(
+            float(riser_m), float(tread_m), int(steps), distance_m=distance, yaw_rad=yaw
+        )
+
     async def name_room(self, name: str, radius: float | None, polygon: Any) -> dict[str, Any]:
         if name == DOCK_ROOM:
             # The robot is sitting on the dock: record it, register the staging pose.
@@ -835,14 +852,28 @@ class RobotApp:
                 await self.motion.idle_sway()
 
     def _start_sensors(self) -> None:
+        oak: Any = None  # the head camera when it serves both colour and depth
         if self.mock:
             sim = MockSensorSim(self, self.cfg.mock_scenario)
             self._threads.append(threading.Thread(target=sim.run, name="mock-sensors", daemon=True))
         else:
+            if self.cfg.camera_source == "oak":
+                try:
+                    from .depth import OakCamera
+
+                    oak = OakCamera(
+                        self.cfg.depth_width, self.cfg.depth_height, self.cfg.camera_fps
+                    )
+                except Exception as exc:
+                    log.error(
+                        "head camera (oak) unavailable (%s): falling back to camera %d",
+                        exc,
+                        self.cfg.camera_index,
+                    )
             try:
                 from .presence.face import CameraSource, InsightFaceRecognizer
 
-                source = CameraSource(self.cfg.camera_index)
+                source = oak if oak is not None else CameraSource(self.cfg.camera_index)
                 rec = InsightFaceRecognizer.from_plan(self.plan, self.cfg.face_det_size)
                 self._threads.append(
                     threading.Thread(
@@ -859,6 +890,8 @@ class RobotApp:
                 depth_source = MockDepthSource(
                     self._head_pose, scene=mock_scene(self.cfg.mock_depth)
                 )
+        elif oak is not None:
+            depth_source = oak.depth  # the same device, its depth stream
         elif self.cfg.depth_enabled:
             try:
                 from .depth import OakDepthSource

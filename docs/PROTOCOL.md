@@ -642,6 +642,10 @@ lines; it does not stop the alarm.
 {"t":"name_room","id":"n3","name":"hall","polygon":[[0,0],[3,0],[3,1.2],[0,1.2]]}   // map-frame metres
                                    ← {"t":"name_room","id":"n1","ok":true,"name":"bedroom","x":1.2,"y":4.0,"radius":2.0,"polygon":null,"rooms":[…]}
 {"t":"goto","id":"g1","room":"bedroom"}          ← {"t":"goto","id":"g1","room":"bedroom","ok":true,"reason":"arrived","secs":41}
+{"t":"climb","id":"c1"}                           // the riser the depth camera sees right now (distance, height, angle, tread)
+{"t":"climb","id":"c2","riser":0.17,"tread":0.28,"steps":3}
+                                   ← {"t":"climb","id":"c2","ok":true,"result":"OK: climbed 3 step(s) of 17 cm, 51 cm up, in 94 s."}
+                                   ← {"t":"climb","id":"c1","ok":false,"result":"REFUSED: no riser in view."}
 ```
 
 `goto` reasons: `arrived`, `timeout` (90 s default), `no_map`, `unknown_room`, `blocked`/`rejected`

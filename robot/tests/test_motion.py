@@ -53,3 +53,10 @@ def test_the_floor_ahead_refuses_a_forward_walk_too() -> None:
     assert robot.walk("backward", 0.2).startswith("OK")
     robot.get_status().floor_clearance_m = 9.0
     assert robot.walk("forward", 0.2).startswith("OK")
+
+
+def test_climb_is_refused_by_a_body_without_legs() -> None:
+    robot = MockRobot()
+    assert robot.climb(0.12).startswith("REFUSED")
+    ctl = MotionController(robot)
+    assert asyncio.run(ctl.climb(0.12, 0.28, 1)).startswith("REFUSED")

@@ -291,3 +291,17 @@ def test_backend_walks_then_settles(monkeypatch):
     assert all(body.feet_down())
     assert sim.report().stable
     assert robot.get_status().is_moving is False
+
+
+def test_body_backend_climbs_a_step_in_the_simulator() -> None:
+    body, sim = simulated_body()
+    backend = BodyBackend(body)
+    body.stand(actuate=True)
+    res = backend.climb(0.12, 0.28, 1, sleep=lambda _s: None)
+    assert res.startswith("OK: climbed 1 step(s) of 12 cm"), res
+    assert not backend.get_status().is_moving
+    # the planner's refusal comes back as a reason, not an exception
+    assert backend.climb(0.40, sleep=lambda _s: None).startswith("REFUSED")
+    # squaring up uses the ordinary walk and turn first
+    res = backend.climb(0.08, distance_m=0.45, yaw_rad=math.radians(12), sleep=lambda _s: None)
+    assert res.startswith("OK"), res
