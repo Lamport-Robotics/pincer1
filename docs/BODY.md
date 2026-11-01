@@ -106,21 +106,26 @@ ranges the shell window and the cable loop allow, and are narrower than the serv
 ## stairs
 
 `climb.py` crawls over steps with keyframes generated from the same kinematics: the body advances
-8 cm per cycle in three pulls, and between the pulls each pair of legs steps to where it is needed
+11 cm per cycle in three pulls, and between the pulls each pair of legs steps to where it is needed
 next, its foot on whatever level is there and never within 4.5 cm of an edge. A foot in the air goes
-out to 16 cm from its coxa while it lifts, because that is where the leg reaches highest, crosses the
+out to 22 cm from its coxa while it lifts, because that is where the leg reaches highest, crosses the
 riser there and comes back in as it lands; the middle feet land wide for the same reason. Body height
-and pitch follow the feet (nose up to 25°), and every keyframe must solve inside the joint limits with
-three feet down and the centre inside their support polygon, or the riser is refused with the phase
-that failed. `interpolate` turns the keyframes into the 50 Hz samples the simulator and the robot play.
+and pitch follow the feet (nose up to 30°). Every keyframe must solve inside the joint limits with
+three feet down, the centre 3.5 cm inside their support polygon (the head on its arm moves the real
+centre of mass when the body is pitched) and the underside of the body 1.5 cm clear of the step below
+it, or the riser is refused with the phase that failed. On the landing the body comes level and down
+to walking height first, then the feet walk out to the walking stance one at a time. `interpolate`
+turns the keyframes into the 50 Hz samples the simulator and the robot play; a keyframe that moves
+the body far takes longer (30°/s of pitch, 6 cm/s of height, 10 cm/s of travel), so the body is never
+thrown from one pose to the next.
 
-What the geometry allows, from the generator: a single step up to 13 cm; 14 cm fails when the first
-rear leg has to lift while the other still stands on the lower floor. A run of steps with a 28 cm tread
-holds the front feet two risers above the rear ones, which the pitch cannot absorb past 8 cm risers.
-In MuJoCo (`sim/stairs.py`, position servos at the walking gains) the body gets up single steps of 6 to
-13 cm level to within 1° of roll, three 6 cm steps in a row, and tips over at the top of three 8 cm
-steps; joint torque stays near 1 N m through the climb against the 3 N m the servos have. A 17 cm
-riser needs longer legs or a different body, not more tuning.
+With the 110 / 160 legs on the 23 cm body, the generator allows single steps up to 15 cm and runs of
+steps up to 13 cm at a 25 to 28 cm tread. In MuJoCo (`sim/stairs.py`, position servos at the walking
+gains) the body gets up 14 and 15 cm single steps and three 12 or 13 cm steps in a row, level within
+2° of roll at the top, joint torque 1.6 N m through the climb against the 3 N m the servos have; a
+shin brushes a riser edge once per climb. The body, not the legs, is what stops at 13 cm: on a 28 cm
+tread the nose reaches the next riser before the rear feet are up on the current one. The same cycle
+with the leg mounts 2 cm closer together (a 21 cm body) climbs three 17 cm steps in the simulator.
 
 ## the floor ahead
 

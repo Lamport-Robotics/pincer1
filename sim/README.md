@@ -28,20 +28,25 @@ a floor in the neutral stance from the body's own IK and prints the height, tilt
 
 ```
 python sim/walk.py --gait tripod --seconds 6
+python sim/walk.py --speed 0.4 --cycle 0.5 --step 0.15 --no-gif
+python sim/walk.py --turn 1.0 --no-gif
 ```
 
 drives the same `Body` controller the robot runs: the gait and leg IK produce the joint targets at
-50 Hz, MuJoCo position servos hold them, physics does the rest. It prints the distance covered against
-the commanded speed, the body height, the largest roll and pitch, and whether anything but a foot
-touched the floor, then writes `walk.gif` (one palette, unchanged pixels left transparent, so it stays
-small). `--gait ripple` and `wave` run the other two.
+50 Hz, MuJoCo position servos hold them, physics does the rest. It prints the distance (or the angle
+turned) against what was commanded, the body height, the largest roll and pitch, and whether anything
+but a foot touched the floor, then writes `walk.gif` (one palette, unchanged pixels left transparent,
+so it stays small). `--speed`, `--turn`, `--cycle`, `--step`, `--lift` and `--kp` (servo stiffness)
+override the defaults; `--gait ripple` and `wave` run the other two. The default speed is the
+service's `GAIT_SPEED_MPS`.
 
 ```
-python sim/stairs.py --riser 0.12 --gif
+python sim/stairs.py --riser 0.13 --steps 3 --gif
 python sim/stairs.py --sweep --steps 1
 ```
 
 plays `pincer_robot.body.climb` over one or more box steps and reports whether the body got onto each
 tread, the largest roll and pitch, the 99th percentile and peak of the leg joint torque against what a
-servo can hold, anything but a foot touching the ground, and when it fell if it did. The gif plays the
-climb three times faster than the cycle runs.
+servo can hold, anything but a foot touching the ground, and when it fell if it did. `--tread`, `--kp`
+(servo stiffness) and `--sweep` (one run per riser in `SWEEP`) are the knobs. The gif plays the climb
+three times faster than the cycle runs.
