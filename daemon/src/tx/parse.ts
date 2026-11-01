@@ -52,6 +52,8 @@ export interface ParsedTx {
   priorityLamports: bigint;
   /** Primary recipient of SOL: the destination receiving the most lamports from the owner. */
   dest: string | null;
+  /** Distinct destinations that receive lamports from the owner; the controller shows one and refuses more. */
+  solRecipients: number;
   tokenOut: TokenMove[];
   tokenIn: TokenMove[];
   dangers: Danger[];
@@ -142,6 +144,7 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
     instructions,
     programs: [...new Set(instructions.map((i) => i.program))],
     lamportsOut: 0n,
+    solRecipients: 0,
     feeLamports: 0n,
     priorityLamports: 0n,
     dest: null,
@@ -263,7 +266,7 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
         }
         case 9: { // closeAccount: [account, dest, owner]
           ix.label = "Token.closeAccount";
-          if (ix.accounts[2] === owner && ix.accounts[1] !== owner) {
+          if (ix.accounts[2] === owner) { // any close the owner authorises is declared, wherever the rent goes (PROTOCOL §1)
             out.dangers.push({ kind: "close_account", program: prog, detail: `closes ${ix.accounts[0]} and sends its rent to ${ix.accounts[1]}`, to: ix.accounts[1] });
           }
           break;
@@ -323,6 +326,7 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
 
   let best: [string, bigint] | null = null;
   for (const e of lamportsTo) if (!best || e[1] > best[1]) best = e;
+  out.solRecipients = [...lamportsTo.values()].filter((n) => n > 0n).length;
   out.dest = best?.[0] ?? null;
   // the fee: 5000 per required signature, plus the compute budget's unit limit x price. Without an explicit
   // limit the runtime grants 200k units per non-budget instruction (capped at 1.4M), the same way solmsg.c counts it.
@@ -380,3 +384,14 @@ export function claimsFor(p: ParsedTx, routers: ReadonlySet<string> = new Set([J
 }
 
 export type { Message, MessageV0 };
+
+/** Maximum token transfers the controller lists on its display; more and it refuses the whole request. */
+export const CONTROLLER_MAX_TOKEN_OUT = 8;
+
+/** Shapes the controller refuses outright (PROTOCOL §1), said up front instead of coming back as denied:policy. */
+export function controllerLimits(tx: ParsedTx): string[] {
+  const out: string[] = [];
+  if (tx.solRecipients > 1) out.push(`SOL leaves to ${tx.solRecipients} different recipients; the controller shows one destination and refuses more.`);
+  if (tx.tokenOut.length > CONTROLLER_MAX_TOKEN_OUT) out.push(`${tx.tokenOut.length} token transfers; the controller lists at most ${CONTROLLER_MAX_TOKEN_OUT}.`);
+  return out;
+}

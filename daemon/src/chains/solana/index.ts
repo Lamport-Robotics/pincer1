@@ -4,7 +4,7 @@
  * reaches it through the same door as EVM and Bitcoin.
  */
 import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
-import { claimsFor, parseMessage, type ParsedTx } from "../../tx/parse.js";
+import { claimsFor, controllerLimits, parseMessage, type ParsedTx } from "../../tx/parse.js";
 import { explain, fmtSol, type Explanation } from "../../tx/explain.js";
 import { assess, type RiskVerdict } from "../../risk/filter.js";
 import { Intel, type AddressIntel } from "../../risk/intel.js";
@@ -87,7 +87,9 @@ export class SolanaAdapter implements ChainAdapter<SolanaParsed> {
   assess(parsed: SolanaParsed, ctx: AssessCtx): RiskVerdict {
     const intel: Record<string, AddressIntel> = {};
     for (const [k, v] of Object.entries(ctx.intel)) intel[k] = fromChainIntel(v);
-    return assess({ tx: parsed.tx, owner: ctx.owner, ownerLamports: ctx.ownerBalance != null ? Number(ctx.ownerBalance) : undefined, intel, addressBook: ctx.addressBook, origin: ctx.origin, originAllowlist: ctx.originAllowlist, dailyLimitLamports: ctx.dailyLimit, knownPrograms: ctx.knownPrograms });
+    const verdict = assess({ tx: parsed.tx, owner: ctx.owner, ownerLamports: ctx.ownerBalance != null ? Number(ctx.ownerBalance) : undefined, intel, addressBook: ctx.addressBook, origin: ctx.origin, originAllowlist: ctx.originAllowlist, dailyLimitLamports: ctx.dailyLimit, knownPrograms: ctx.knownPrograms });
+    const hard = controllerLimits(parsed.tx);
+    return hard.length ? { level: "block", reasons: [...hard, ...verdict.reasons] } : verdict;
   }
 
   claims(parsed: SolanaParsed): SolanaClaims { return claimsFor(parsed.tx, this.routers); }

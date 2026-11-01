@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ownerAtaSet, parseMessage, looksLikeMessage, claimsFor } from "../src/tx/parse.js";
+import { ownerAtaSet, parseMessage, looksLikeMessage, claimsFor, controllerLimits } from "../src/tx/parse.js";
 import { explain } from "../src/tx/explain.js";
 import * as F from "./fixtures.js";
 import { createTransferCheckedInstruction } from "@solana/spl-token";
@@ -163,4 +163,21 @@ describe("explain", () => {
     expect(sync.dangers).toEqual([]);
   });
 
+});
+
+describe("the controller's hard limits are said before the request leaves", () => {
+  const own = F.owner.publicKey.toBase58();
+  it("counts SOL recipients and refuses more than one", () => {
+    const one = parseMessage(F.messageOf(F.legacy([F.transfer(F.stranger, 0.5)])), { owner: own });
+    expect(one.solRecipients).toBe(1);
+    expect(controllerLimits(one)).toEqual([]);
+    const two = parseMessage(F.messageOf(F.legacy([F.transfer(F.stranger, 0.1), F.transfer(F.friend, 0.3)])), { owner: own });
+    expect(two.solRecipients).toBe(2);
+    expect(controllerLimits(two)[0]).toMatch(/2 different recipients/);
+  });
+  it("refuses more token transfers than the display lists", () => {
+    const nine = parseMessage(F.messageOf(F.legacy(Array.from({ length: 9 }, () => F.usdcTransfer(F.strangerUsdc, 1)))), { owner: own });
+    expect(nine.tokenOut.length).toBe(9);
+    expect(controllerLimits(nine)[0]).toMatch(/9 token transfers/);
+  });
 });

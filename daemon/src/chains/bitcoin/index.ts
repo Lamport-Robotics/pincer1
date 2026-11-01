@@ -56,7 +56,8 @@ export class BitcoinAdapter implements ChainAdapter<BtcParsed> {
   claims(p: BtcParsed): BtcClaims {
     const dangerous = new Set<BtcDanger>();
     for (const d of p.dangers) dangerous.add(d.kind as BtcDanger);
-    if (p.feeSats >= 0n && p.satsOut > 0n && Number(p.feeSats) / Number(p.satsOut) > 0.05) dangerous.add("high_fee");
+    // the controller's rule: a fee of 10 % or more of what leaves, or any fee when nothing leaves
+    if (p.feeSats > 0n && (p.satsOut === 0n || Number(p.feeSats) / Number(p.satsOut) >= 0.10)) dangerous.add("high_fee");
     return { network: this.network, sats_out: p.satsOut.toString(), dest: p.dest ?? "", fee_sats: p.feeSats >= 0n ? p.feeSats.toString() : "0", inputs: p.ownerInputs.length, dangerous: [...dangerous] };
   }
 
