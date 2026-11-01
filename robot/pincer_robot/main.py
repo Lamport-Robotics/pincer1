@@ -143,6 +143,7 @@ class RobotApp:
         self._stt: SpeechToText | None = None
         self._encoder: SpeakerEncoder | None = None
         self._verifier: PassphraseVerifier | None = None
+        self.head: Any = None  # body.GazeHead on the v1 body: the camera arm follows the face
         self.robot: RobotInterface = self._make_robot()
         self.motion = MotionController(self.robot)
         self.dock = DockController(
@@ -225,6 +226,10 @@ class RobotApp:
             body.actuator.torque(True)  # type: ignore[union-attr]
             body.stand()
             log.info("body: own gait (%s) on %s", self.cfg.gait, self.cfg.servo_port)
+            from .body import Gaze, GazeConfig, GazeHead
+
+            self.head = GazeHead(bus, Gaze(GazeConfig(hfov_deg=self.cfg.camera_hfov_deg)))
+            self.head.raise_head()
             status = RobotStatus(note="body: own gait")
             sensors: Any = None
             try:
@@ -388,6 +393,11 @@ class RobotApp:
             )
             self.shared.face_x_norm = res.x_norm
             self.shared.face_ts = ts
+        if self.head is not None:
+            try:
+                self.head.observe(observations, ts)
+            except Exception as exc:  # a bus hiccup must not take the presence loop down
+                log.warning("head: %s", exc)
 
     def on_transcript(self, text: str, audio: np.ndarray | None = None) -> None:
         if not text:
