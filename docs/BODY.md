@@ -107,7 +107,9 @@ ranges the shell window and the cable loop allow, and are narrower than the serv
 
 `climb.py` crawls over steps with keyframes generated from the same kinematics: the body advances
 11 cm per cycle in three pulls, and between the pulls each pair of legs steps to where it is needed
-next, its foot on whatever level is there and never within 4.5 cm of an edge. A foot in the air goes
+next, its foot on whatever level is there and never within 3 cm of an edge. The front and rear feet
+stand 14 cm from their coxa while climbing, well under the body, which is what keeps the rear legs
+within reach when the body is a riser higher than they are. A foot in the air goes
 out to 22 cm from its coxa while it lifts, because that is where the leg reaches highest, crosses the
 riser there and comes back in as it lands; the middle feet land wide for the same reason. Body height
 and pitch follow the feet (nose up to 30°). Every keyframe must solve inside the joint limits with
@@ -119,13 +121,15 @@ turns the keyframes into the 50 Hz samples the simulator and the robot play; a k
 the body far takes longer (30°/s of pitch, 6 cm/s of height, 10 cm/s of travel), so the body is never
 thrown from one pose to the next.
 
-With the 110 / 160 legs on the 23 cm body, the generator allows single steps up to 15 cm and runs of
-steps up to 13 cm at a 25 to 28 cm tread. In MuJoCo (`sim/stairs.py`, position servos at the walking
-gains) the body gets up 14 and 15 cm single steps and three 12 or 13 cm steps in a row, level within
-2° of roll at the top, joint torque 1.6 N m through the climb against the 3 N m the servos have; a
-shin brushes a riser edge once per climb. The body, not the legs, is what stops at 13 cm: on a 28 cm
-tread the nose reaches the next riser before the rear feet are up on the current one. The same cycle
-with the leg mounts 2 cm closer together (a 21 cm body) climbs three 17 cm steps in the simulator.
+The v1 body is 21 cm long with the front and rear leg mounts 83 mm from its centre, and that length
+comes from the stairs: on the 23 cm plate of the first test chassis the nose reached the next riser
+before the rear feet were up on the current one, so runs of steps stopped at 13 cm whatever the legs
+did. With the 110 / 160 legs on the 21 cm body the generator allows single steps and runs of steps up
+to 17 cm at a 28 cm tread (18 cm, and 17 cm on a 25 cm tread, are refused). In MuJoCo (`sim/stairs.py`,
+position servos at the walking gains) the body climbs three 17 cm steps in 94 s and stands level on
+the landing within 3° of roll, nose up to 32° on the way; joint torque stays at 1.5 N m through the
+climb against the 3 N m the servos have, with one brush of the underside on a step edge. Twelve and
+thirteen centimetre runs climb the same way.
 
 ## the floor ahead
 
