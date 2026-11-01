@@ -629,7 +629,9 @@ class RobotApp:
         yaw = 0.0
         if self.head is not None:
             tilt, yaw = self.head.gaze.tilt, self.head.gaze.pan
-        return CameraPose(x=self.cfg.depth_head_x_m, z=self.cfg.depth_head_height_m, tilt=tilt, yaw=yaw)
+        return CameraPose(
+            x=self.cfg.depth_head_x_m, z=self.cfg.depth_head_height_m, tilt=tilt, yaw=yaw
+        )
 
     def _depth_thread(self, source: Any) -> None:
         from .depth import FloorWatch
@@ -783,17 +785,23 @@ class RobotApp:
             if self.cfg.mock_depth != "none":
                 from .depth import MockDepthSource, mock_scene
 
-                depth_source = MockDepthSource(self._head_pose, scene=mock_scene(self.cfg.mock_depth))
+                depth_source = MockDepthSource(
+                    self._head_pose, scene=mock_scene(self.cfg.mock_depth)
+                )
         elif self.cfg.depth_enabled:
             try:
                 from .depth import OakDepthSource
 
-                depth_source = OakDepthSource(self.cfg.depth_width, self.cfg.depth_height, self.cfg.depth_fps)
+                depth_source = OakDepthSource(
+                    self.cfg.depth_width, self.cfg.depth_height, self.cfg.depth_fps
+                )
             except Exception as exc:
                 log.error("depth disabled: %s", exc)
         if depth_source is not None:
             self._threads.append(
-                threading.Thread(target=self._depth_thread, args=(depth_source,), name="depth", daemon=True)
+                threading.Thread(
+                    target=self._depth_thread, args=(depth_source,), name="depth", daemon=True
+                )
             )
         self._threads.append(threading.Thread(target=self._listen_thread, name="mic", daemon=True))
         for t in self._threads:

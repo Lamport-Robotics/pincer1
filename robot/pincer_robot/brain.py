@@ -143,6 +143,8 @@ def untrusted_block(text: str, max_chars: int = 2000) -> str:
     copy of them in the text is dropped, and the system prompt says what the block means."""
     body = clean_text(text, max_chars).replace(DATA_OPEN, "").replace(DATA_CLOSE, "")
     return f"{DATA_OPEN}\n{redact_secrets(body)}\n{DATA_CLOSE}"
+
+
 _SIGNED_CLAIM = re.compile(
     r"\bI(?:'ve| have| just| already)?\s+(?:just\s+|already\s+)?"
     r"(?:signed|approved|sent|broadcast|unlocked)\b",
@@ -229,9 +231,7 @@ class AnthropicBrain:
                 model=self.model,
                 max_tokens=self.max_tokens,
                 system=SYSTEM_PROMPT,
-                messages=[
-                    {"role": "user", "content": f"{format_context(context)}\n\n{user_text}"}
-                ],
+                messages=[{"role": "user", "content": f"{format_context(context)}\n\n{user_text}"}],
             )
         except Exception as exc:
             raise BrainError(f"anthropic request failed: {exc}") from exc

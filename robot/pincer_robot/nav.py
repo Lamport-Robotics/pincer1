@@ -512,8 +512,13 @@ class Navigator:
             "map": self.available,
             "map_name": self.map_name,
             "rooms": self.rooms.names(),
-            "pose": None if loc is None else {"x": round(loc.x, 2), "y": round(loc.y, 2),
-                                              "yaw": round(loc.yaw, 3)},  # fmt: skip
+            "pose": None
+            if loc is None
+            else {
+                "x": round(loc.x, 2),
+                "y": round(loc.y, 2),
+                "yaw": round(loc.yaw, 3),
+            },  # fmt: skip
             "room": None if loc is None else self.rooms.room_at(loc.x, loc.y),
             "localized": loc is not None and loc.cov_xy <= self.localized_cov,
         }

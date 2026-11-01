@@ -79,7 +79,10 @@ class RobotInterface(ABC):
         if direction == "forward" and status.front_clearance_m < MIN_FRONT_CLEARANCE_M:
             return f"REFUSED: obstacle {status.front_clearance_m:.2f} m ahead."
         if direction == "forward" and status.floor_clearance_m < MIN_FRONT_CLEARANCE_M:
-            return f"REFUSED: the floor ahead ends {status.floor_clearance_m:.2f} m out (step, drop or wall)."
+            return (
+                f"REFUSED: the floor ahead ends {status.floor_clearance_m:.2f} m out "
+                "(step, drop or wall)."
+            )
         duration = distance_m / (GAIT_SPEED_MPS * speed)
         self._drive(lin_x=sign * speed, ang_z=0.0, duration_s=duration)
         return f"OK: walked {direction} {distance_m:.2f} m."

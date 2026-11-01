@@ -5,13 +5,13 @@ Frames (right-handed, metres, radians):
 * body frame: origin at the centre of the top plate, x forward, y left, z up.
 * leg frame i: origin at leg i's coxa axis, x pointing outward along the mount yaw, z up.
 
-Legs are numbered clockwise from the front right: 0 FR, 1 MR, 2 RR, 3 RL, 4 ML, 5 FL. The defaults are
-the v1 body: a 21 cm plate with the front and rear coxa axes 83 mm from its centre (the first test
-chassis had 93 on a 23 cm plate; the shorter body is what lets the nose clear the next riser on a
-staircase), femur and tibia 110 / 160 mm axis to axis, the length that takes a 17 cm stair
-(`climb.py`, `sim/stairs.py`). Bracket angles between a servo and its segment are absorbed by the servo zero in
-`Calibration`, so the kinematics see straight segments. A different build changes the dataclass, not
-the code.
+Legs are numbered clockwise from the front right: 0 FR, 1 MR, 2 RR, 3 RL, 4 ML, 5 FL. The defaults
+are the v1 body: a 21 cm plate with the front and rear coxa axes 83 mm from its centre (the first
+test chassis had 93 on a 23 cm plate; the shorter body is what lets the nose clear the next riser on
+a staircase), femur and tibia 110 / 160 mm axis to axis, the length that takes a 17 cm stair
+(`climb.py`, `sim/stairs.py`). Bracket angles between a servo and its segment are absorbed by the
+servo zero in `Calibration`, so the kinematics see straight segments. A different build changes the
+dataclass, not the code.
 """
 
 from __future__ import annotations

@@ -276,9 +276,7 @@ class DockController:
         loc = self.nav.localize_raw()
         if loc is None:
             raise RuntimeError("not localised: build/load a map first")
-        site = DockSite(
-            loc.x, loc.y, loc.yaw, wall_m, approach_m=approach_m or self.cfg.approach_m
-        )
+        site = DockSite(loc.x, loc.y, loc.yaw, wall_m, approach_m=approach_m or self.cfg.approach_m)
         self.store.save(site)
         sx, sy, syaw = site.staging()
         # Registered directly: the registry's 0.5 m floor is for rooms, this is a parking spot.

@@ -5,9 +5,9 @@ The head rides the four-axis arm. ``Gaze`` is the pure part: it takes where a fa
 of the error per update, rate limited, inside the arm's limits. When the face goes away it holds the
 last bearing for a moment, then drifts back to centre and scans slowly until someone shows up.
 
-``GazeHead`` is the wiring: the biggest face from the recogniser in, one sync-write to the arm servos
-out, on the same bus the legs use. The other two arm joints are parked in the upright pose so the
-camera sits as high as the arm allows; nothing here touches the legs.
+``GazeHead`` is the wiring: the biggest face from the recogniser in, one sync-write to the arm
+servos out, on the same bus the legs use. The other two arm joints are parked in the upright pose so
+the camera sits as high as the arm allows; nothing here touches the legs.
 
 Frames follow ``sim/build.py``: the arm's pitch joints turn about +y, so a positive wrist angle tips
 the camera down. ``tilt`` here is camera elevation (positive up) and is negated on the way out.
@@ -101,7 +101,9 @@ class Gaze:
                 self._scan_start = now
             t = now - self._scan_start
             # settle time first, then a slow sweep about the centre
-            sweep = 0.0 if t < max(0.0, c.scan_after_s - c.hold_s) else t - (c.scan_after_s - c.hold_s)
+            sweep = (
+                0.0 if t < max(0.0, c.scan_after_s - c.hold_s) else t - (c.scan_after_s - c.hold_s)
+            )
             want_pan = c.scan_amplitude * math.sin(2 * math.pi * sweep / c.scan_period_s)
             want_tilt = c.scan_tilt
         step = c.max_rate_rad_s * dt

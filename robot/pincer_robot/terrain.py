@@ -1,15 +1,15 @@
 """The floor ahead, from the depth camera on the head.
 
-A depth image and the camera's pose become a height grid on the ground in front of the body (cells of
-5 cm, body frame on the floor: x forward, y left, z up). Cells are labelled floor, step, wall or drop,
-and ``find_step`` reads the first riser out of it: how far, how tall, how it is angled to the body. That
-is what the climb cycle needs to line up and what the motion layer needs to refuse a walk into a wall or
-off an edge. The lidar sees a slice at one height; this sees the ground.
+A depth image and the camera's pose become a height grid on the ground in front of the body (cells
+of 5 cm, body frame on the floor: x forward, y left, z up). Cells are labelled floor, step, wall or
+drop, and ``find_step`` reads the first riser out of it: how far, how tall, how it is angled to the
+body. That is what the climb cycle needs to line up and what the motion layer needs to refuse a walk
+into a wall or off an edge. The lidar sees a slice at one height; this sees the ground.
 
-Pure numpy. The camera is the ROS optical convention (z forward out of the lens, x right, y down) and its
-pose is where the head is in the body frame: height above the floor, elevation (positive up, the same
-``tilt`` the gaze module drives) and yaw. ``render_steps`` draws a synthetic depth image of a staircase for
-tests and the mock robot.
+Pure numpy. The camera is the ROS optical convention (z forward out of the lens, x right, y down)
+and its pose is where the head is in the body frame: height above the floor, elevation (positive up,
+the same ``tilt`` the gaze module drives) and yaw. ``render_steps`` draws a synthetic depth image of
+a staircase for tests and the mock robot.
 """
 
 from __future__ import annotations
@@ -85,8 +85,14 @@ class FloorGrid:
 FLOOR, STEP, WALL, DROP, UNKNOWN = 0, 1, 2, 3, 4
 
 
-def unproject(depth_m: np.ndarray, cam: CameraModel, pose: CameraPose, *, stride: int = 2,
-              max_depth_m: float = 3.0) -> np.ndarray:
+def unproject(
+    depth_m: np.ndarray,
+    cam: CameraModel,
+    pose: CameraPose,
+    *,
+    stride: int = 2,
+    max_depth_m: float = 3.0,
+) -> np.ndarray:
     """Depth image (metres, 0 or nan = no return) -> points in the body frame, shape [n, 3]."""
     d = np.asarray(depth_m, dtype=np.float64)[::stride, ::stride]
     v, u = np.mgrid[0 : cam.height : stride, 0 : cam.width : stride]
@@ -98,9 +104,17 @@ def unproject(depth_m: np.ndarray, cam: CameraModel, pose: CameraPose, *, stride
     return pts @ pose.rotation().T + pose.origin()
 
 
-def height_grid(depth_m: np.ndarray, cam: CameraModel, pose: CameraPose, *, cell: float = 0.05,
-                x_range: tuple[float, float] = (0.05, 1.20), y_range: tuple[float, float] = (-0.40, 0.40),
-                stride: int = 2, min_points: int = 3) -> FloorGrid:
+def height_grid(
+    depth_m: np.ndarray,
+    cam: CameraModel,
+    pose: CameraPose,
+    *,
+    cell: float = 0.05,
+    x_range: tuple[float, float] = (0.05, 1.20),
+    y_range: tuple[float, float] = (-0.40, 0.40),
+    stride: int = 2,
+    min_points: int = 3,
+) -> FloorGrid:
     """Bin the points onto the ground; a cell's height is the median of what landed in it."""
     pts = unproject(depth_m, cam, pose, stride=stride)
     nx = int(round((x_range[1] - x_range[0]) / cell))
@@ -117,18 +131,21 @@ def height_grid(depth_m: np.ndarray, cam: CameraModel, pose: CameraPose, *, cell
         key = i * ny + j
         starts = np.flatnonzero(np.r_[True, key[1:] != key[:-1]])
         ends = np.r_[starts[1:], len(key)]
-        for s, e in zip(starts, ends):
+        for s, e in zip(starts, ends, strict=True):
             if e - s >= min_points:
                 # sorted within the cell: take the 90th percentile, so a cell that holds a riser
                 # face reads as the top of that face and a wall reads as a wall, while the odd
                 # high outlier is still dropped
                 heights[i[s], j[s]] = z[s + int(0.9 * (e - s - 1))]
                 counts[i[s], j[s]] = e - s
-    return FloorGrid(heights, counts, cell, x_range[0], y_range[0], floor_far=floor_reach(cam, pose))
+    return FloorGrid(
+        heights, counts, cell, x_range[0], y_range[0], floor_far=floor_reach(cam, pose)
+    )
 
 
 def floor_reach(cam: CameraModel, pose: CameraPose) -> float:
-    """x where the top image row's centre ray meets the floor: beyond it nothing of the floor is in view."""
+    """x where the top image row's centre ray meets the floor: beyond it nothing of the floor is
+    in view."""
     d = pose.rotation() @ np.array([0.0, -cam.cy / cam.fy, 1.0])
     if d[2] >= 0:
         return math.inf
@@ -136,7 +153,9 @@ def floor_reach(cam: CameraModel, pose: CameraPose) -> float:
     return float(pose.x + t * d[0])
 
 
-def classify(grid: FloorGrid, *, floor_tol_m: float = 0.025, step_max_m: float = 0.22) -> np.ndarray:
+def classify(
+    grid: FloorGrid, *, floor_tol_m: float = 0.025, step_max_m: float = 0.22
+) -> np.ndarray:
     h = grid.heights
     labels = np.full(h.shape, UNKNOWN, dtype=int)
     seen = np.isfinite(h)
@@ -170,8 +189,13 @@ class StepEdge:
     rows: int  # how many grid rows the edge was found in
 
 
-def find_step(grid: FloorGrid, labels: np.ndarray | None = None, *, corridor_m: float = 0.30,
-              min_rows: int = 3) -> StepEdge | None:
+def find_step(
+    grid: FloorGrid,
+    labels: np.ndarray | None = None,
+    *,
+    corridor_m: float = 0.30,
+    min_rows: int = 3,
+) -> StepEdge | None:
     """The first riser ahead inside a corridor of ±corridor_m: floor cells, then step cells."""
     if labels is None:
         labels = classify(grid)
@@ -198,7 +222,11 @@ def find_step(grid: FloorGrid, labels: np.ndarray | None = None, *, corridor_m: 
                 risers.append(top)
                 # the tread runs until the height rises again or the view ends
                 k = i
-                while k + 1 < grid.nx and labels[k + 1, j] == STEP and grid.heights[k + 1, j] - top < 0.03:
+                while (
+                    k + 1 < grid.nx
+                    and labels[k + 1, j] == STEP
+                    and grid.heights[k + 1, j] - top < 0.03
+                ):
                     k += 1
                 if k + 1 < grid.nx and labels[k + 1, j] in (STEP, WALL):
                     treads.append((k + 1 - i) * grid.cell)
@@ -221,7 +249,9 @@ def find_step(grid: FloorGrid, labels: np.ndarray | None = None, *, corridor_m: 
     )
 
 
-def front_clearance(grid: FloorGrid, labels: np.ndarray | None = None, *, corridor_m: float = 0.15) -> float | None:
+def front_clearance(
+    grid: FloorGrid, labels: np.ndarray | None = None, *, corridor_m: float = 0.15
+) -> float | None:
     """Distance to the nearest wall or drop straight ahead, or None if the corridor is clear."""
     if labels is None:
         labels = classify(grid)
@@ -236,17 +266,30 @@ def front_clearance(grid: FloorGrid, labels: np.ndarray | None = None, *, corrid
     return best
 
 
-def render_steps(cam: CameraModel, pose: CameraPose, *, riser_m: float = 0.0, edge_x_m: float = 0.5,
-                 tread_m: float = 0.28, steps: int = 3, edge_yaw: float = 0.0, wall_x_m: float | None = None,
-                 drop_x_m: float | None = None, drop_m: float = 0.3, noise_m: float = 0.0,
-                 seed: int = 0) -> np.ndarray:
+def render_steps(
+    cam: CameraModel,
+    pose: CameraPose,
+    *,
+    riser_m: float = 0.0,
+    edge_x_m: float = 0.5,
+    tread_m: float = 0.28,
+    steps: int = 3,
+    edge_yaw: float = 0.0,
+    wall_x_m: float | None = None,
+    drop_x_m: float | None = None,
+    drop_m: float = 0.3,
+    noise_m: float = 0.0,
+    seed: int = 0,
+) -> np.ndarray:
     """A depth image of a flat floor with, optionally, a staircase, a wall or a drop ahead.
 
     Risers are vertical planes, treads horizontal, all axis aligned after rotating the scene by
     ``edge_yaw`` about z. Returns metres along the optical axis, 0 where a ray never hits anything.
     """
     v, u = np.mgrid[0 : cam.height, 0 : cam.width]
-    dirs = np.stack([(u - cam.cx) / cam.fx, (v - cam.cy) / cam.fy, np.ones_like(u, dtype=float)], axis=-1)
+    dirs = np.stack(
+        [(u - cam.cx) / cam.fx, (v - cam.cy) / cam.fy, np.ones_like(u, dtype=float)], axis=-1
+    )
     R = pose.rotation()
     d = dirs @ R.T  # ray directions in the body frame
     o = pose.origin()
@@ -271,7 +314,11 @@ def render_steps(cam: CameraModel, pose: CameraPose, *, riser_m: float = 0.0, ed
         ok = (t > 0) & (z >= z_lo) & (z < z_hi)
         best[ok] = np.minimum(best[ok], t[ok])
 
-    floor_end = edge_x_m if riser_m > 0 else (drop_x_m if drop_x_m is not None else (wall_x_m if wall_x_m is not None else np.inf))
+    floor_end = (
+        edge_x_m
+        if riser_m > 0
+        else (drop_x_m if drop_x_m is not None else (wall_x_m if wall_x_m is not None else np.inf))
+    )
     hit_plane_z(0.0, -np.inf, floor_end)
     if riser_m > 0:
         for k in range(steps):
@@ -283,7 +330,8 @@ def render_steps(cam: CameraModel, pose: CameraPose, *, riser_m: float = 0.0, ed
     if drop_x_m is not None:
         hit_plane_z(-drop_m, drop_x_m, np.inf)
         hit_plane_x(drop_x_m, -drop_m, 0.0)
-    # depth along the optical axis is the ray parameter times the forward component in optical units,
+    # depth along the optical axis is the ray parameter times the forward component in optical
+    # units,
     # and dirs has z = 1 there, so t is already the optical depth
     depth = np.where(np.isfinite(best), best, 0.0)
     if noise_m > 0:

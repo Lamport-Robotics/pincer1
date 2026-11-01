@@ -321,19 +321,15 @@ class RobotService:
 
     _inflight = 0
 
-
     async def _tracked(self, coro):  # noqa: ANN001, ANN201
 
         self._inflight += 1
 
         try:
-
             return await coro
 
         finally:
-
             self._inflight -= 1
-
 
     def _spawn(self, coro: Any) -> None:
         task = asyncio.create_task(coro)

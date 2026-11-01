@@ -7,7 +7,9 @@ HEAD = CameraPose(x=0.07, z=0.40, tilt=math.radians(-25))
 
 
 def watch(scene: str, pose=HEAD) -> FloorWatch:
-    return FloorWatch(MockDepthSource(lambda: pose, scene=mock_scene(scene)), lambda: pose, stride=1)
+    return FloorWatch(
+        MockDepthSource(lambda: pose, scene=mock_scene(scene)), lambda: pose, stride=1
+    )
 
 
 def test_flat_floor_is_clear_and_far():

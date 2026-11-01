@@ -43,7 +43,10 @@ def test_floor_only_has_no_step_and_is_clear():
     assert front_clearance(g) is None
 
 
-@pytest.mark.parametrize("riser,edge,yaw", [(0.08, 0.45, 0.0), (0.12, 0.55, math.radians(15)), (0.17, 0.40, math.radians(-15))])
+@pytest.mark.parametrize(
+    "riser,edge,yaw",
+    [(0.08, 0.45, 0.0), (0.12, 0.55, math.radians(15)), (0.17, 0.40, math.radians(-15))],
+)
 def test_step_distance_height_and_angle(riser, edge, yaw):
     g = grid_for(riser_m=riser, edge_x_m=edge, edge_yaw=yaw)
     s = find_step(g)

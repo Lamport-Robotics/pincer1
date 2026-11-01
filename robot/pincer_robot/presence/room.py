@@ -184,9 +184,7 @@ def fingerprint_from_static(
     )
 
 
-def _profile_similarity(
-    a: np.ndarray, b: np.ndarray, tol_soft: float, tol_hard: float
-) -> float:
+def _profile_similarity(a: np.ndarray, b: np.ndarray, tol_soft: float, tol_hard: float) -> float:
     both_open = np.isnan(a) & np.isnan(b)
     one_open = np.isnan(a) ^ np.isnan(b)
     ok = ~(both_open | one_open)

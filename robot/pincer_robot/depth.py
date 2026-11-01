@@ -11,12 +11,23 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 import numpy as np
 
-from .terrain import CameraModel, CameraPose, FloorGrid, StepEdge, classify, find_step, front_clearance, height_grid, render_steps
+from .terrain import (
+    CameraModel,
+    CameraPose,
+    FloorGrid,
+    StepEdge,
+    classify,
+    find_step,
+    front_clearance,
+    height_grid,
+    render_steps,
+)
 
 
 class DepthSource(Protocol):
@@ -32,14 +43,19 @@ class DepthSource(Protocol):
 class OakDepthSource:
     """Stereo depth from the head camera. The import is lazy: only the robot has ``depthai``."""
 
-    def __init__(self, width: int = 640, height: int = 400, fps: float = 10.0, *, confidence: int = 200):
+    def __init__(
+        self, width: int = 640, height: int = 400, fps: float = 10.0, *, confidence: int = 200
+    ):
         import depthai as dai  # type: ignore[import-not-found]
 
         self._dai = dai
         pipeline = dai.Pipeline()
         left = pipeline.create(dai.node.MonoCamera)
         right = pipeline.create(dai.node.MonoCamera)
-        for cam, socket in ((left, dai.CameraBoardSocket.CAM_B), (right, dai.CameraBoardSocket.CAM_C)):
+        for cam, socket in (
+            (left, dai.CameraBoardSocket.CAM_B),
+            (right, dai.CameraBoardSocket.CAM_C),
+        ):
             cam.setBoardSocket(socket)
             cam.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
             cam.setFps(fps)
@@ -56,8 +72,14 @@ class OakDepthSource:
         stereo.depth.link(out.input)
         self._device = dai.Device(pipeline)
         self._queue = self._device.getOutputQueue("depth", maxSize=1, blocking=False)
-        m = np.array(self._device.readCalibration().getCameraIntrinsics(dai.CameraBoardSocket.CAM_C, width, height))
-        self.model = CameraModel(float(m[0, 0]), float(m[1, 1]), float(m[0, 2]), float(m[1, 2]), width, height)
+        m = np.array(
+            self._device.readCalibration().getCameraIntrinsics(
+                dai.CameraBoardSocket.CAM_C, width, height
+            )
+        )
+        self.model = CameraModel(
+            float(m[0, 0]), float(m[1, 1]), float(m[0, 2]), float(m[1, 2]), width, height
+        )
 
     def read(self) -> np.ndarray | None:
         pkt = self._queue.tryGet()
@@ -73,10 +95,17 @@ class OakDepthSource:
 
 
 class MockDepthSource:
-    """A drawn scene: ``scene`` is what ``render_steps`` takes (riser_m, edge_x_m, wall_x_m, drop_x_m, …)."""
+    """A drawn scene: ``scene`` is what ``render_steps`` takes (riser_m, edge_x_m, wall_x_m,
+    drop_x_m, …)."""
 
-    def __init__(self, pose: Callable[[], CameraPose], model: CameraModel | None = None, *,
-                 scene: dict[str, Any] | None = None, noise_m: float = 0.004):
+    def __init__(
+        self,
+        pose: Callable[[], CameraPose],
+        model: CameraModel | None = None,
+        *,
+        scene: dict[str, Any] | None = None,
+        noise_m: float = 0.004,
+    ):
         self.model = model or CameraModel.from_fov(320, 200, 73.0)
         self._pose = pose
         self.scene = dict(scene or {})
@@ -85,7 +114,9 @@ class MockDepthSource:
 
     def read(self) -> np.ndarray | None:
         self._seed += 1
-        return render_steps(self.model, self._pose(), noise_m=self.noise_m, seed=self._seed, **self.scene)
+        return render_steps(
+            self.model, self._pose(), noise_m=self.noise_m, seed=self._seed, **self.scene
+        )
 
     def close(self) -> None:
         pass
@@ -121,7 +152,9 @@ class FloorReport:
 class FloorWatch:
     """One grid per frame. ``head_pose`` is called every frame so the gaze's tilt is used as is."""
 
-    def __init__(self, source: DepthSource, head_pose: Callable[[], CameraPose], *, stride: int = 2):
+    def __init__(
+        self, source: DepthSource, head_pose: Callable[[], CameraPose], *, stride: int = 2
+    ):
         self.source = source
         self.head_pose = head_pose
         self.stride = stride

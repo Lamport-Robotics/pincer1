@@ -53,7 +53,8 @@ class FaceObservation:
 
     @property
     def y_norm(self) -> float:
-        """Vertical position of the face centre, -1 (top) .. +1 (bottom); 0 without a frame height."""
+        """Vertical position of the face centre, -1 (top) .. +1 (bottom); 0 if the frame height
+        is unknown."""
         if self.frame_height <= 0:
             return 0.0
         cy = (self.bbox[1] + self.bbox[3]) / 2.0

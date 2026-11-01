@@ -48,11 +48,11 @@ def test_interpolated_samples_are_reachable_and_supported():
     # between two keyframes a foot counts as planted when both ends say so, or when it landed at the
     # previous keyframe and does not move during this one
     i = 1
-    for prev, kf in zip(kfs, kfs[1:]):
+    for prev, kf in zip(kfs, kfs[1:], strict=False):
         n = max(1, round(seconds_between(prev, kf) / 0.02))
         both = [
             (a and b) or (b and pf == kf.feet_world[j])
-            for j, (a, b, pf) in enumerate(zip(prev.down, kf.down, prev.feet_world))
+            for j, (a, b, pf) in enumerate(zip(prev.down, kf.down, prev.feet_world, strict=False))
         ]
         for _ in range(n):
             feet, pose = samples[i]
@@ -81,7 +81,7 @@ def test_feet_never_land_on_an_edge():
     params = ClimbParams(riser_m=0.10, steps=1)
     edge = params.terrain.edges()[0]
     for kf in climb_cycle(G, params):
-        for foot, down in zip(kf.feet_world, kf.down):
+        for foot, down in zip(kf.feet_world, kf.down, strict=False):
             if down:
                 assert abs(foot[0] - edge) >= params.edge_margin_m - 1e-9, kf.note
 
@@ -92,7 +92,7 @@ def test_swing_goes_out_and_over_the_riser():
     ups = [k for k in kfs if k.note.endswith("up")]
     overs = [k for k in kfs if k.note.endswith("over")]
     assert ups and len(ups) == len(overs)
-    for up, over in zip(ups, overs):
+    for up, over in zip(ups, overs, strict=False):
         leg = int(up.note.split()[1])
         assert up.feet_world[leg][2] == over.feet_world[leg][2]
         assert over.feet_world[leg][2] >= params.terrain.floor_z + params.lift_clearance_m - 1e-9

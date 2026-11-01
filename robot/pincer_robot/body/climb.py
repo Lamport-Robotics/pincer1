@@ -5,12 +5,12 @@ The body advances a fixed distance per cycle in three pulls, and between the pul
 terrain has there. A foot that would land on a riser's edge is moved off it. The body's height and
 pitch follow the feet: pitch is the slope from the rear feet to the front feet (nose up when the
 front is higher, capped), height keeps the legs near the climbing stance height. Every keyframe is
-solved through the leg IK inside the joint limits, with at least three feet down and the body's centre
-inside their support polygon; a riser the geometry cannot do raises ``ClimbError`` from the phase that
-failed instead of producing a cycle that falls over.
+solved through the leg IK inside the joint limits, with at least three feet down and the body's
+centre inside their support polygon; a riser the geometry cannot do raises ``ClimbError`` from the
+phase that failed instead of producing a cycle that falls over.
 
-Frame: the body's neutral frame at the start of the climb (x forward toward the stairs, z up, origin at
-the top plate centre, ``stance_height_m`` above the lower floor). ``Terrain`` holds the risers; a
+Frame: the body's neutral frame at the start of the climb (x forward toward the stairs, z up, origin
+at the top plate centre, ``stance_height_m`` above the lower floor). ``Terrain`` holds the risers; a
 ``Keyframe`` is six feet in that frame plus a ``BodyPose`` for the body. ``interpolate`` turns the
 keyframes into 50 Hz samples that the simulator and the robot play the same way.
 """
@@ -39,7 +39,8 @@ class ClimbError(ValueError):
 
 @dataclass(frozen=True)
 class Terrain:
-    """Risers at ``edge0 + k * tread_m`` for k < steps, each ``riser_m`` up; flat beyond the last."""
+    """Risers at ``edge0 + k * tread_m`` for k < steps, each ``riser_m`` up; flat beyond the
+    last."""
 
     riser_m: float
     tread_m: float = 0.28
@@ -65,10 +66,12 @@ class ClimbParams:
     tread_m: float = 0.28
     steps: int = 1
     advance_m: float = 0.11  # body travel per cycle
-    # where a foot lands, as a fraction of the advance ahead of its neutral point. the rear feet land
+    # where a foot lands, as a fraction of the advance ahead of its neutral point. the rear feet
+    # land
     # well ahead so they are still under the body, not stretched out behind it, when they next swing
     place_ahead: tuple[float, float, float] = (0.5, 0.5, 0.8)  # front, middle, rear
-    stance_radius_m: float = 0.14  # front and rear feet well under the body: more height, and the rear legs keep their reach
+    # front and rear feet well under the body: more height, and the rear legs keep their reach
+    stance_radius_m: float = 0.14
     middle_radius_m: float = 0.215  # middle feet wide: a foot far out can sit above its own coxa
     stance_height_m: float = 0.18  # leg extension the body aims for while climbing
     lift_clearance_m: float = 0.04  # swing height above the higher of the two levels
@@ -135,19 +138,21 @@ def neutral_offset(geometry: BodyGeometry, leg: int, radius: float) -> tuple[flo
     return (mx + radius * math.cos(yaw), my + radius * math.sin(yaw))
 
 
-def _fit_pose(
-    geometry: BodyGeometry, feet: list[Vec3], x: float, params: ClimbParams
-) -> BodyPose:
+def _fit_pose(geometry: BodyGeometry, feet: list[Vec3], x: float, params: ClimbParams) -> BodyPose:
     """Body pose over the feet: pitch from the front/rear foot heights, height so the most and the
     least extended leg are equally far from the climbing stance height."""
     front_z = (feet[FRONT[0]][2] + feet[FRONT[1]][2]) / 2
     rear_z = (feet[REAR[0]][2] + feet[REAR[1]][2]) / 2
     # the body's pitch rotation is about +y, so nose up is a negative pitch
-    pitch = -max(-params.pitch_max, min(params.pitch_max, math.atan2(front_z - rear_z, COXA_SPAN_M)))
+    pitch = -max(
+        -params.pitch_max, min(params.pitch_max, math.atan2(front_z - rear_z, COXA_SPAN_M))
+    )
     return BodyPose(x=x, z=_height_for(geometry, feet, pitch, params), pitch=pitch)
 
 
-def _height_for(geometry: BodyGeometry, feet: list[Vec3], pitch: float, params: ClimbParams) -> float:
+def _height_for(
+    geometry: BodyGeometry, feet: list[Vec3], pitch: float, params: ClimbParams
+) -> float:
     prefs = []
     for leg, foot in enumerate(feet):
         mx, my, _ = geometry.mount(leg)
@@ -165,9 +170,12 @@ def _fit_keyframe(
     seconds: float,
 ) -> Keyframe:
     """``base`` if every leg can hold it, else the nearest pose that works: the fitted pitch first,
-    then level through to full nose-up in 5 degree steps, the height searched outward from the fit."""
+    then level through to full nose-up in 5 degree steps, the height searched outward from the
+    fit."""
     last: ClimbError | None = None
-    pitches = [base.pitch] + [-math.radians(d) for d in range(0, int(math.degrees(params.pitch_max)) + 1, 5)]
+    pitches = [base.pitch] + [
+        -math.radians(d) for d in range(0, int(math.degrees(params.pitch_max)) + 1, 5)
+    ]
     seen: set[float] = set()
     for pitch in pitches:
         if round(pitch, 4) in seen:
@@ -187,9 +195,16 @@ def _fit_keyframe(
 
 
 def _best_pose(
-    geometry: BodyGeometry, feet: list[Vec3], down: list[bool], x: float, params: ClimbParams, note: str
+    geometry: BodyGeometry,
+    feet: list[Vec3],
+    down: list[bool],
+    x: float,
+    params: ClimbParams,
+    note: str,
 ) -> Keyframe:
-    return _fit_keyframe(geometry, feet, down, _fit_pose(geometry, feet, x, params), params, note, params.pull_s)
+    return _fit_keyframe(
+        geometry, feet, down, _fit_pose(geometry, feet, x, params), params, note, params.pull_s
+    )
 
 
 def _snap_off_edge(x: float, terrain: Terrain, margin: float) -> float:
@@ -201,7 +216,9 @@ def _snap_off_edge(x: float, terrain: Terrain, margin: float) -> float:
     return x
 
 
-def climb_cycle(geometry: BodyGeometry, params: ClimbParams, steps: int | None = None) -> list[Keyframe]:
+def climb_cycle(
+    geometry: BodyGeometry, params: ClimbParams, steps: int | None = None
+) -> list[Keyframe]:
     """Keyframes from standing before the first riser to standing on the top landing."""
     if steps is not None:
         params.steps = steps
@@ -214,7 +231,12 @@ def climb_cycle(geometry: BodyGeometry, params: ClimbParams, steps: int | None =
     frames = [Keyframe(list(feet), BodyPose(), list(down), 1.0, "stand")]
     # done when the rear feet can stand at the climbing radius on the top landing, off the last edge
     rear_off = neutral_offset(geometry, REAR[0], params.stance_radius_m)[0]
-    x_goal = terrain.edges()[-1] + params.edge_margin_m - rear_off + params.advance_m * params.place_ahead[2]
+    x_goal = (
+        terrain.edges()[-1]
+        + params.edge_margin_m
+        - rear_off
+        + params.advance_m * params.place_ahead[2]
+    )
     cycles = 0
     while x < x_goal - 1e-9:
         cycles += 1
@@ -225,7 +247,9 @@ def climb_cycle(geometry: BodyGeometry, params: ClimbParams, steps: int | None =
             radius = params.middle_radius_m if pair is MIDDLE else params.stance_radius_m
             for leg in pair:
                 ox, oy = neutral_offset(geometry, leg, radius)
-                tx = _snap_off_edge(x + ox + adv * params.place_ahead[k], terrain, params.edge_margin_m)
+                tx = _snap_off_edge(
+                    x + ox + adv * params.place_ahead[k], terrain, params.edge_margin_m
+                )
                 target = (tx, oy, terrain.height(tx))
                 frames += _swing(geometry, feet, down, leg, target, frames[-1].pose, params)
                 feet[leg] = target
@@ -260,17 +284,28 @@ def _settle(
 ) -> list[Keyframe]:
     """Body from ``start`` to ``goal`` over planted feet in steps of at most 1 cm and 5 degrees,
     each checked; stops short at the last pose that still solves rather than failing the climb."""
-    n = max(1, int(math.ceil(max(
-        abs(goal.z - start.z) / 0.01,
-        abs(goal.pitch - start.pitch) / math.radians(5),
-        abs(goal.x - start.x) / params.pull_sub_m,
-    ))))
+    n = max(
+        1,
+        int(
+            math.ceil(
+                max(
+                    abs(goal.z - start.z) / 0.01,
+                    abs(goal.pitch - start.pitch) / math.radians(5),
+                    abs(goal.x - start.x) / params.pull_sub_m,
+                )
+            )
+        ),
+    )
     out: list[Keyframe] = []
     for i in range(1, n + 1):
         s = i / n
         pose = BodyPose(
-            start.x + (goal.x - start.x) * s, start.y, start.z + (goal.z - start.z) * s,
-            0.0, start.pitch + (goal.pitch - start.pitch) * s, 0.0,
+            start.x + (goal.x - start.x) * s,
+            start.y,
+            start.z + (goal.z - start.z) * s,
+            0.0,
+            start.pitch + (goal.pitch - start.pitch) * s,
+            0.0,
         )
         kf = Keyframe(list(feet), pose, list(down), params.pull_s, f"settle {i}/{n}")
         try:
@@ -356,7 +391,9 @@ def seconds_between(prev: Keyframe, kf: Keyframe) -> float:
     )
 
 
-def interpolate(keyframes: list[Keyframe], dt: float = 0.02) -> Iterator[tuple[list[Vec3], BodyPose]]:
+def interpolate(
+    keyframes: list[Keyframe], dt: float = 0.02
+) -> Iterator[tuple[list[Vec3], BodyPose]]:
     """Linear in time between keyframes; the first keyframe is held for its own duration."""
     prev = keyframes[0]
     yield list(prev.feet_world), prev.pose
