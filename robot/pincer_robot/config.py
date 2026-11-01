@@ -48,9 +48,13 @@ class Settings(BaseSettings):
     # --- legs ------------------------------------------------------------------------
     # twist: hand velocity commands to an external gait controller on cmd_vel_topic (demo chassis).
     # bus:   drive the leg servos directly with the gait in pincer_robot.body (the v1 body).
-    body_backend: Literal["twist", "bus"] = "twist"
+    # joint: the same gait, gaze and climb, but the servos sit behind the chassis' own ROS 2 stack
+    #        and are reached in pulses over rosbridge (body/pulse.py); needs servo_calibration.
+    body_backend: Literal["twist", "bus", "joint"] = "twist"
     servo_port: str = "/dev/ttyUSB0"
     servo_baud: int = 1_000_000
+    rosbridge_url: str = "ws://127.0.0.1:9090"
+    servo_calibration: Path = Path("~/.pincer1/servo_calibration.json")
     gait: Literal["tripod", "ripple", "wave"] = "tripod"
     # servo health (bus backend): every poll reads temperature and load of each joint; past a
     # threshold the body refuses to walk for cooldown_s and says why in the log

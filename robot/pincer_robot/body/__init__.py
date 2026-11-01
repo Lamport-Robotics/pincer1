@@ -5,6 +5,7 @@ from .gait import GAITS, GaitParams, GaitState, Velocity
 from .gaze import ArmPose, Gaze, GazeConfig, GazeHead, GazeTarget, largest_face
 from .geometry import LEG_NAMES, BodyGeometry, JointLimits
 from .kinematics import BodyPose, JointAngles, ReachError, forward, inverse, solve_body, solve_leg
+from .pulse import PulseCalibration, RosbridgeClient, RosbridgeSensors, RosbridgeServoBus
 from .servo import Bus, Calibration, LoopbackTransport, SerialTransport, ServoError
 from .sim import Simulation, StabilityReport
 
@@ -30,6 +31,10 @@ __all__ = [
     "JointAngles",
     "JointLimits",
     "LoopbackTransport",
+    "PulseCalibration",
+    "RosbridgeClient",
+    "RosbridgeSensors",
+    "RosbridgeServoBus",
     "ReachError",
     "SerialTransport",
     "ServoError",

@@ -260,6 +260,77 @@ class RobotApp:
             backend = BodyBackend(body, status=status, sensors=sensors, health=health)
             backend.start_health_poll(self.cfg.servo_health_poll_s)
             return backend
+        if self.cfg.body_backend == "joint":
+            from .body import (
+                Body,
+                BodyBackend,
+                BodyGeometry,
+                BusActuator,
+                GaitParams,
+                Gaze,
+                GazeConfig,
+                GazeHead,
+            )
+            from .body.pulse import (
+                PulseCalibration,
+                RosbridgeClient,
+                RosbridgeSensors,
+                RosbridgeServoBus,
+            )
+
+            try:
+                cal = PulseCalibration.load(self.cfg.servo_calibration)
+            except (OSError, ValueError, KeyError) as exc:
+                log.error(
+                    "joint backend: no servo calibration at %s (%s); run pincer-calibrate first. "
+                    "Running with a mock body.",
+                    self.cfg.servo_calibration,
+                    exc,
+                )
+                return MockRobot()
+            try:
+                client = RosbridgeClient(self.cfg.rosbridge_url)
+            except Exception as exc:
+                log.error(
+                    "joint backend: rosbridge at %s unreachable (%s); mock body",
+                    self.cfg.rosbridge_url,
+                    exc,
+                )
+                return MockRobot()
+            bus = RosbridgeServoBus(client, cal)
+            geometry = BodyGeometry()
+            actuator = BusActuator(bus, geometry, move_time_ms=40)
+            leg_ids = actuator.servo_ids()
+            if not cal.complete_for(leg_ids):
+                log.error(
+                    "joint backend: calibration misses leg servos %s; mock body",
+                    [s for s in leg_ids if s not in cal.zero],
+                )
+                client.close()
+                return MockRobot()
+            status = RobotStatus(note="body: own gait over rosbridge")
+            sensors = RosbridgeSensors(
+                client,
+                status,
+                scan_topic=self.cfg.scan_topic,
+                imu_topic=self.cfg.imu_topic,
+                on_scan=self.on_scan,
+                on_imu=self.on_imu,
+            )
+            if not bus.wait_for_state():
+                log.warning("joint backend: no servo state from the chassis yet")
+            body = Body(geometry=geometry, gait=GaitParams(name=self.cfg.gait), actuator=actuator)
+            body.stand()
+            log.info("body: own gait (%s) over rosbridge %s", self.cfg.gait, self.cfg.rosbridge_url)
+            head_cfg = GazeConfig(hfov_deg=self.cfg.camera_hfov_deg)
+            if cal.complete_for(
+                [head_cfg.pan_id, head_cfg.shoulder_id, head_cfg.elbow_id, head_cfg.tilt_id]
+            ):
+                self.head = GazeHead(bus, Gaze(head_cfg))
+                self.head.raise_head()
+            else:
+                log.warning("joint backend: arm servos not calibrated, the head stays where it is")
+            return BodyBackend(body, status=status, sensors=sensors, health=None)
         try:
             from .ros_backend import HexapodRobot
 
