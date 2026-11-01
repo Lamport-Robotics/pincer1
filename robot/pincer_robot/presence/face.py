@@ -43,12 +43,21 @@ class FaceObservation:
     frame_width: int
     ts: float
     det_score: float = 1.0
+    frame_height: int = 0
 
     @property
     def x_norm(self) -> float:
         """Horizontal position of the face centre, -1 (left edge) .. +1 (right edge)."""
         cx = (self.bbox[0] + self.bbox[2]) / 2.0
         return float(2.0 * cx / max(1, self.frame_width) - 1.0)
+
+    @property
+    def y_norm(self) -> float:
+        """Vertical position of the face centre, -1 (top) .. +1 (bottom); 0 without a frame height."""
+        if self.frame_height <= 0:
+            return 0.0
+        cy = (self.bbox[1] + self.bbox[3]) / 2.0
+        return float(2.0 * cy / self.frame_height - 1.0)
 
 
 class FaceRecognizer(Protocol):
@@ -226,7 +235,9 @@ class MockFaceRecognizer:
         obs = self.script[self._i % len(self.script)]
         self._i += 1
         return [
-            FaceObservation(o.embedding, o.bbox, o.pose, o.frame_width, ts, o.det_score)
+            FaceObservation(
+                o.embedding, o.bbox, o.pose, o.frame_width, ts, o.det_score, o.frame_height
+            )
             for o in obs
         ]
 
@@ -239,14 +250,18 @@ def make_mock_observation(
     pitch: float = 0.0,
     x_norm: float = 0.0,
     frame_width: int = 640,
+    y_norm: float = 0.0,
+    frame_height: int = 480,
 ) -> FaceObservation:
     cx = (x_norm + 1.0) / 2.0 * frame_width
+    cy = (y_norm + 1.0) / 2.0 * frame_height
     return FaceObservation(
         embedding=l2norm(embedding),
-        bbox=(cx - 60, 100, cx + 60, 260),
+        bbox=(cx - 60, cy - 80, cx + 60, cy + 80),
         pose=(yaw, pitch, 0.0),
         frame_width=frame_width,
         ts=ts,
+        frame_height=frame_height,
     )
 
 
@@ -289,7 +304,7 @@ class InsightFaceRecognizer:
 
     def observe(self, frame: Any, ts: float) -> list[FaceObservation]:
         faces = self._app.get(frame)
-        width = int(frame.shape[1])
+        height, width = int(frame.shape[0]), int(frame.shape[1])
         out: list[FaceObservation] = []
         for f in faces:
             emb = getattr(f, "normed_embedding", None)
@@ -311,6 +326,7 @@ class InsightFaceRecognizer:
                     frame_width=width,
                     ts=ts,
                     det_score=float(getattr(f, "det_score", 1.0)),
+                    frame_height=height,
                 )
             )
         return out
