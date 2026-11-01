@@ -100,3 +100,33 @@ Procedure, body on a stand, feet in the air:
 The arm takes the same treatment with its own neutral: arm straight up (shoulder and elbow zero) and the
 camera level (wrist zero). That pose is the `rest` in `GazeConfig`; the head's limits are the pan and tilt
 ranges the shell window and the cable loop allow, and are narrower than the servos'.
+
+## stairs
+
+`climb.py` crawls over steps with keyframes generated from the same kinematics: the body advances
+8 cm per cycle in three pulls, and between the pulls each pair of legs steps to where it is needed
+next, its foot on whatever level is there and never within 4.5 cm of an edge. A foot in the air goes
+out to 16 cm from its coxa while it lifts, because that is where the leg reaches highest, crosses the
+riser there and comes back in as it lands; the middle feet land wide for the same reason. Body height
+and pitch follow the feet (nose up to 25°), and every keyframe must solve inside the joint limits with
+three feet down and the centre inside their support polygon, or the riser is refused with the phase
+that failed. `interpolate` turns the keyframes into the 50 Hz samples the simulator and the robot play.
+
+What the geometry allows, from the generator: a single step up to 13 cm; 14 cm fails when the first
+rear leg has to lift while the other still stands on the lower floor. A run of steps with a 28 cm tread
+holds the front feet two risers above the rear ones, which the pitch cannot absorb past 8 cm risers.
+In MuJoCo (`sim/stairs.py`, position servos at the walking gains) the body gets up single steps of 6 to
+13 cm level to within 1° of roll, three 6 cm steps in a row, and tips over at the top of three 8 cm
+steps; joint torque stays near 1 N m through the climb against the 3 N m the servos have. A 17 cm
+riser needs longer legs or a different body, not more tuning.
+
+## the floor ahead
+
+`robot/pincer_robot/terrain.py` is what the climb and the walk look at before moving. The depth
+camera on the head, with the head's height and tilt, gives a height grid of the ground in front of the
+body (5 cm cells, 1.2 m out, ±40 cm wide); each cell is floor, step, wall or drop, and floor the camera
+should see but does not is a drop too. `find_step` reads the first riser out of the grid: distance,
+height, the angle of its edge against the body (so the body can square up before `climb.py` starts),
+and the tread depth when the next riser is in view. `front_clearance` is the distance to the nearest
+wall or drop in the walking corridor, the number the motion layer refuses to walk into. `render_steps`
+draws the same scenes synthetically for the tests and the mock robot.
