@@ -340,6 +340,7 @@ class CameraSource:
         import cv2  # type: ignore[import-not-found]
 
         self._cv2 = cv2
+        self._index, self._width, self._height = index, width, height
         self._cap = cv2.VideoCapture(index)
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
@@ -349,6 +350,16 @@ class CameraSource:
     def read(self) -> Any | None:
         ok, frame = self._cap.read()
         return frame if ok else None
+
+    def reopen(self) -> None:
+        """A network stream that dropped does not come back on its own: open it again."""
+        try:
+            self._cap.release()
+        except Exception:
+            pass
+        self._cap = self._cv2.VideoCapture(self._index)
+        self._cap.set(self._cv2.CAP_PROP_FRAME_WIDTH, self._width)
+        self._cap.set(self._cv2.CAP_PROP_FRAME_HEIGHT, self._height)
 
     def close(self) -> None:
         self._cap.release()

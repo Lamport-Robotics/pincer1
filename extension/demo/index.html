@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pincer1 demo dapp</title>
+<style>
+  :root { color-scheme: dark; --bg: #0e0f11; --fg: #e8e6e1; --mute: #8a8f98; --line: #26292e; --ok: #7bd389; --bad: #e06c75; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 ui-sans-serif, system-ui, sans-serif; }
+  main { max-width: 560px; margin: 8vh auto; padding: 0 16px; }
+  h1 { font-weight: 600; font-size: 22px; margin: 0 0 4px; }
+  p { color: var(--mute); margin: 0 0 20px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+  label { display: block; font-size: 13px; color: var(--mute); margin: 10px 0 4px; }
+  input { width: 100%; box-sizing: border-box; background: #15171a; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; }
+  button { background: var(--fg); color: #111; border: 0; border-radius: 8px; padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 12px; }
+  button:disabled { opacity: .4; cursor: default; }
+  #log { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; color: var(--mute); min-height: 80px; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  a { color: var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Send SOL</h1>
+  <p>A plain dapp. It asks the wallet to sign; the wallet is a robot.</p>
+  <div class="card">
+    <div id="wallet">Looking for Pincer1…</div>
+    <button id="connect" disabled>Connect</button>
+  </div>
+  <div class="card">
+    <label for="to">To</label>
+    <input id="to" value="9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin" spellcheck="false">
+    <label for="amount">Amount (SOL, devnet)</label>
+    <input id="amount" value="0.01">
+    <button id="send" disabled>Send</button>
+  </div>
+  <div class="card"><div id="log"></div></div>
+</main>
+<script type="module">
+  import { getWallets } from "https://esm.sh/@wallet-standard/app@1.1.0";
+  import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from "https://esm.sh/@solana/web3.js@1.98.0";
+
+  const $ = (id) => document.getElementById(id);
+  const log = (text, cls = "") => { const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls; $("log").prepend(d); };
+  const conn = new Connection("https://api.devnet.solana.com", "confirmed");
+  let wallet = null, account = null;
+
+  function adopt(w) {
+    if (w.name !== "Pincer1" || wallet) return;
+    wallet = w;
+    $("wallet").textContent = "Pincer1 is here.";
+    $("connect").disabled = false;
+  }
+  const { get, on } = getWallets();
+  get().forEach(adopt);
+  on("register", (...ws) => ws.forEach(adopt));
+
+  $("connect").onclick = async () => {
+    try {
+      const { accounts } = await wallet.features["standard:connect"].connect();
+      account = accounts.find((a) => a.chains.includes("solana:devnet")) ?? accounts[0];
+      $("wallet").textContent = `Connected: ${account.address}`;
+      $("send").disabled = false;
+      const bal = await conn.getBalance(new PublicKey(account.address));
+      log(`balance ${(bal / LAMPORTS_PER_SOL).toFixed(4)} SOL on devnet`);
+      if (bal < 0.02 * LAMPORTS_PER_SOL) log("low balance: airdrop at faucet.solana.com", "bad");
+    } catch (e) { log(`connect failed: ${e.message ?? e}`, "bad"); }
+  };
+
+  $("send").onclick = async () => {
+    try {
+      const to = new PublicKey($("to").value.trim());
+      const lamports = Math.round(parseFloat($("amount").value) * LAMPORTS_PER_SOL);
+      const from = new PublicKey(account.address);
+      const { blockhash } = await conn.getLatestBlockhash();
+      const tx = new Transaction({ feePayer: from, recentBlockhash: blockhash })
+        .add(SystemProgram.transfer({ fromPubkey: from, toPubkey: to, lamports }));
+      log(`asking the robot to sign ${lamports / LAMPORTS_PER_SOL} SOL to ${to.toBase58().slice(0, 4)}…${to.toBase58().slice(-4)}`);
+      const [res] = await wallet.features["solana:signAndSendTransaction"].signAndSendTransaction({
+        account, chain: "solana:devnet", transaction: tx.serialize({ requireAllSignatures: false }),
+      });
+      const sig = typeof res.signature === "string" ? res.signature : bs58(res.signature);
+      log(`sent: ${sig}`, "ok");
+      const a = document.createElement("a");
+      a.href = `https://explorer.solana.com/tx/${sig}?cluster=devnet`; a.target = "_blank"; a.textContent = "open in explorer";
+      $("log").prepend(a);
+    } catch (e) { log(`refused or failed: ${e.message ?? e}`, "bad"); }
+  };
+
+  function bs58(bytes) {
+    const A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let n = 0n; for (const b of bytes) n = n * 256n + BigInt(b);
+    let s = ""; while (n > 0n) { s = A[Number(n % 58n)] + s; n /= 58n; }
+    for (const b of bytes) { if (b) break; s = "1" + s; }
+    return s;
+  }
+</script>
+</body>
+</html>

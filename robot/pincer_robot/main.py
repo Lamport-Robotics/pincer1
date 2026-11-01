@@ -811,10 +811,19 @@ class RobotApp:
 
     def _camera_thread(self, recognizer: FaceRecognizer, source: Any) -> None:
         period = 1.0 / max(0.5, self.cfg.camera_fps)
+        last_frame = time.time()
         while not self._stop.is_set():
             t0 = time.time()
             frame = source.read()
+            if frame is None and t0 - last_frame > 5.0 and hasattr(source, "reopen"):
+                log.warning("camera: no frames for 5 s, reopening")
+                try:
+                    source.reopen()
+                except Exception as exc:
+                    log.error("camera reopen failed: %s", exc)
+                last_frame = t0
             if frame is not None:
+                last_frame = t0
                 try:
                     obs = recognizer.observe(frame, t0)
                 except Exception as exc:
