@@ -1,0 +1,37 @@
+{
+  "chain": "solana",
+  "kind": "tx",
+  "name": "spl_transfer_checked_2022",
+  "notes": "token-2022 transferChecked with a compute budget",
+  "source": {
+    "signature": "3SnRxEWpk65A9dU6rvcxyW4cdKvVqVaVeVrUWd4c892t2nDwurcoYrWTdLhbvZPAHCq9FJ4H1mJnmwpnfXKgG41G",
+    "slot": 464142092,
+    "url": "https://solscan.io/tx/3SnRxEWpk65A9dU6rvcxyW4cdKvVqVaVeVrUWd4c892t2nDwurcoYrWTdLhbvZPAHCq9FJ4H1mJnmwpnfXKgG41G",
+    "fetched": "getTransaction base64 + jsonParsed, api.mainnet-beta.solana.com"
+  },
+  "bytes": "AQADBlwkAGWeEJKXm3iucb/ihL/2f5v3cAWy7NpjtlmPOFnUlmslDI94CyuciJfIhhr8oBuRoosipFEAQiq+A2ClLQTyxZWYv1+7i8YjflwboZVqZ52fZ9gs1Z/e1tBkHy7VMm5HnfcQo3nIc9BJP7a9LrMW1PJgM8kF8DeTD7AL6ngrAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh7nWP3hhCXbzkbM3athr8TYO5DSf+vfko2KGL/HoE6l+qpBhM4Ju9eFvualUnvR2RQ+mdNA3rtJZVjc9XAwQACQP6NdUAAAAAAAQABQL3FAAABQUBAwIAAAoMZsbxaQEAAAAG",
+  "owner": "7CgMCAponQGC4aWcdnF7w7HrvhWMaR2e8Qqu5JD4Dgef",
+  "expect": {
+    "version": "legacy",
+    "signers": 1,
+    "lamports_out": "0",
+    "dest": "HLgQdjD5onxqYkmnifBgGChxdnzXTp9K9CRYkWxNNWZf",
+    "token_out": [
+      {
+        "mint": "8RVBk8vxLiUHueLUW1f4izFVqN3nWippLhkohKg6EGkS",
+        "mint_in_instruction": true,
+        "dest": "HLgQdjD5onxqYkmnifBgGChxdnzXTp9K9CRYkWxNNWZf",
+        "amount": "6072419942"
+      }
+    ],
+    "programs": [
+      "ComputeBudget111111111111111111111111111111",
+      "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    ],
+    "fee_lamports": "79994",
+    "durable_nonce": false,
+    "warnings": [],
+    "lamport_recipients": 0,
+    "controller": "accept"
+  }
+}

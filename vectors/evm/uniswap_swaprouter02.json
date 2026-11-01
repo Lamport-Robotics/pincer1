@@ -1,0 +1,33 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "uniswap_swaprouter02",
+  "notes": "swaprouter02 call carrying ether value",
+  "source": {
+    "hash": "0x4a94441fc6a6a22eee3b8087ede8a0c3d6e34d02bb249a92f5cdbeb1fa197a7b",
+    "block": 26320803,
+    "url": "https://etherscan.io/tx/0x4a94441fc6a6a22eee3b8087ede8a0c3d6e34d02bb249a92f5cdbeb1fa197a7b",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "AvkBEwEcgwXlSYQF9eEAgwM6Y5Ros0ZYM/typw7N9IXg5Me9hmX8RYcBaEtac+TsuOQE5FqvAAAAAAAAAAAAAAAAwCqqObIj/o0KDlxPJ+rZCDx1bMIAAAAAAAAAAAAAAAD5UeM1r7KJNT3CSegpJheOrH3teAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH0AAAAAAAAAAAAAAAA7jA2ITeOVi+Z8oH9ClrkKPwmFjsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWhLWnPk7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADA",
+  "owner": "0xEe303621378E562F99f281FD0A5AE428Fc26163B",
+  "expect": {
+    "type": "eip1559",
+    "chain_id": 1,
+    "nonce": 28,
+    "to": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "value_wei": "396147826091244",
+    "gas_limit": "211555",
+    "max_fee_per_gas_wei": "100000000",
+    "max_fee_wei": "21155500000000",
+    "call": "unknown",
+    "call_to": null,
+    "token_out": [],
+    "spender": null,
+    "allowance": null,
+    "warnings": [
+      "unknown_contract"
+    ],
+    "controller": "accept_with_declaration: unknown_contract"
+  }
+}

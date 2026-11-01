@@ -1,0 +1,170 @@
+{
+  "chain": "evm",
+  "kind": "evm_typed_data",
+  "name": "seaport_listing",
+  "notes": "a seaport 1.6 listing of one nft for 15 eth (order shape from the seaport reference); arrays of structs are beyond the controller's typed-data support",
+  "source": {
+    "url": "https://github.com/ProjectOpenSea/seaport/blob/main/docs/SeaportDocumentation.md"
+  },
+  "typed_data": {
+    "domain": {
+      "name": "Seaport",
+      "version": "1.6",
+      "chainId": 1,
+      "verifyingContract": "0x0000000000000068F116a894984e2DB1123eB395"
+    },
+    "types": {
+      "EIP712Domain": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "version",
+          "type": "string"
+        },
+        {
+          "name": "chainId",
+          "type": "uint256"
+        },
+        {
+          "name": "verifyingContract",
+          "type": "address"
+        }
+      ],
+      "OrderComponents": [
+        {
+          "name": "offerer",
+          "type": "address"
+        },
+        {
+          "name": "zone",
+          "type": "address"
+        },
+        {
+          "name": "offer",
+          "type": "OfferItem[]"
+        },
+        {
+          "name": "consideration",
+          "type": "ConsiderationItem[]"
+        },
+        {
+          "name": "orderType",
+          "type": "uint8"
+        },
+        {
+          "name": "startTime",
+          "type": "uint256"
+        },
+        {
+          "name": "endTime",
+          "type": "uint256"
+        },
+        {
+          "name": "zoneHash",
+          "type": "bytes32"
+        },
+        {
+          "name": "salt",
+          "type": "uint256"
+        },
+        {
+          "name": "conduitKey",
+          "type": "bytes32"
+        },
+        {
+          "name": "counter",
+          "type": "uint256"
+        }
+      ],
+      "OfferItem": [
+        {
+          "name": "itemType",
+          "type": "uint8"
+        },
+        {
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "name": "identifierOrCriteria",
+          "type": "uint256"
+        },
+        {
+          "name": "startAmount",
+          "type": "uint256"
+        },
+        {
+          "name": "endAmount",
+          "type": "uint256"
+        }
+      ],
+      "ConsiderationItem": [
+        {
+          "name": "itemType",
+          "type": "uint8"
+        },
+        {
+          "name": "token",
+          "type": "address"
+        },
+        {
+          "name": "identifierOrCriteria",
+          "type": "uint256"
+        },
+        {
+          "name": "startAmount",
+          "type": "uint256"
+        },
+        {
+          "name": "endAmount",
+          "type": "uint256"
+        },
+        {
+          "name": "recipient",
+          "type": "address"
+        }
+      ]
+    },
+    "primaryType": "OrderComponents",
+    "message": {
+      "offerer": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d",
+      "zone": "0x0000000000000000000000000000000000000000",
+      "offer": [
+        {
+          "itemType": 2,
+          "token": "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D",
+          "identifierOrCriteria": "1234",
+          "startAmount": "1",
+          "endAmount": "1"
+        }
+      ],
+      "consideration": [
+        {
+          "itemType": 0,
+          "token": "0x0000000000000000000000000000000000000000",
+          "identifierOrCriteria": "0",
+          "startAmount": "15000000000000000000",
+          "endAmount": "15000000000000000000",
+          "recipient": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d"
+        }
+      ],
+      "orderType": 0,
+      "startTime": "1767225600",
+      "endTime": "1769904000",
+      "zoneHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "salt": "24446860302761739304752683030156737591518664810215442929",
+      "conduitKey": "0x0000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000",
+      "counter": "0"
+    }
+  },
+  "owner": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d",
+  "expect": {
+    "digest": "0xaa22fd7607f2e5f59f6b44fdd2ef395e55364b988269166ffc585a0ec825d334",
+    "owner": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d",
+    "warnings": [],
+    "market": "Seaport",
+    "controller": "refuse: unsupported_typed_data"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "usdc_transfer",
+  "notes": "erc-20 transfer of usdc",
+  "source": {
+    "hash": "0x0f35ed06b0185c9204c2fa56c74f7b93c929040605fed63dcdfddde82d230531",
+    "block": 26320804,
+    "url": "https://etherscan.io/tx/0x0f35ed06b0185c9204c2fa56c74f7b93c929040605fed63dcdfddde82d230531",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "AvhvAYIUXIR3NZQAhHqgCLeDAa2wlKC4aZHGIYs2wdGdSi6esM42ButIgLhEqQWcuwAAAAAAAAAAAAAAAPSsbmr0q76y72S+bldHHDE2KxCPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADYuw2XA",
+  "owner": "0xA34d615f888b46e5C4f5fB1e00a2F2189cee2b6E",
+  "expect": {
+    "type": "eip1559",
+    "chain_id": 1,
+    "nonce": 5212,
+    "to": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "value_wei": "0",
+    "gas_limit": "110000",
+    "max_fee_per_gas_wei": "2057308343",
+    "max_fee_wei": "226303917730000",
+    "call": "transfer",
+    "call_to": "0xF4aC6E6Af4abBeB2ef64bE6e57471C31362B108F",
+    "token_out": [
+      {
+        "token": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "to": "0xF4aC6E6Af4abBeB2ef64bE6e57471C31362B108F",
+        "amount": "909034341"
+      }
+    ],
+    "spender": null,
+    "allowance": null,
+    "warnings": [],
+    "controller": "accept"
+  }
+}

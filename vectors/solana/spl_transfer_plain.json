@@ -1,0 +1,157 @@
+{
+  "chain": "solana",
+  "kind": "tx",
+  "name": "spl_transfer_plain",
+  "notes": "twenty-one token transfers (tag 3, no mint in the instruction) in one message: more than the controller lists",
+  "source": {
+    "signature": "WFnfeKFhLtw1sWLE3DSoJo6TVmALGrZHjYBstCvatySZHBRTLKjnQ6hNjVe2Sub8mBH3jTdwYutRZocQvg6Hidj",
+    "slot": 464142092,
+    "url": "https://solscan.io/tx/WFnfeKFhLtw1sWLE3DSoJo6TVmALGrZHjYBstCvatySZHBRTLKjnQ6hNjVe2Sub8mBH3jTdwYutRZocQvg6Hidj",
+    "fetched": "getTransaction base64 + jsonParsed, api.mainnet-beta.solana.com"
+  },
+  "bytes": "AQACGHrEbJuhTDaWRwNLMa0Xeod87uVoi4/0IEnHpyI5V9HFD5/fVeY4DGcXxAnE16aRXH0LZLK/lV4FfO3G1+MsH+oTxlW/zdNtL+vyb43Sxox4emSBjZoxa2njUzqK/OepyxSnXCOosSrDdRdAf3XrPxF65xwVyMil093lKP6qoCaHK2Da4XWcIAoh/VI9VSxYCwzhoWxu7Oa9cF6typ6MSBg5SsG8lL9Z1T84IV/ignyc+I68bd3VKp8emkpObWqbBj6KuhsoksTf+FDS+V2/9xC0YyroiFoCIP5HwzhkogFGROWT6FGuzirTHpziBcUL+SriYgSJqN3zObyBGLgUTy5i6v2+ieFyKPPoNGbtPJlJhD323Z+Q+VM+5BBxFJlty2XDgb8kbtDX3aCJIcMCZXCjr2FNgRu87b2mhh9ZBMZ4djCzf8Mz5p5WgVnuGJIgRGX08ddXFxewenBm3HG2gF94Ee035/MJQUgqlMQ6cmlmgdKTEX9lHcbraL2+QOmOpYCN9axpH3G9d+t6ZmadPxpJib1USb/wFwZG+1zLdigphp7HBecFmHGqUDt3OWs+gEav9S25ipSleeGPdOZFdZSHZjByIDjrZVYXOHCsSrbj8NbpVfM2iLR/4fU6I36ivIzsv8G3m9RC2uMzdvxm7Bjc5GEv7Svo5TzB17xyqIIVmyOosZX/qOwFPtq6g/BKAvZfulYwJga7X/wA7jtQUeCkwxEX+5t7NzeFETPWGIJbI/d1BNY5SDHNllhMSZU/46/svQW6V0nckx6lU2OGPybV9fk/pIKNiniHWHhlechrsj6GhTrgB91vxA72iaap5OYqw463GkpgCWAV/tAlM/i5M0raGwPFjTS2Dm24jJhziwhancRrB/Y9tAWo7yOLDgUTuS/M4bkiTBdSK+KcEOvIKn7XnCJJPKZ8a6zjGxElAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAG3fbh12Whk9nL4UbO63msHLSF7V9bN5E6jPWFfv8AqTODvwh6YpQktrSEeU93GatYtBHAsjvXw+kgUQO0UWqPFhYACQOgDwAAAAAAABcDChUACQMDiOkaEwAAABcDCgEACQMDiOkaEwAAABcDCgIACQMDiOkaEwAAABcDCgMACQMDiOkaEwAAABcDCgQACQMDiOkaEwAAABcDCgUACQMDiOkaEwAAABcDCgYACQMDiOkaEwAAABcDCgcACQMDiOkaEwAAABcDCggACQMDiOkaEwAAABcDCgkACQMDiOkaEwAAABcDCgoACQMDiOkaEwAAABcDCgsACQMDiOkaEwAAABcDCgwACQMDiOkaEwAAABcDCg0ACQMDiOkaEwAAABcDCg4ACQMDiOkaEwAAABcDCg8ACQMDiOkaEwAAABcDChAACQMDiOkaEwAAABcDChEACQMDiOkaEwAAABcDChIACQMDiOkaEwAAABcDChMACQMDiOkaEwAAABcDChQACQMDiOkaEwAAAA==",
+  "owner": "9GETYoSJCzRubNHKjHdZK6aBzp66TeFhLM83QSLhUAUC",
+  "expect": {
+    "version": "legacy",
+    "signers": 1,
+    "lamports_out": "0",
+    "dest": "LpUxHRzqtcwj96nUZ1L731NibLhFR84qE8WTG8FV5vt",
+    "token_out": [
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "LpUxHRzqtcwj96nUZ1L731NibLhFR84qE8WTG8FV5vt",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "23zWRzxEzFpj7ySKUdWUJ2obmEXLJfhFxPMRwsL4U39B",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "2LC9yQmcpfrcsiRg1sCcRcg8tRTPWUmCvdLfBEeZ5M9k",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "2PdAjsSs3kQ1tAWYY5JimUzQk1SZk5qwBHSWsC8Rissc",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "3vLC2MpcBmUpWZSdkjt5ATtjvi9qWKCV7bBk4bAGkLcw",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "4reMY2atng7fW3ing1UogwaFn471mJKGaas3N4yW73yF",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "5D8y9hUqEZHgg39DNCgszF4YQ6roPJEqoAiYfPp9U8y3",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "5dwmGMhcGFZpPsb6QbnQA1MQ5cD3aMnuPZy3ThXcUK7b",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "7f8nLuUzAUD9t4sKAFUNJ8PQayK6sNuAFKo5vcjF24kS",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "7rF5uvpBCd2mFYcTNg6WKhxc5RaYKebTHmPLf6FQWtiB",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "8xNBSArPHE4m8kh29xiEUj4fxsTrf8F6FkUxCgZCC9tA",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "95hn8ez9HkxscX2gzF4HVo5rMtGn3ugj5tabfW8aDLe8",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "9epje5Bes7MPDeFUBvAe3VKkEJ6eVtR5aK6vgnLXJQ4Q",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "A4W4CFJjZBCbTR7RoXxXrrWFXiS4kgNpb6G2YPVGVBnj",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "A7YR82Mkg1Mi9mty1QZ1hNjS9uUYwq8h42Ewy2qtEGrF",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "AV7Tfb1a4k7TeCQttyqgRVdCfTgUo59kC2G8eCh9RTz4",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "BSbjM7jjThxcgnrGFzSNaDUnU4p3VasP1MFo4aAncsYj",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "C6AP4vFKxWkgLZReFFCaD1ausP9EvravGiqxDxMAMVTY",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "Cqjik9KGThJRojFPdKNag9tDBE3achB24VZN8WQdkKHk",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "CznsM6uGqa8MVNsBNwf5zubPEpRChorG8b3M91FFv5GT",
+        "amount": "82055890947"
+      },
+      {
+        "mint": null,
+        "mint_in_instruction": false,
+        "dest": "DTwnfbi4uBw9Ji9KrFeggA81TKKcS1BDgKHpNFkbeg8u",
+        "amount": "82055890947"
+      }
+    ],
+    "programs": [
+      "ComputeBudget111111111111111111111111111111",
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+    ],
+    "fee_lamports": "10600",
+    "durable_nonce": false,
+    "warnings": [],
+    "lamport_recipients": 0,
+    "controller": "refuse: token_out_overflow (the controller lists at most 8 token transfers)"
+  }
+}

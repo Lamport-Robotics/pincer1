@@ -1,0 +1,31 @@
+{
+  "chain": "solana",
+  "kind": "tx",
+  "name": "unknown_program",
+  "notes": "one instruction to a program that is neither core nor a router",
+  "source": {
+    "signature": "4XAW25cL9yUBPTgRFYXyWyucv4hP9Ahb5yaHXLGmvQm9r2Y5Nmaymrp9qfjffubUQKNRwj4PRPJX7XwZ2HMMfhhf",
+    "slot": 464142092,
+    "url": "https://solscan.io/tx/4XAW25cL9yUBPTgRFYXyWyucv4hP9Ahb5yaHXLGmvQm9r2Y5Nmaymrp9qfjffubUQKNRwj4PRPJX7XwZ2HMMfhhf",
+    "fetched": "getTransaction base64 + jsonParsed, api.mainnet-beta.solana.com"
+  },
+  "bytes": "AQABA/Znb3zhy8efyyhsAnQ/VRR3tqhA6MrrmFN/raJFDOUPNZtjiLgkUYJsu4O7lCF6+WWGCGKfgWNPCiRJ3mtQnHYNP61S0OnW6airVQrVwQNtsH9Iy4yLop26FhlhyMjN69wM1YxKQ1/OifwVnj/AnUZ3crm94p8zjya15Bq9WgTFAQICAQAZAQw/qhsAAAAAxpL/iVT14xiA8PoCAAAAAA==",
+  "owner": "Harmonic8SoAfZixJqUxxdSeyWzr6q7XFjuiXS5Z2zPg",
+  "expect": {
+    "version": "legacy",
+    "signers": 1,
+    "lamports_out": "0",
+    "dest": null,
+    "token_out": [],
+    "programs": [
+      "tickUcsEQegChaAuo9VYQQztB4ZGApY6ZT4FkULWY6N"
+    ],
+    "fee_lamports": "5000",
+    "durable_nonce": false,
+    "warnings": [
+      "unknown_program"
+    ],
+    "lamport_recipients": 0,
+    "controller": "accept_with_declaration: unknown_program"
+  }
+}

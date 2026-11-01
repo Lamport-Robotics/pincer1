@@ -110,6 +110,14 @@ if(BUILD_HOST_TESTS)
         add_test(NAME ${t} COMMAND test_${t})
     endforeach()
 
+    # the public transaction corpus in /vectors, through every parser (the daemon reads the same files)
+    add_executable(test_vectors test/test_vectors.c)
+    target_link_libraries(test_vectors pincer_core)
+    target_include_directories(test_vectors PRIVATE test)
+    target_compile_definitions(test_vectors PRIVATE PINCER_VECTORS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../vectors")
+    target_compile_options(test_vectors PRIVATE -Wall -Wextra -Wno-unused-function)
+    add_test(NAME vectors COMMAND test_vectors)
+
     # secrets.c is compiled into the test itself so the dev-key fallback can be exercised with a known string.
     add_executable(test_secrets test/test_secrets.c src/secrets.c)
     target_link_libraries(test_secrets pincer_core)

@@ -1,0 +1,30 @@
+{
+  "chain": "solana",
+  "kind": "tx",
+  "name": "sol_transfer_memo_v0",
+  "notes": "a system transfer with a memo in a v0 message that uses no lookup tables",
+  "source": {
+    "signature": "4FWBNLR2Jpb97drFFtryyfLjmNaqgNJhosHSczLCx7yTiYUtNzuyeQPLKZHtesFPWm7DXpGKiBH8WiULUzd9amkn",
+    "slot": 464142092,
+    "url": "https://solscan.io/tx/4FWBNLR2Jpb97drFFtryyfLjmNaqgNJhosHSczLCx7yTiYUtNzuyeQPLKZHtesFPWm7DXpGKiBH8WiULUzd9amkn",
+    "fetched": "getTransaction base64 + jsonParsed, api.mainnet-beta.solana.com"
+  },
+  "bytes": "gAEAAgTnXi96eh4kuvpfFxNETql6S8KzRBKHP1lW6QgrW9tZNVwe7jiFXO0FZUn/vOQyJczUXcYkz4XFCFA7PYaNEG1dAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjcDxRt35rrsq3fa8vx3RW6hk/TyxoGCd3bgjf3Iw4UEuAgICAAEMAgAAAAAtMQEAAAAAAwAkZDYxOGVlNzItNzUyNS00NzYxLTg2ZGMtNTNlMGRjNzkyYzZhAA==",
+  "owner": "GaAUdDcanaihJzhW3usARHeo6m1YhcuSYS6CEWsYidpg",
+  "expect": {
+    "version": 0,
+    "signers": 1,
+    "lamports_out": "20000000",
+    "dest": "7Cbs5EtTUA1XdGFeeWibDrjq5YnuFhbjoqKE31F1pE2x",
+    "token_out": [],
+    "programs": [
+      "11111111111111111111111111111111",
+      "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+    ],
+    "fee_lamports": "5000",
+    "durable_nonce": false,
+    "warnings": [],
+    "lamport_recipients": 1,
+    "controller": "accept"
+  }
+}

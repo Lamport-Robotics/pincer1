@@ -1,0 +1,33 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "set_approval_for_all",
+  "notes": "setApprovalForAll on a collection",
+  "source": {
+    "hash": "0xcbef9749808e18823f1d9202b59569648d16602fca4694550ea4199ea7faa60d",
+    "block": 26320803,
+    "url": "https://etherscan.io/tx/0xcbef9749808e18823f1d9202b59569648d16602fca4694550ea4199ea7faa60d",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "AvhuAYIhjIMBhqCEAv3pEYMBEkGUMCDSLb9jg4AKGntrP7FxxTtNlguAuESiLLRlAAAAAAAAAAAAAAAAHgBJeD8AigCFGT4AAD0AzVQAPHEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcA=",
+  "owner": "0xb814f14996DD967A04e858ebe36120784cEd4E36",
+  "expect": {
+    "type": "eip1559",
+    "chain_id": 1,
+    "nonce": 8588,
+    "to": "0x3020D22dBf6383800A1A7B6B3fB171c53b4d960B",
+    "value_wei": "0",
+    "gas_limit": "70209",
+    "max_fee_per_gas_wei": "50194705",
+    "max_fee_wei": "3524120043345",
+    "call": "setApprovalForAll",
+    "call_to": "0x1E0049783F008A0085193E00003D00cd54003c71",
+    "token_out": [],
+    "spender": null,
+    "allowance": null,
+    "warnings": [
+      "set_approval_for_all"
+    ],
+    "controller": "accept_with_declaration: set_approval_for_all"
+  }
+}

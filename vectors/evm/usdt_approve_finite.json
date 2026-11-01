@@ -1,0 +1,33 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "usdt_approve_finite",
+  "notes": "approve of a bounded amount",
+  "source": {
+    "hash": "0x52ed08493d0be4b98553bbcf84eb2ef848619905efc6c1e7966e72ba0774a9d7",
+    "block": 26320803,
+    "url": "https://etherscan.io/tx/0x52ed08493d0be4b98553bbcf84eb2ef848619905efc6c1e7966e72ba0774a9d7",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "AvhsASOEfSt1AYR/22czgr8olNrBf5WNLuUjoiBiBplFl8E9gx7HgLhECV6nswAAAAAAAAAAAAAAAIgdQCN2WcJRgRzsnDZO+R3AjTAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACYloDA",
+  "owner": "0x76C8Fed84b94092f4E77223cd3CcaB4F4079E924",
+  "expect": {
+    "type": "eip1559",
+    "chain_id": 1,
+    "nonce": 35,
+    "to": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "value_wei": "0",
+    "gas_limit": "48936",
+    "max_fee_per_gas_wei": "2145085235",
+    "max_fee_wei": "104971891059960",
+    "call": "approve",
+    "call_to": null,
+    "token_out": [],
+    "spender": "0x881D40237659C251811CEC9c364ef91dC08D300C",
+    "allowance": "10000000",
+    "warnings": [
+      "approve"
+    ],
+    "controller": "accept_with_declaration: approve"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "chain": "solana",
+  "kind": "tx",
+  "name": "sol_transfer",
+  "notes": "a plain system transfer, one signer",
+  "source": {
+    "signature": "2NsGbn3Fv1GUSUNgQfm7d7FwvboTakoop3bFrFbBXr9of24byhzoKJeZpsFHjmgi9vuqw4bWmvS5siGkv2gyvkzd",
+    "slot": 464142092,
+    "url": "https://solscan.io/tx/2NsGbn3Fv1GUSUNgQfm7d7FwvboTakoop3bFrFbBXr9of24byhzoKJeZpsFHjmgi9vuqw4bWmvS5siGkv2gyvkzd",
+    "fetched": "getTransaction base64 + jsonParsed, api.mainnet-beta.solana.com"
+  },
+  "bytes": "AQACBMXkQ9nYSAieYtEiTgT5rLDPDc16dkID/6gbfXR39VemyiUzZbDx62GvawrVLpzeynVsOFnufq3+qj1mP9ruUWYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAUamcze3oR1PaJnAjt2/IQ9MimNJEV8AmIl1UK3AeXWEDAwAJAkBCDwAAAAAAAwAJAwUAAAAAAAAAAgIAAQwCAAAAECcAAAAAAAA=",
+  "owner": "EKVCKim7bbL5gasg3qE5PDtAH25FK2ghwEne7qwR1M81",
+  "expect": {
+    "version": "legacy",
+    "signers": 1,
+    "lamports_out": "10000",
+    "dest": "Ec6FpVg2mXszGGt5uR88JqiAQzLXyL9aGyHJgdhtsyY1",
+    "token_out": [],
+    "programs": [
+      "ComputeBudget111111111111111111111111111111",
+      "11111111111111111111111111111111"
+    ],
+    "fee_lamports": "5005",
+    "durable_nonce": false,
+    "warnings": [],
+    "lamport_recipients": 1,
+    "controller": "accept"
+  }
+}

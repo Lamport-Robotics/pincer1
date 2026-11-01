@@ -1,0 +1,29 @@
+{
+  "chain": "bitcoin",
+  "kind": "btc_psbt",
+  "name": "p2wpkh_no_change_legacy_dest",
+  "notes": "one input paying a p2pkh address, no change",
+  "source": {
+    "txid": "f2ef9b72f544429bede9236008a8580554e31e62b6e4b655579798f6d2d82edb",
+    "url": "https://mempool.space/tx/f2ef9b72f544429bede9236008a8580554e31e62b6e4b655579798f6d2d82edb",
+    "fetched": "mempool.space /api/tx (prevouts, witnesses); psbt v0 built from it with the spender's key named on every input"
+  },
+  "bytes": "cHNidP8BAFUCAAAAAc7hW35K78CL1KSBIQkScpF9zJnU41Y9hHtRSK7HaBMoAQAAAAD/////AV/6AAAAAAAAGXapFC5rCnHzFLdvRM55oGK7q4uZkeXEiKwAAAAAAAEBH/f+AAAAAAAAFgAUsslv3NjliBM+IpUk//5BfZZpMqgiBgMUDqHqr04L+Eewv7ZrnPB8JZDGjHfqPLg69JnsPdINqxgAAAAAVAAAgAAAAIAAAACAAAAAAAAAAAAAAA==",
+  "owner": {
+    "address": "bc1qktyklhxcukypx03zj5j0lljp0ktxjv4g9x3yqx",
+    "pubkey": "03140ea1eaaf4e0bf847b0bfb66b9cf07c2590c68c77ea3cb83af499ec3dd20dab"
+  },
+  "expect": {
+    "inputs": 1,
+    "owner_inputs": 1,
+    "outputs": 1,
+    "sats_in": "65271",
+    "sats_out": "64095",
+    "fee_sats": "1176",
+    "change_sats": "0",
+    "dest": "15ESK9fmGDiiAku9p83dkCjPTNfYy4Nh9K",
+    "dest_script": "76a9142e6b0a71f314b76f44ce79a062bbab8b9991e5c488ac",
+    "warnings": [],
+    "controller": "accept"
+  }
+}

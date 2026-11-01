@@ -1,0 +1,29 @@
+{
+  "chain": "bitcoin",
+  "kind": "btc_psbt",
+  "name": "p2wpkh_large_payment",
+  "notes": "two inputs, 26.9 btc out",
+  "source": {
+    "txid": "5189f09ea45eff161772e8a415f529494d58f593d6c7fcf69a406b43cc4ccab7",
+    "url": "https://mempool.space/tx/5189f09ea45eff161772e8a415f529494d58f593d6c7fcf69a406b43cc4ccab7",
+    "fetched": "mempool.space /api/tx (prevouts, witnesses); psbt v0 built from it with the spender's key named on every input"
+  },
+  "bytes": "cHNidP8BAKYBAAAAAqbOoRxqn9iQFoNIruYCSXIhC46/gT33NUZH1r+JGYHtAAAAAAD/////m7UKYFXpCmLNm9uiXySZSY59CNmosdYbOFQI/IwDRWMBAAAAAP////8CgCRWoAAAAAAiACARFXQXvAvZNccTyv4cHv7JFgZkBrR0OSYNO0h7JIhRSNsa+BgAAAAAFgAULkyI1bbaDcUcmbLRMqiyDIIuWvcAAAAAAAEBH3C7oEIAAAAAFgAULkyI1bbaDcUcmbLRMqiyDIIuWvciBgK+bWWr48h0sl3YlOcBAUjMtb+eFGP6X5YOmvjCOQV4YBgAAAAAVAAAgAAAAIAAAACAAAAAAAAAAAAAAQEfR46tdgAAAAAWABQuTIjVttoNxRyZstEyqLIMgi5a9yIGAr5tZavjyHSyXdiU5wEBSMy1v54UY/pflg6a+MI5BXhgGAAAAABUAACAAAAAgAAAAIAAAAAAAAAAAAAAIgICvm1lq+PIdLJd2JTnAQFIzLW/nhRj+l+WDpr4wjkFeGAYAAAAAFQAAIAAAACAAAAAgAAAAAAAAAAAAA==",
+  "owner": {
+    "address": "bc1q9exg34dkmgxu28yektgn929jpjpzukhhl2r3zr",
+    "pubkey": "02be6d65abe3c874b25dd894e7010148ccb5bf9e1463fa5f960e9af8c239057860"
+  },
+  "expect": {
+    "inputs": 2,
+    "owner_inputs": 2,
+    "outputs": 2,
+    "sats_in": "3108915639",
+    "sats_out": "2690000000",
+    "fee_sats": "2652",
+    "change_sats": "418912987",
+    "dest": "bc1qzy2hg9aup0vnt3cnetlpc8h7eytqveqxk36rjfsd8dy8kfyg29yqg29swh",
+    "dest_script": "002011157417bc0bd935c713cafe1c1efec916066406b47439260d3b487b24885148",
+    "warnings": [],
+    "controller": "accept"
+  }
+}

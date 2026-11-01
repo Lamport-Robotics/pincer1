@@ -1,0 +1,33 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "usdt_approve_unlimited_legacy",
+  "notes": "the same, in a legacy transaction",
+  "source": {
+    "hash": "0x778afcad801a2f32f05648b12a7ba122c2261ea2663aee41b0d25b3d330fba1b",
+    "block": 26320798,
+    "url": "https://etherscan.io/tx/0x778afcad801a2f32f05648b12a7ba122c2261ea2663aee41b0d25b3d330fba1b",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "+GkBhD6La3iDASDHlNrBf5WNLuUjoiBiBplFl8E9gx7HgLhECV6nswAAAAAAAAAAAAAAAMkui9958FB/ZaOSsKtGZ3Fr/gEQ//////////////////////////////////////////8BgIA=",
+  "owner": "0x20806260DA7129b1E93F0E614E9Ac11b867738a6",
+  "expect": {
+    "type": "legacy",
+    "chain_id": 1,
+    "nonce": 1,
+    "to": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "value_wei": "0",
+    "gas_limit": "73927",
+    "max_fee_per_gas_wei": "1049324408",
+    "max_fee_wei": "77573405510216",
+    "call": "approve",
+    "call_to": null,
+    "token_out": [],
+    "spender": "0xC92E8bdf79f0507f65a392b0ab4667716BFE0110",
+    "allowance": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "warnings": [
+      "approve_unlimited"
+    ],
+    "controller": "accept_with_declaration: approve_unlimited"
+  }
+}

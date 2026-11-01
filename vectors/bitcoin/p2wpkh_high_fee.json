@@ -1,0 +1,31 @@
+{
+  "chain": "bitcoin",
+  "kind": "btc_psbt",
+  "name": "p2wpkh_high_fee",
+  "notes": "fee above a tenth of what leaves",
+  "source": {
+    "txid": "de191c675c46c93b4f9048d358c9d34cd32668d46037ae91c2205b62bbee4c08",
+    "url": "https://mempool.space/tx/de191c675c46c93b4f9048d358c9d34cd32668d46037ae91c2205b62bbee4c08",
+    "fetched": "mempool.space /api/tx (prevouts, witnesses); psbt v0 built from it with the spender's key named on every input"
+  },
+  "bytes": "cHNidP8BAHEBAAAAAY6mC2nI7DG8rGz1+hGV6fc0BVY8XBugwmo78YTrhZTiAQAAAAD/////AqYdAAAAAAAAFgAU2Nm/WV5sl9Qbts1oiRIC+MOUzhZPXgcAAAAAABYAFOAUXfFmsg25JaP3SSiJpetf9tNjAAAAAAABAR9fgAcAAAAAABYAFOAUXfFmsg25JaP3SSiJpetf9tNjIgYCnHPJ3o2zG9HmwnuOD4P3yvOF9Ng7N5EriqirI+BH2csYAAAAAFQAAIAAAACAAAAAgAAAAAAAAAAAAAAiAgKcc8nejbMb0ebCe44Pg/fK84X02Ds3kSuKqKsj4EfZyxgAAAAAVAAAgAAAAIAAAACAAAAAAAAAAAAA",
+  "owner": {
+    "address": "bc1quq29mutxkgxmjfdr7ayj3zd9ad0ld5mrhh89l2",
+    "pubkey": "029c73c9de8db31bd1e6c27b8e0f83f7caf385f4d83b37912b8aa8ab23e047d9cb"
+  },
+  "expect": {
+    "inputs": 1,
+    "owner_inputs": 1,
+    "outputs": 2,
+    "sats_in": "491615",
+    "sats_out": "7590",
+    "fee_sats": "1130",
+    "change_sats": "482895",
+    "dest": "bc1qmrvm7k27djtagxake45gjyszlrpefnskw7npgd",
+    "dest_script": "0014d8d9bf595e6c97d41bb6cd68891202f8c394ce16",
+    "warnings": [
+      "high_fee"
+    ],
+    "controller": "accept_with_declaration: high_fee"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "chain": "evm",
+  "kind": "evm_typed_data",
+  "name": "ether_mail",
+  "notes": "the eip-712 example from the eip: nested structs, which the controller refuses",
+  "source": {
+    "url": "https://eips.ethereum.org/EIPS/eip-712"
+  },
+  "typed_data": {
+    "domain": {
+      "name": "Ether Mail",
+      "version": "1",
+      "chainId": 1,
+      "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+    },
+    "types": {
+      "EIP712Domain": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "version",
+          "type": "string"
+        },
+        {
+          "name": "chainId",
+          "type": "uint256"
+        },
+        {
+          "name": "verifyingContract",
+          "type": "address"
+        }
+      ],
+      "Person": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "wallet",
+          "type": "address"
+        }
+      ],
+      "Mail": [
+        {
+          "name": "from",
+          "type": "Person"
+        },
+        {
+          "name": "to",
+          "type": "Person"
+        },
+        {
+          "name": "contents",
+          "type": "string"
+        }
+      ]
+    },
+    "primaryType": "Mail",
+    "message": {
+      "from": {
+        "name": "Cow",
+        "wallet": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826"
+      },
+      "to": {
+        "name": "Bob",
+        "wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"
+      },
+      "contents": "Hello, Bob!"
+    }
+  },
+  "owner": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
+  "expect": {
+    "digest": "0xbe609aee343fb3c4b28e1df9e632fca64fcfaede20f02e86244efddf30957bd2",
+    "owner": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
+    "warnings": [],
+    "controller": "refuse: unsupported_typed_data"
+  }
+}

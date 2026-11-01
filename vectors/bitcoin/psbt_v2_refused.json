@@ -1,0 +1,19 @@
+{
+  "chain": "bitcoin",
+  "kind": "btc_psbt",
+  "name": "psbt_v2_refused",
+  "notes": "a psbt version 2 (bip-370) with no inputs or outputs; the controller only reads version 0",
+  "source": {
+    "url": "https://github.com/bitcoin/bips/blob/master/bip-0370.mediawiki",
+    "fetched": "constructed from the bip"
+  },
+  "bytes": "cHNidP8BAgQCAAAAAQQBAAEFAQAB+wQCAAAAAA==",
+  "owner": {
+    "address": null,
+    "pubkey": null
+  },
+  "expect": {
+    "warnings": [],
+    "controller": "refuse: psbt_version"
+  }
+}

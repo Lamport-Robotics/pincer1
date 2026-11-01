@@ -1,0 +1,33 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "uniswap_v2_swap",
+  "notes": "a uniswap v2 router call; the router is not in the controller's allowlist",
+  "source": {
+    "hash": "0x49279495f6a344974f7223bd2c0f07d5d8720474cc5afd7ee7571182a97f33c9",
+    "block": 26320803,
+    "url": "https://etherscan.io/tx/0x49279495f6a344974f7223bd2c0f07d5d8720474cc5afd7ee7571182a97f33c9",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "AvkBLQEZgxa10oQC7XAggwknwJR6JQ1WMLTPU5c53yxdrLTGWfJIjYC5AQR5GslHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADjXyMGOkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgAAAAAAAAAAAAAAAAda3DfkGs9yt9+/9UVvqLk5p7aFgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaudZ7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAPm3XIPg6pTFrPHqBpBEr1yzSDAcAAAAAAAAAAAAAAADAKqo5siP+jQoOXE8n6tkIPHVswsA=",
+  "owner": "0x295C97b251e28862749B4d7246298f51A0E2F14E",
+  "expect": {
+    "type": "eip1559",
+    "chain_id": 1,
+    "nonce": 25,
+    "to": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+    "value_wei": "0",
+    "gas_limit": "600000",
+    "max_fee_per_gas_wei": "49115168",
+    "max_fee_wei": "29469100800000",
+    "call": "unknown",
+    "call_to": null,
+    "token_out": [],
+    "spender": null,
+    "allowance": null,
+    "warnings": [
+      "unknown_contract"
+    ],
+    "controller": "accept_with_declaration: unknown_contract"
+  }
+}

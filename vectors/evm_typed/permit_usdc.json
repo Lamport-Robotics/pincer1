@@ -1,0 +1,78 @@
+{
+  "chain": "evm",
+  "kind": "evm_typed_data",
+  "name": "permit_usdc",
+  "notes": "eip-2612 permit on usdc's real domain: a bounded allowance to the 1inch router",
+  "source": {
+    "url": "https://eips.ethereum.org/EIPS/eip-2612"
+  },
+  "typed_data": {
+    "domain": {
+      "name": "USD Coin",
+      "version": "2",
+      "chainId": 1,
+      "verifyingContract": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    },
+    "types": {
+      "EIP712Domain": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "version",
+          "type": "string"
+        },
+        {
+          "name": "chainId",
+          "type": "uint256"
+        },
+        {
+          "name": "verifyingContract",
+          "type": "address"
+        }
+      ],
+      "Permit": [
+        {
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "name": "value",
+          "type": "uint256"
+        },
+        {
+          "name": "nonce",
+          "type": "uint256"
+        },
+        {
+          "name": "deadline",
+          "type": "uint256"
+        }
+      ]
+    },
+    "primaryType": "Permit",
+    "message": {
+      "owner": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d",
+      "spender": "0x111111125421cA6dc452d289314280a0f8842A65",
+      "value": "25000000",
+      "nonce": "3",
+      "deadline": "1767225600"
+    }
+  },
+  "owner": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d",
+  "expect": {
+    "digest": "0xe865aea47958495d68b979f17b20fbfdc8acfd6302dde3ff4acc5bd5a3a8117d",
+    "owner": "0x5a2c1e8f2a5b3c0d1e9f8a7b6c5d4e3f2a1b0c9d",
+    "warnings": [
+      "approve"
+    ],
+    "spender": "0x111111125421cA6dc452d289314280a0f8842A65",
+    "allowance": "25000000",
+    "controller": "accept_with_declaration: approve"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "chain": "evm",
+  "kind": "evm_tx",
+  "name": "eth_transfer_1559",
+  "notes": "type-2 ether transfer to a contract with no calldata",
+  "source": {
+    "hash": "0x584c20ee931146b22d9ff12c80a04ffd450b35968614bd368173c08762792407",
+    "block": 26320804,
+    "url": "https://etherscan.io/tx/0x584c20ee931146b22d9ff12c80a04ffd450b35968614bd368173c08762792407",
+    "fetched": "eth_getTransactionByHash, ethereum-rpc.publicnode.com; unsigned payload re-serialised and the signed form checked against the hash"
+  },
+  "bytes": "AvABgg19hHc1lACEesd+o4MBz9+U+PCZHG8EVQy3EnQ9OTF6sh5//3KG3nnB0Bz9gMA=",
+  "owner": "0x627131468B88A0583DA9FdC964F7bc609f3480A0",
+  "expect": {
+    "type": "eip1559",
+    "chain_id": 1,
+    "nonce": 3453,
+    "to": "0xf8f0991c6f04550Cb712743d39317ab21E7FfF72",
+    "value_wei": "244614524050685",
+    "gas_limit": "118751",
+    "max_fee_per_gas_wei": "2059894435",
+    "max_fee_wei": "244614524050685",
+    "call": "none",
+    "call_to": null,
+    "token_out": [],
+    "spender": null,
+    "allowance": null,
+    "warnings": [],
+    "controller": "accept"
+  }
+}
