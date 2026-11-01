@@ -176,3 +176,85 @@ class FloorWatch:
         )
         self.grid, self.last = grid, report
         return report
+
+
+class OakCamera:
+    """One head camera for both jobs: colour frames for the face recogniser (``read``, BGR like the
+    OpenCV source) and stereo depth for the floor watch (``depth``), from a single device so the two
+    threads do not fight over the USB port. The import is lazy; only the robot has ``depthai``."""
+
+    def __init__(
+        self, width: int = 640, height: int = 400, fps: float = 10.0, *, confidence: int = 200
+    ):
+        import depthai as dai  # type: ignore[import-not-found]
+
+        pipeline = dai.Pipeline()
+        rgb = pipeline.create(dai.node.ColorCamera)
+        rgb.setBoardSocket(dai.CameraBoardSocket.CAM_A)
+        rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+        rgb.setPreviewSize(width, height)
+        rgb.setInterleaved(False)
+        rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
+        rgb.setFps(fps)
+        left = pipeline.create(dai.node.MonoCamera)
+        right = pipeline.create(dai.node.MonoCamera)
+        for cam, socket in (
+            (left, dai.CameraBoardSocket.CAM_B),
+            (right, dai.CameraBoardSocket.CAM_C),
+        ):
+            cam.setBoardSocket(socket)
+            cam.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+            cam.setFps(fps)
+        stereo = pipeline.create(dai.node.StereoDepth)
+        stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
+        stereo.initialConfig.setConfidenceThreshold(confidence)
+        stereo.setLeftRightCheck(True)
+        stereo.setSubpixel(True)
+        stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)  # depth in the colour camera's frame
+        stereo.setOutputSize(width, height)
+        left.out.link(stereo.left)
+        right.out.link(stereo.right)
+        for name, src in (("rgb", rgb.preview), ("depth", stereo.depth)):
+            out = pipeline.create(dai.node.XLinkOut)
+            out.setStreamName(name)
+            src.link(out.input)
+        self._device = dai.Device(pipeline)
+        self._rgb = self._device.getOutputQueue("rgb", maxSize=1, blocking=False)
+        self._depth_q = self._device.getOutputQueue("depth", maxSize=1, blocking=False)
+        m = np.array(
+            self._device.readCalibration().getCameraIntrinsics(
+                dai.CameraBoardSocket.CAM_A, width, height
+            )
+        )
+        self.model = CameraModel(
+            float(m[0, 0]), float(m[1, 1]), float(m[0, 2]), float(m[1, 2]), width, height
+        )
+        self.depth = _OakDepthView(self)
+
+    def read(self) -> Any | None:
+        pkt = self._rgb.tryGet()
+        return None if pkt is None else pkt.getCvFrame()
+
+    def read_depth(self) -> np.ndarray | None:
+        pkt = self._depth_q.tryGet()
+        return None if pkt is None else pkt.getFrame().astype(np.float32) / 1000.0
+
+    def close(self) -> None:
+        try:
+            self._device.close()
+        except Exception:
+            pass
+
+
+class _OakDepthView:
+    """The ``DepthSource`` face of an ``OakCamera``; closing it does not close the camera."""
+
+    def __init__(self, cam: OakCamera):
+        self._cam = cam
+        self.model = cam.model
+
+    def read(self) -> np.ndarray | None:
+        return self._cam.read_depth()
+
+    def close(self) -> None:
+        pass

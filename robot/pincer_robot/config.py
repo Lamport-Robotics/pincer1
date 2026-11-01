@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     device: Literal["auto", "cuda", "cpu"] = "auto"
 
     # --- camera / face -----------------------------------------------------------
+    # opencv: a UVC camera at camera_index. oak: the head camera through depthai, colour for the
+    # face recogniser and stereo depth for the floor watch from the one device (depth.OakCamera).
+    camera_source: Literal["opencv", "oak"] = "opencv"
     camera_index: int = 0
     camera_hfov_deg: float = 62.0
     camera_fps: float = 8.0
