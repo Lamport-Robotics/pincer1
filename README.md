@@ -30,6 +30,8 @@ bus driver for the servos and a simulator the tests walk (`docs/BODY.md`). `sim/
 URDF and MJCF for MuJoCo, Isaac and the browser simulators. Not in here: the CAD. v1 bodies are built
 from the parts in `docs/HARDWARE.md`.
 
+<p align="center"><img src="sim/walk.gif" width="560"></p>
+
 ## features
 
 Core: presence-gated signing, on-device transaction parsing for all three chains, trusted display, PIN as a
