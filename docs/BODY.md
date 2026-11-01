@@ -141,3 +141,26 @@ height, the angle of its edge against the body (so the body can square up before
 and the tread depth when the next riser is in view. `front_clearance` is the distance to the nearest
 wall or drop in the walking corridor, the number the motion layer refuses to walk into. `render_steps`
 draws the same scenes synthetically for the tests and the mock robot.
+
+## on the first chassis
+
+The test chassis keeps its servos behind its own ROS 2 stack, which takes positions in pulses (0 to
+1000 over 240°) and reports them back. `body/pulse.py` puts the body package on it without rclpy:
+`RosbridgeServoBus` speaks to that stack over rosbridge's websocket with the same `move` / `position`
+surface as the serial `Bus`, so the gait, the gaze and the climb cycle run unchanged, from the robot or
+from a laptop on the same network. `PINCER_BODY_BACKEND=joint` and `PINCER_ROSBRIDGE_URL` select it;
+the lidar and the IMU come over the same socket. Torque, temperature and load are the chassis
+controller's business on that path, so the health poll is off.
+
+The radians-to-pulses map is measured once:
+
+```
+pincer-calibrate --rosbridge ws://robot:9090 --show     # live pulses
+pincer-calibrate --rosbridge ws://robot:9090            # jog each joint to its neutral, answer the direction questions
+pincer-calibrate --rosbridge ws://robot:9090 --arm      # the four arm servos only
+```
+
+For every joint you drive the part to its neutral with the keyboard (coxa along the mount, femur
+horizontal, tibia vertical, arm straight up with the camera level), press enter, then say whether a
+ten-degree nudge went the positive way. The file lands in `~/.pincer1/servo_calibration.json` and the
+`joint` backend refuses to start without it.

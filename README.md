@@ -10,6 +10,8 @@ after re-parsing the transaction itself, showing it on its own display, and gett
 main computer (Jetson Orin Nano) runs presence detection (lidar, face, voice), the wallet daemon and the
 companion brain, and is treated as compromised by design.
 
+<p align="center"><img src="brand/pincer1-test-chassis.jpg" alt="the first test chassis, camera arm up" width="560"></p>
+
 ```
 browser dapp ── Wallet Standard / EIP-6963 / PSBT ──▶ extension/
                                                         │ ws
