@@ -250,6 +250,7 @@ class BodyBackend(RobotInterface):
 
     def shutdown(self) -> None:
         self._poll_stop.set()
+        self.stop()
         if self.sensors is not None:
             self.sensors.shutdown()
 

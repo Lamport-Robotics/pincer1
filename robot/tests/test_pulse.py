@@ -177,10 +177,12 @@ def test_rosbridge_drive_holds_a_twist_then_stops():
         d = RosbridgeDrive(client, rate_hz=1000.0, sleep=lambda _s: None)
         adv = srv.wait_for("advertise")
         assert adv and adv[0]["topic"] == "/controller/cmd_vel"
+        first = srv.wait_for("publish", 1)  # a stop goes out as soon as the topic is advertised
+        assert first[0]["msg"]["linear"]["x"] == 0.0
         d.drive(0.5, -1.0, 0.01)
-        pubs = srv.wait_for("publish", 2)
-        assert pubs[0]["msg"]["linear"]["x"] == pytest.approx(0.06)
-        assert pubs[0]["msg"]["angular"]["z"] == pytest.approx(-0.6)
+        pubs = srv.wait_for("publish", 3)
+        assert pubs[1]["msg"]["linear"]["x"] == pytest.approx(0.06)
+        assert pubs[1]["msg"]["angular"]["z"] == pytest.approx(-0.6)
         time.sleep(0.1)
         last = [m for m in srv.received if m.get("op") == "publish"][-1]["msg"]
         assert last["linear"]["x"] == 0.0 and last["angular"]["z"] == 0.0

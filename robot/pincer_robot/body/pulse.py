@@ -500,6 +500,8 @@ class RosbridgeDrive:
         self.client, self.topic = client, topic
         self.max_vx, self.max_wz, self.rate_hz, self._sleep = max_vx, max_wz, rate_hz, sleep
         client.advertise(topic, "geometry_msgs/Twist")
+        self._sleep(0.3)  # let the advertise land, then make sure nothing is still walking
+        self.stop()
 
     def twist(self, vx: float, wz: float) -> None:
         self.client.publish(
@@ -517,10 +519,12 @@ class RosbridgeDrive:
         wz = max(-1.0, min(1.0, ang_z)) * self.max_wz
         end = time.monotonic() + duration_s
         period = 1.0 / self.rate_hz
-        while time.monotonic() < end:
-            self.twist(vx, wz)
-            self._sleep(period)
-        self.stop()
+        try:
+            while time.monotonic() < end:
+                self.twist(vx, wz)
+                self._sleep(period)
+        finally:
+            self.stop()  # whatever interrupts the walk, the chassis must not keep going
 
     def stop(self) -> None:
         self.twist(0.0, 0.0)
