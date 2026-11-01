@@ -9,16 +9,16 @@
     <inertial>
       <origin xyz="0 0 -0.0225" rpy="0 0 0"/>
       <mass value="1.7"/>
-      <inertia ixx="3.474e-03" ixy="0" ixz="0" iyy="7.781e-03" iyz="0" izz="1.068e-02"/>
+      <inertia ixx="3.474e-03" ixy="0" ixz="0" iyy="6.534e-03" iyz="0" izz="9.435e-03"/>
     </inertial>
     <visual>
       <origin xyz="0 0 -0.0225" rpy="0 0 0"/>
-      <geometry><box size="0.23 0.15 0.045"/></geometry>
+      <geometry><box size="0.21 0.15 0.045"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
       <origin xyz="0 0 -0.0225" rpy="0 0 0"/>
-      <geometry><box size="0.23 0.15 0.045"/></geometry>
+      <geometry><box size="0.21 0.15 0.045"/></geometry>
     </collision>
   </link>
   <link name="display">
@@ -38,7 +38,7 @@
     </collision>
   </link>
   <joint name="display_mount" type="fixed">
-    <origin xyz="0.119 0 -0.0225" rpy="0 0 0"/>
+    <origin xyz="0.109 0 -0.0225" rpy="0 0 0"/>
     <parent link="body"/>
     <child link="display"/>
   </joint>
@@ -66,7 +66,7 @@
 
   <!-- leg FR -->
   <joint name="fr_coxa" type="revolute">
-    <origin xyz="0.093 -0.051 0" rpy="0 0 -0.7854"/>
+    <origin xyz="0.083 -0.051 0" rpy="0 0 -0.7854"/>
     <parent link="body"/>
     <child link="fr_coxa_link"/>
     <axis xyz="0 0 1"/>
@@ -256,7 +256,7 @@
 
   <!-- leg RR -->
   <joint name="rr_coxa" type="revolute">
-    <origin xyz="-0.093 -0.051 0" rpy="0 0 -2.35619"/>
+    <origin xyz="-0.083 -0.051 0" rpy="0 0 -2.35619"/>
     <parent link="body"/>
     <child link="rr_coxa_link"/>
     <axis xyz="0 0 1"/>
@@ -351,7 +351,7 @@
 
   <!-- leg RL -->
   <joint name="rl_coxa" type="revolute">
-    <origin xyz="-0.093 0.051 0" rpy="0 0 2.35619"/>
+    <origin xyz="-0.083 0.051 0" rpy="0 0 2.35619"/>
     <parent link="body"/>
     <child link="rl_coxa_link"/>
     <axis xyz="0 0 1"/>
@@ -541,7 +541,7 @@
 
   <!-- leg FL -->
   <joint name="fl_coxa" type="revolute">
-    <origin xyz="0.093 0.051 0" rpy="0 0 0.7854"/>
+    <origin xyz="0.083 0.051 0" rpy="0 0 0.7854"/>
     <parent link="body"/>
     <child link="fl_coxa_link"/>
     <axis xyz="0 0 1"/>

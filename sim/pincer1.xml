@@ -2,8 +2,8 @@
   <compiler angle="radian"/>
 
   <worldbody>
-    <geom size="0.115 0.075 0.0225" pos="0 0 -0.0225" type="box" rgba="0.13 0.13 0.14 1"/>
-    <body name="fr_coxa_link" pos="0.093 -0.051 0" quat="0.923879 0 0 -0.382684">
+    <geom size="0.105 0.075 0.0225" pos="0 0 -0.0225" type="box" rgba="0.13 0.13 0.14 1"/>
+    <body name="fr_coxa_link" pos="0.083 -0.051 0" quat="0.923879 0 0 -0.382684">
       <inertial pos="0.0225 0 0" quat="1 0 1.8366e-06 0" mass="0.06" diaginertia="1.306e-05 1.306e-05 5.88e-06"/>
       <joint name="fr_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
@@ -39,7 +39,7 @@
         </body>
       </body>
     </body>
-    <body name="rr_coxa_link" pos="-0.093 -0.051 0" quat="0.382686 0 0 -0.923879">
+    <body name="rr_coxa_link" pos="-0.083 -0.051 0" quat="0.382686 0 0 -0.923879">
       <inertial pos="0.0225 0 0" quat="1 0 1.8366e-06 0" mass="0.06" diaginertia="1.306e-05 1.306e-05 5.88e-06"/>
       <joint name="rr_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
@@ -57,7 +57,7 @@
         </body>
       </body>
     </body>
-    <body name="rl_coxa_link" pos="-0.093 0.051 0" quat="0.382686 0 0 0.923879">
+    <body name="rl_coxa_link" pos="-0.083 0.051 0" quat="0.382686 0 0 0.923879">
       <inertial pos="0.0225 0 0" quat="1 0 1.8366e-06 0" mass="0.06" diaginertia="1.306e-05 1.306e-05 5.88e-06"/>
       <joint name="rl_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
@@ -93,7 +93,7 @@
         </body>
       </body>
     </body>
-    <body name="fl_coxa_link" pos="0.093 0.051 0" quat="0.923879 0 0 0.382684">
+    <body name="fl_coxa_link" pos="0.083 0.051 0" quat="0.923879 0 0 0.382684">
       <inertial pos="0.0225 0 0" quat="1 0 1.8366e-06 0" mass="0.06" diaginertia="1.306e-05 1.306e-05 5.88e-06"/>
       <joint name="fl_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
@@ -134,7 +134,7 @@
         </body>
       </body>
     </body>
-    <frame pos="0.119 0 -0.0225">
+    <frame pos="0.109 0 -0.0225">
       <geom size="0.003 0.055 0.02" type="box" rgba="0.05 0.08 0.12 1"/>
     </frame>
     <frame pos="-0.02 0 0.002">

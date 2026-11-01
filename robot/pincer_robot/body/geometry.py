@@ -6,9 +6,10 @@ Frames (right-handed, metres, radians):
 * leg frame i: origin at leg i's coxa axis, x pointing outward along the mount yaw, z up.
 
 Legs are numbered clockwise from the front right: 0 FR, 1 MR, 2 RR, 3 RL, 4 ML, 5 FL. The defaults are
-the v1 body: coxa positions about the centre of the leg mounts as measured on the first test chassis,
-femur and tibia 110 / 160 mm axis to axis, the length that takes a 17 cm stair (`climb.py`,
-`sim/stairs.py`). Bracket angles between a servo and its segment are absorbed by the servo zero in
+the v1 body: a 21 cm plate with the front and rear coxa axes 83 mm from its centre (the first test
+chassis had 93 on a 23 cm plate; the shorter body is what lets the nose clear the next riser on a
+staircase), femur and tibia 110 / 160 mm axis to axis, the length that takes a 17 cm stair
+(`climb.py`, `sim/stairs.py`). Bracket angles between a servo and its segment are absorbed by the servo zero in
 `Calibration`, so the kinematics see straight segments. A different build changes the dataclass, not
 the code.
 """
@@ -37,12 +38,12 @@ class BodyGeometry:
     tibia_m: float = 0.160
     # coxa axis positions in the body frame (x, y) and the mount yaw, per leg
     mounts: tuple[tuple[float, float, float], ...] = (
-        (0.093, -0.051, -math.radians(45)),  # FR
+        (0.083, -0.051, -math.radians(45)),  # FR
         (0.000, -0.074, -math.radians(90)),  # MR
-        (-0.093, -0.051, -math.radians(135)),  # RR
-        (-0.093, 0.051, math.radians(135)),  # RL
+        (-0.083, -0.051, -math.radians(135)),  # RR
+        (-0.083, 0.051, math.radians(135)),  # RL
         (0.000, 0.074, math.radians(90)),  # ML
-        (0.093, 0.051, math.radians(45)),  # FL
+        (0.083, 0.051, math.radians(45)),  # FL
     )
     limits: JointLimits = field(default_factory=JointLimits)
     # neutral stance: foot this far out along the mount yaw, body this high above the ground

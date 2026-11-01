@@ -26,7 +26,7 @@ G = BodyGeometry()
 # ---- the body as a parts list -------------------------------------------------------------------
 
 # the body frame origin is the centre of the top plate at coxa-axis height (geometry.py); the body hangs below it
-BODY_L, BODY_W, BODY_H = 0.230, 0.150, 0.045  # top-plate footprint and the depth of the body between plates
+BODY_L, BODY_W, BODY_H = 0.210, 0.150, 0.045  # top-plate footprint and the depth of the body between plates
 BODY_MASS = 1.70  # plates, Jetson, battery pack, bus driver, consent module
 SERVO_MASS = 0.060  # one bus servo with its bracket
 SEG_R = 0.014  # radius of the leg / arm segment visuals
