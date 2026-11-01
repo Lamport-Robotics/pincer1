@@ -27,7 +27,7 @@ from .sim import _polygon_margin
 
 FRONT, MIDDLE, REAR = (0, 5), (1, 4), (2, 3)  # leg pairs: FR FL, MR ML, RR RL
 # length, width, depth below the top plate (sim/build.py): what has to clear the steps
-BODY_BOX_M = (0.230, 0.150, 0.045)
+BODY_BOX_M = (0.210, 0.150, 0.045)
 COXA_SPAN_M = 0.186  # front coxa to rear coxa, for the pitch estimate
 
 
@@ -68,12 +68,12 @@ class ClimbParams:
     # where a foot lands, as a fraction of the advance ahead of its neutral point. the rear feet land
     # well ahead so they are still under the body, not stretched out behind it, when they next swing
     place_ahead: tuple[float, float, float] = (0.5, 0.5, 0.8)  # front, middle, rear
-    stance_radius_m: float = 0.17  # front and rear feet closer under the body than when walking: more height
+    stance_radius_m: float = 0.14  # front and rear feet well under the body: more height, and the rear legs keep their reach
     middle_radius_m: float = 0.215  # middle feet wide: a foot far out can sit above its own coxa
     stance_height_m: float = 0.18  # leg extension the body aims for while climbing
     lift_clearance_m: float = 0.04  # swing height above the higher of the two levels
     swing_radius_m: float = 0.22  # how far out from the coxa a foot travels while it is in the air
-    edge_margin_m: float = 0.045  # no foot within this of a riser's edge
+    edge_margin_m: float = 0.03  # no foot within this of a riser's edge (the foot ball is 9 mm)
     pitch_max: float = math.radians(30)
     body_clearance_m: float = 0.015  # the body's underside keeps this much above the step below it
     # support margin the body centre must keep; the head on its arm moves the real centre of mass
