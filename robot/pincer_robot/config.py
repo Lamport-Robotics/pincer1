@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # the small turn-in-place the body makes now and then while the owner is around; off when the
     # gait is a stepping one that makes it look like fidgeting
     idle_sway: bool = True
+    # the attention move: turn the body toward the owner and step closer when the daemon asks for
+    # attention. Off: the head still turns (gaze), the legs stay put.
+    attention_moves: bool = True
     daemon_http: str = (
         "http://127.0.0.1:7401"  # where a press of the body button is relayed as a touch
     )

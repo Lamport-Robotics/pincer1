@@ -609,6 +609,9 @@ class RobotApp:
 
     async def attention(self) -> None:
         self.shared.last_attention_ts = time.time()
+        if not self.cfg.attention_moves:
+            log.info("attention: head only (attention_moves off)")
+            return
         await self.dock.leave_dock_for("attention")
         await self.motion.attention(self.owner_bearing())
 
