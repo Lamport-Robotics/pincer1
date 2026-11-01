@@ -305,3 +305,13 @@ def test_body_backend_climbs_a_step_in_the_simulator() -> None:
     # squaring up uses the ordinary walk and turn first
     res = backend.climb(0.08, distance_m=0.45, yaw_rad=math.radians(12), sleep=lambda _s: None)
     assert res.startswith("OK"), res
+
+
+def test_body_backend_can_hand_locomotion_to_another_controller() -> None:
+    body, sim = simulated_body()
+    calls: list[tuple[float, float, float]] = []
+    backend = BodyBackend(body, drive=lambda x, z, s: calls.append((x, z, s)))
+    assert backend.walk("forward", 0.3, speed=0.5).startswith("OK")
+    assert backend.turn("left", 45, speed=0.5).startswith("OK")
+    assert len(calls) == 2 and calls[0][0] == 0.5 and calls[1][1] == 0.5
+    assert not backend.get_status().is_moving

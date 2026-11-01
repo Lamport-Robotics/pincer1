@@ -166,3 +166,24 @@ def test_sensor_helpers():
         {"angle_min": -1.0, "angle_increment": 0.5, "ranges": [1.0, None, 3.0]}, 5.0
     )
     assert scan.ts == 5.0 and np.isnan(scan.ranges[1]) and scan.ranges[2] == 3.0
+
+
+def test_rosbridge_drive_holds_a_twist_then_stops():
+    from pincer_robot.body.pulse import RosbridgeDrive
+
+    srv = FakeRosbridge()
+    try:
+        client = RosbridgeClient(f"ws://127.0.0.1:{srv.port}")
+        d = RosbridgeDrive(client, rate_hz=1000.0, sleep=lambda _s: None)
+        adv = srv.wait_for("advertise")
+        assert adv and adv[0]["topic"] == "/controller/cmd_vel"
+        d.drive(0.5, -1.0, 0.01)
+        pubs = srv.wait_for("publish", 2)
+        assert pubs[0]["msg"]["linear"]["x"] == pytest.approx(0.06)
+        assert pubs[0]["msg"]["angular"]["z"] == pytest.approx(-0.6)
+        time.sleep(0.1)
+        last = [m for m in srv.received if m.get("op") == "publish"][-1]["msg"]
+        assert last["linear"]["x"] == 0.0 and last["angular"]["z"] == 0.0
+        client.close()
+    finally:
+        srv.close()

@@ -337,8 +337,24 @@ class RobotApp:
             if not bus.wait_for_state():
                 log.warning("joint backend: no servo state from the chassis yet")
             body = Body(geometry=geometry, gait=GaitParams(name=self.cfg.gait), actuator=actuator)
-            body.stand()
-            log.info("body: own gait (%s) over rosbridge %s", self.cfg.gait, self.cfg.rosbridge_url)
+            drive = None
+            if self.cfg.body_profile == "chassis" and self.cfg.chassis_gait == "chassis":
+                # the chassis walks with its own gait controller; we keep its stance and own the
+                # head
+                from .body.pulse import RosbridgeDrive
+
+                drive = RosbridgeDrive(client, topic=self.cfg.cmd_vel_topic).drive
+                status.note = "body: chassis gait, own head"
+                log.info(
+                    "body: chassis gait on %s over rosbridge %s",
+                    self.cfg.cmd_vel_topic,
+                    self.cfg.rosbridge_url,
+                )
+            else:
+                body.stand()
+                log.info(
+                    "body: own gait (%s) over rosbridge %s", self.cfg.gait, self.cfg.rosbridge_url
+                )
             head_cfg = GazeConfig(hfov_deg=self.cfg.camera_hfov_deg)
             if cal.complete_for(
                 [head_cfg.pan_id, head_cfg.shoulder_id, head_cfg.elbow_id, head_cfg.tilt_id]
@@ -347,7 +363,7 @@ class RobotApp:
                 self.head.raise_head()
             else:
                 log.warning("joint backend: arm servos not calibrated, the head stays where it is")
-            return BodyBackend(body, status=status, sensors=sensors, health=None)
+            return BodyBackend(body, status=status, sensors=sensors, health=None, drive=drive)
         try:
             from .ros_backend import HexapodRobot
 

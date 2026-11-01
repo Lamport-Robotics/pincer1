@@ -213,11 +213,14 @@ class BodyBackend(RobotInterface):
         *,
         sensors: SensorSource | None = None,
         health: ServoHealth | None = None,
+        drive: Callable[[float, float, float], None] | None = None,
     ):
         self.body = body
         self._status = status or RobotStatus(note="body: own gait")
         self.sensors = sensors
         self.health = health
+        # a locomotion controller that is not ours (the chassis' own gait): (lin_x, ang_z, seconds)
+        self.drive_fn = drive
         self._lock = threading.Lock()
         self._moving = False
         self._poll: threading.Thread | None = None
@@ -254,6 +257,14 @@ class BodyBackend(RobotInterface):
         why = self.resting()
         if why is not None:
             log.warning("body: not moving (%s)", why)
+            return
+        if self.drive_fn is not None:
+            with self._lock:
+                self._moving = True
+                try:
+                    self.drive_fn(lin_x, ang_z, duration_s)
+                finally:
+                    self._moving = False
             return
         with self._lock:
             self._moving = True
@@ -350,6 +361,9 @@ class BodyBackend(RobotInterface):
 
     def stop(self) -> None:
         self.body.stop()
+        stop = getattr(self.drive_fn, "__self__", None)
+        if stop is not None and hasattr(stop, "stop"):
+            stop.stop()
         self._moving = False
 
 

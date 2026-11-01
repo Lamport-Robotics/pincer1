@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # numbering),
     # with a built-in calibration when the file above is missing.
     body_profile: Literal["v1", "chassis"] = "v1"
+    # on the chassis profile: walk with the chassis' own gait controller (cmd_vel over rosbridge),
+    # or with the body package's gait on the joints
+    chassis_gait: Literal["chassis", "own"] = "chassis"
     daemon_http: str = (
         "http://127.0.0.1:7401"  # where a press of the body button is relayed as a touch
     )

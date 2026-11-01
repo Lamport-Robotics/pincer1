@@ -436,3 +436,51 @@ class RosbridgePanel:
     def _button(self, msg: dict[str, Any]) -> None:
         if self._on_button is not None:
             self._on_button(int(msg.get("id", 0)), int(msg.get("state", 0)))
+
+
+CMD_VEL_TOPIC = "/controller/cmd_vel"
+
+
+class RosbridgeDrive:
+    """Locomotion by the chassis' own gait controller: a Twist on its cmd_vel topic for the
+    duration,
+    then zero. The body package still owns the arm and the head; the legs walk the way the chassis
+    already knows how to. ``max_vx`` / ``max_wz`` are the controller's clamps."""
+
+    def __init__(
+        self,
+        client: RosbridgeClient,
+        *,
+        topic: str = CMD_VEL_TOPIC,
+        max_vx: float = 0.12,
+        max_wz: float = 0.6,
+        rate_hz: float = 10.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ):
+        self.client, self.topic = client, topic
+        self.max_vx, self.max_wz, self.rate_hz, self._sleep = max_vx, max_wz, rate_hz, sleep
+        client.advertise(topic, "geometry_msgs/Twist")
+
+    def twist(self, vx: float, wz: float) -> None:
+        self.client.publish(
+            self.topic,
+            {
+                "linear": {"x": float(vx), "y": 0.0, "z": 0.0},
+                "angular": {"x": 0.0, "y": 0.0, "z": float(wz)},
+            },
+        )
+
+    def drive(self, lin_x: float, ang_z: float, duration_s: float) -> None:
+        """``lin_x`` / ``ang_z`` are the motion layer's -1..1; held for ``duration_s`` at
+        ``rate_hz``."""
+        vx = max(-1.0, min(1.0, lin_x)) * self.max_vx
+        wz = max(-1.0, min(1.0, ang_z)) * self.max_wz
+        end = time.monotonic() + duration_s
+        period = 1.0 / self.rate_hz
+        while time.monotonic() < end:
+            self.twist(vx, wz)
+            self._sleep(period)
+        self.stop()
+
+    def stop(self) -> None:
+        self.twist(0.0, 0.0)
