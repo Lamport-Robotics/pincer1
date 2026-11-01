@@ -84,6 +84,7 @@ class _Shared:
     rear_range_ts: float = 0.0
     battery: BatteryState | None = None  # latest pack sample (feature-extras thread)
     last_attention_ts: float = -math.inf
+    floor: Any = None  # depth.FloorReport: clearance and the first riser ahead (depth thread)
 
 
 class RobotApp:
@@ -619,6 +620,37 @@ class RobotApp:
         return reply
 
     # -- loops ------------------------------------------------------------------------------
+    def _head_pose(self) -> Any:
+        """Where the depth camera is looking from: the gaze's tilt when the head is live, else the
+        configured resting tilt."""
+        from .terrain import CameraPose
+
+        tilt = math.radians(self.cfg.depth_head_tilt_deg)
+        yaw = 0.0
+        if self.head is not None:
+            tilt, yaw = self.head.gaze.tilt, self.head.gaze.pan
+        return CameraPose(x=self.cfg.depth_head_x_m, z=self.cfg.depth_head_height_m, tilt=tilt, yaw=yaw)
+
+    def _depth_thread(self, source: Any) -> None:
+        from .depth import FloorWatch
+
+        watch = FloorWatch(source, self._head_pose)
+        period = 1.0 / max(0.5, self.cfg.depth_fps)
+        try:
+            while not self._stop.is_set():
+                t0 = time.time()
+                try:
+                    report = watch.update(t0)
+                except Exception as exc:
+                    log.error("floor watch failed: %s", exc)
+                    report = None
+                if report is not None:
+                    with self.shared.lock:
+                        self.shared.floor = report
+                time.sleep(max(0.0, period - (time.time() - t0)))
+        finally:
+            source.close()
+
     def _camera_thread(self, recognizer: FaceRecognizer, source: Any) -> None:
         period = 1.0 / max(0.5, self.cfg.camera_fps)
         while not self._stop.is_set():
@@ -744,6 +776,23 @@ class RobotApp:
                 )
             except Exception as exc:
                 log.error("camera/face disabled: %s", exc)
+        depth_source: Any = None
+        if self.mock:
+            if self.cfg.mock_depth != "none":
+                from .depth import MockDepthSource, mock_scene
+
+                depth_source = MockDepthSource(self._head_pose, scene=mock_scene(self.cfg.mock_depth))
+        elif self.cfg.depth_enabled:
+            try:
+                from .depth import OakDepthSource
+
+                depth_source = OakDepthSource(self.cfg.depth_width, self.cfg.depth_height, self.cfg.depth_fps)
+            except Exception as exc:
+                log.error("depth disabled: %s", exc)
+        if depth_source is not None:
+            self._threads.append(
+                threading.Thread(target=self._depth_thread, args=(depth_source,), name="depth", daemon=True)
+            )
         self._threads.append(threading.Thread(target=self._listen_thread, name="mic", daemon=True))
         for t in self._threads:
             t.start()

@@ -37,6 +37,7 @@ jetson = [
     "sounddevice==0.5.6",
     "elevenlabs==2.74.1",
     "anthropic==2.3.0",              # PINCER_BRAIN=anthropic (optional at runtime)
+    "depthai>=2.29,<3",              # the head camera's stereo depth (depth.py); the v3 API is different
 ]
 # Raspberry Pi 5 / any CPU-only box (Ubuntu 22.04 + ROS2 Humble): everything from PyPI.
 # onnxruntime (CPU) + buffalo_sc, faster-whisper base int8, resemblyzer on CPU torch (~1 GB wheel).
@@ -49,6 +50,10 @@ pi = [
     "sounddevice==0.5.6",
     "elevenlabs==2.74.1",
     "anthropic==2.3.0",
+]
+# The head camera's stereo depth for the floor ahead (terrain.py / depth.py).
+depth = [
+    "depthai>=2.29,<3",
 ]
 # Finer-grained groups kept for laptops / partial installs.
 # Camera + owner face embedding. insightface (ArcFace) via onnxruntime CPU; buffalo_sc ~16 MB.

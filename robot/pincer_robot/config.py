@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     camera_index: int = 0
     camera_hfov_deg: float = 62.0
     camera_fps: float = 8.0
+    # --- depth / the floor ahead (terrain.py, depth.py) ---------------------------
+    depth_enabled: bool = False  # the head camera's stereo depth through depthai
+    depth_fps: float = 5.0
+    depth_width: int = 640
+    depth_height: int = 400
+    depth_head_height_m: float = 0.40  # lens above the floor with the arm upright, standing
+    depth_head_x_m: float = 0.07  # lens ahead of the body centre
+    depth_head_tilt_deg: float = -25.0  # used when no gaze head reports its tilt
+    mock_depth: Literal["none", "flat", "step", "stairs", "wall", "drop"] = "flat"
     face_model: str | None = None  # buffalo_l on cuda, buffalo_sc on cpu
     face_det_size: int = 320
     face_sim_low: float = 0.20  # cosine similarity that maps to confidence 0
