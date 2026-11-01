@@ -86,6 +86,7 @@ dev = [
 [project.scripts]
 pincer-robot = "pincer_robot.main:main"
 pincer-enroll = "pincer_robot.enroll:main"
+pincer-calibrate = "pincer_robot.calibrate:main"
 
 [tool.setuptools.packages.find]
 include = ["pincer_robot*"]
