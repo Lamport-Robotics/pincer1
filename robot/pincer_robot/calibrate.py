@@ -143,7 +143,12 @@ class Session:
                 if math.isnan(p):
                     continue
             else:
-                p = self.bus.pulse(j.servo_id)
+                # no jog: the preset's zero is trusted, so the neutral pulse is what it predicts
+                p = (
+                    float(self.cal.to_pulse(j.servo_id, j.neutral_rad))
+                    if j.servo_id in self.cal.zero
+                    else self.bus.pulse(j.servo_id)
+                )
                 self.neutral_pulse[j.servo_id] = p
             s = self.sign(j) if do_signs else self.cal.sign.get(j.servo_id, 1)
             self.cal.sign[j.servo_id] = s
@@ -161,11 +166,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-jog", action="store_true", help="take the current pose as the neutral")
     ap.add_argument("--no-signs", action="store_true", help="keep the signs already in the file")
     ap.add_argument("--show", action="store_true", help="print the live pulses and exit")
+    ap.add_argument(
+        "--preset",
+        choices=["chassis"],
+        help="start from the built-in calibration of that body and only confirm the directions",
+    )
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     out = Path(a.out).expanduser()
-    cal = PulseCalibration.load(out) if out.exists() else PulseCalibration()
+    if a.preset == "chassis":
+        cal = PulseCalibration.chassis()
+        a.no_jog = True
+    else:
+        cal = PulseCalibration.load(out) if out.exists() else PulseCalibration()
     client = RosbridgeClient(a.rosbridge)
     bus = RosbridgeServoBus(client, cal)
     if not bus.wait_for_state(5.0):
@@ -175,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         for sid, p in sorted(bus.pulses().items()):
             print(f"servo {sid:2d}: {p:.0f}")
         return 0
-    g = BodyGeometry()
+    g = BodyGeometry.chassis() if a.preset == "chassis" else BodyGeometry()
     todo = joints(g, None if a.legs else GazeConfig())
     if a.arm:
         todo = [j for j in todo if j.servo_id >= 19]

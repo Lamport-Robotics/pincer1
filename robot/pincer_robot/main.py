@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import math
 import threading
@@ -145,6 +146,7 @@ class RobotApp:
         self._encoder: SpeakerEncoder | None = None
         self._verifier: PassphraseVerifier | None = None
         self.head: Any = None  # body.GazeHead on the v1 body: the camera arm follows the face
+        self.panel: Any = None  # body.pulse.RosbridgePanel on the chassis: oled, buzzer, buttons
         self.robot: RobotInterface = self._make_robot()
         self.motion = MotionController(self.robot)
         self.dock = DockController(
@@ -281,13 +283,21 @@ class RobotApp:
             try:
                 cal = PulseCalibration.load(self.cfg.servo_calibration)
             except (OSError, ValueError, KeyError) as exc:
-                log.error(
-                    "joint backend: no servo calibration at %s (%s); run pincer-calibrate first. "
-                    "Running with a mock body.",
-                    self.cfg.servo_calibration,
-                    exc,
-                )
-                return MockRobot()
+                if self.cfg.body_profile == "chassis":
+                    cal = PulseCalibration.chassis()
+                    log.warning(
+                        "joint backend: no servo calibration at %s; using the chassis defaults",
+                        self.cfg.servo_calibration,
+                    )
+                else:
+                    log.error(
+                        "joint backend: no servo calibration at %s (%s); "
+                        "run pincer-calibrate first. "
+                        "Running with a mock body.",
+                        self.cfg.servo_calibration,
+                        exc,
+                    )
+                    return MockRobot()
             try:
                 client = RosbridgeClient(self.cfg.rosbridge_url)
             except Exception as exc:
@@ -298,7 +308,13 @@ class RobotApp:
                 )
                 return MockRobot()
             bus = RosbridgeServoBus(client, cal)
-            geometry = BodyGeometry()
+            geometry = (
+                BodyGeometry.chassis() if self.cfg.body_profile == "chassis" else BodyGeometry()
+            )
+            from .body.pulse import RosbridgePanel
+
+            self.panel = RosbridgePanel(client, on_button=self._on_body_button)
+            self.panel.show("PINCER1", "starting")
             actuator = BusActuator(bus, geometry, move_time_ms=40)
             leg_ids = actuator.servo_ids()
             if not cal.complete_for(leg_ids):
@@ -637,6 +653,49 @@ class RobotApp:
     async def goto(self, room: str) -> NavResult:
         return await self.nav.goto(room)
 
+    async def display(self, title: str, body: str, level: str, ttl_secs: float) -> None:
+        """The daemon's readout for the panel: on the chassis the two-line OLED, with a beep when a
+        request needs the owner."""
+        log.info("display: %s | %s (%s)", title, body, level)
+        if self.panel is None:
+            return
+        self.panel.show(title, body)
+        if level in ("medium", "high", "block"):
+            self.panel.beep(repeat=2 if level != "block" else 4)
+        if ttl_secs > 0:
+            loop = asyncio.get_running_loop()
+            loop.call_later(
+                ttl_secs, lambda: self.panel.show("PINCER1", "watching") if self.panel else None
+            )
+
+    def _on_body_button(self, button_id: int, state: int) -> None:
+        """A press of the button on the chassis' controller board stands in for the touch pad until
+        the shell has one: relayed to the daemon's touch input, long press as a long touch."""
+        if state == 0:
+            return
+        long = state >= 3  # the board reports 1 press, 2 double, 3 long
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(
+                self.cfg.daemon_http.rstrip("/") + "/dev/touch",
+                data=json.dumps({"long": long}).encode(),
+                headers={"content-type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=2) as r:
+                r.read()
+            log.info(
+                "body button %d (%s) relayed as a %s touch",
+                button_id,
+                state,
+                "long" if long else "short",
+            )
+            if self.panel is not None:
+                self.panel.beep(freq=2400, on_s=0.05, repeat=1)
+        except Exception as exc:
+            log.warning("button relay failed: %s", exc)
+
     async def climb(self, riser_m: float | None, tread_m: float = 0.28, steps: int = 1) -> str:
         """Climb the riser the floor watch sees, or the one the caller names."""
         distance = yaw = None
@@ -873,7 +932,11 @@ class RobotApp:
             try:
                 from .presence.face import CameraSource, InsightFaceRecognizer
 
-                source = oak if oak is not None else CameraSource(self.cfg.camera_index)
+                source = (
+                    oak
+                    if oak is not None
+                    else CameraSource(self.cfg.camera_url or self.cfg.camera_index)
+                )
                 rec = InsightFaceRecognizer.from_plan(self.plan, self.cfg.face_det_size)
                 self._threads.append(
                     threading.Thread(

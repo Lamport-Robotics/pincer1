@@ -89,6 +89,37 @@ class PulseCalibration:
     def load(cls, path: Path) -> PulseCalibration:
         return cls.from_dict(json.loads(path.expanduser().read_text()))
 
+    @classmethod
+    def chassis(cls) -> PulseCalibration:
+        """The first test chassis as its controller defines it: every leg joint reads 500 at the
+        description's zero (coxa along the mount, femur horizontal, tibia vertical), the right side
+        counts up with a positive angle and the left side down; the arm's zero is the upright pose
+        measured on the robot (shoulder 500, elbow 125, camera level at wrist 580). Run
+        ``pincer-calibrate --preset chassis`` to confirm the directions on the machine in front of
+        you."""
+        zero: dict[int, int] = {}
+        sign: dict[int, int] = {}
+        knee = math.pi / 2 * PULSES_PER_RAD
+        for coxa, femur, tibia in ((6, 4, 2), (12, 10, 8), (18, 16, 14)):  # right side
+            zero[coxa], sign[coxa] = 500, 1
+            zero[femur], sign[femur] = 500, 1
+            zero[tibia], sign[tibia] = int(round(500 - knee)), 1
+        for coxa, femur, tibia in (
+            (5, 3, 1),
+            (11, 9, 7),
+            (17, 15, 13),
+        ):  # left side, mirrored servos
+            zero[coxa], sign[coxa] = 500, 1
+            zero[femur], sign[femur] = 500, -1
+            zero[tibia], sign[tibia] = int(round(500 + knee)), -1
+        zero.update({19: 500, 20: 500, 21: 125, 22: 580})
+        sign.update({19: 1, 20: 1, 21: 1, 22: -1})
+        return cls(
+            zero=zero,
+            sign=sign,
+            note="chassis defaults from its controller's zero; directions to confirm",
+        )
+
 
 class RosbridgeClient:
     """One websocket to rosbridge: advertise, publish, subscribe. Messages are rosbridge's JSON
@@ -321,3 +352,44 @@ class RosbridgeSensors:
 
     def shutdown(self) -> None:
         pass
+
+
+OLED_TOPIC = "/ros_robot_controller/set_oled"
+BUZZER_TOPIC = "/ros_robot_controller/set_buzzer"
+BUTTON_TOPIC = "/ros_robot_controller/button"
+
+
+class RosbridgePanel:
+    """The chassis' own front panel over the same socket: a two-line OLED (16 characters a line),
+    a buzzer, and the two buttons on its controller board. On this chassis the button is the touch
+    and the OLED is the readout; the robot's shell will carry a pad and a bigger display."""
+
+    def __init__(
+        self, client: RosbridgeClient, *, on_button: Callable[[int, int], None] | None = None
+    ):
+        self.client = client
+        self._on_button = on_button
+        client.advertise(OLED_TOPIC, "ros_robot_controller_msgs/OLEDState")
+        client.advertise(BUZZER_TOPIC, "ros_robot_controller_msgs/BuzzerState")
+        client.subscribe(BUTTON_TOPIC, "ros_robot_controller_msgs/ButtonState", self._button)
+
+    def show(self, line1: str, line2: str = "") -> None:
+        for index, text in ((1, line1), (2, line2)):
+            self.client.publish(OLED_TOPIC, {"index": index, "text": text[:16]})
+
+    def beep(
+        self, freq: int = 1800, on_s: float = 0.08, off_s: float = 0.08, repeat: int = 1
+    ) -> None:
+        self.client.publish(
+            BUZZER_TOPIC,
+            {
+                "freq": int(freq),
+                "on_time": float(on_s),
+                "off_time": float(off_s),
+                "repeat": int(repeat),
+            },
+        )
+
+    def _button(self, msg: dict[str, Any]) -> None:
+        if self._on_button is not None:
+            self._on_button(int(msg.get("id", 0)), int(msg.get("state", 0)))

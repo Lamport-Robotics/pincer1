@@ -97,7 +97,16 @@ def elevenlabs_voice_settings(urgency: float = 0.0) -> dict[str, float] | None:
 class ElevenLabsSpeaker:
     SAMPLE_RATE = 22050
 
-    def __init__(self, api_key: str, voice_id: str, model_id: str = "eleven_flash_v2_5") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        voice_id: str,
+        model_id: str = "eleven_flash_v2_5",
+        sink: str | None = None,
+    ) -> None:
+        # sink "ssh:user@host" plays through that machine's default PulseAudio sink instead of a
+        # local device
+        self.sink = sink
         from elevenlabs.client import ElevenLabs  # type: ignore[import-not-found]
 
         self._client = ElevenLabs(api_key=api_key)
@@ -123,6 +132,25 @@ class ElevenLabsSpeaker:
             output_format="pcm_22050",
             **kwargs,
         )
+        if self.sink and self.sink.startswith("ssh:"):
+            import subprocess
+
+            cmd = [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                self.sink[4:],
+                "XDG_RUNTIME_DIR=/run/user/1000 paplay --raw --format=s16le "
+                f"--rate={self.SAMPLE_RATE} --channels=1",
+            ]
+            with subprocess.Popen(cmd, stdin=subprocess.PIPE) as proc:
+                assert proc.stdin is not None
+                for chunk in stream:
+                    if chunk:
+                        proc.stdin.write(chunk)
+                proc.stdin.close()
+                proc.wait(timeout=120)
+            return
         with sd.RawOutputStream(
             samplerate=self.SAMPLE_RATE, channels=1, dtype="int16", blocksize=2048
         ) as out:
@@ -151,7 +179,10 @@ def make_speaker(cfg: Settings, *, mock: bool = False) -> Speaker:
             raise RuntimeError("ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID are required")
         try:
             return ElevenLabsSpeaker(
-                cfg.elevenlabs_api_key, cfg.elevenlabs_voice_id, cfg.elevenlabs_model
+                cfg.elevenlabs_api_key,
+                cfg.elevenlabs_voice_id,
+                cfg.elevenlabs_model,
+                sink=cfg.audio_sink,
             )
         except ImportError as exc:
             if backend == "elevenlabs":

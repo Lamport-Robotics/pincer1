@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     servo_baud: int = 1_000_000
     rosbridge_url: str = "ws://127.0.0.1:9090"
     servo_calibration: Path = Path("~/.pincer1/servo_calibration.json")
+    # v1: the body in geometry.py. chassis: the first test chassis (short legs, its servo
+    # numbering),
+    # with a built-in calibration when the file above is missing.
+    body_profile: Literal["v1", "chassis"] = "v1"
+    daemon_http: str = (
+        "http://127.0.0.1:7401"  # where a press of the body button is relayed as a touch
+    )
     gait: Literal["tripod", "ripple", "wave"] = "tripod"
     # servo health (bus backend): every poll reads temperature and load of each joint; past a
     # threshold the body refuses to walk for cooldown_s and says why in the log
@@ -74,6 +81,9 @@ class Settings(BaseSettings):
     # face recogniser and stereo depth for the floor watch from the one device (depth.OakCamera).
     camera_source: Literal["opencv", "oak"] = "opencv"
     camera_index: int = 0
+    camera_url: str | None = (
+        None  # an MJPEG / RTSP stream instead of camera_index (the chassis' web video server)
+    )
     camera_hfov_deg: float = 62.0
     camera_fps: float = 8.0
     # --- depth / the floor ahead (terrain.py, depth.py) ---------------------------
@@ -139,6 +149,10 @@ class Settings(BaseSettings):
 
     # --- speech ---------------------------------------------------------------------
     tts_backend: Literal["auto", "elevenlabs", "espeak", "print"] = "auto"
+    # where the voice comes out: local sound device, or "ssh:user@host" to play through that
+    # machine's
+    # default PulseAudio sink (the robot's speaker when the service runs beside it)
+    audio_sink: str | None = None
     elevenlabs_api_key: str | None = Field(
         default=None, validation_alias=AliasChoices("ELEVENLABS_API_KEY", "elevenlabs_api_key")
     )

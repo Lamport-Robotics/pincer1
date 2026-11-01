@@ -49,15 +49,38 @@ class BodyGeometry:
     # neutral stance: foot this far out along the mount yaw, body this high above the ground
     stance_radius_m: float = 0.200
     stance_height_m: float = 0.125
-    # servo ids: leg i uses ids base + 3*i + (0 coxa, 1 femur, 2 tibia)
+    # servo ids: leg i uses ids base + 3*i + (0 coxa, 1 femur, 2 tibia), unless servo_map names them
     servo_id_base: int = 1
+    servo_map: tuple[tuple[int, int, int], ...] | None = None
 
     def mount(self, leg: int) -> tuple[float, float, float]:
         return self.mounts[leg]
 
     def servo_ids(self, leg: int) -> tuple[int, int, int]:
+        if self.servo_map is not None:
+            return self.servo_map[leg]
         b = self.servo_id_base + 3 * leg
         return (b, b + 1, b + 2)
+
+    @classmethod
+    def chassis(cls) -> BodyGeometry:
+        """The first test chassis: short legs on the 23 cm plate, its own servo numbering
+        (front right coxa 6, femur 4, tibia 2; the left side odd, the rear in the teens)."""
+        return cls(
+            femur_m=0.077,
+            tibia_m=0.116,
+            mounts=(
+                (0.093, -0.051, -math.radians(45)),
+                (0.000, -0.074, -math.radians(90)),
+                (-0.093, -0.051, -math.radians(135)),
+                (-0.093, 0.051, math.radians(135)),
+                (0.000, 0.074, math.radians(90)),
+                (0.093, 0.051, math.radians(45)),
+            ),
+            stance_radius_m=0.145,
+            stance_height_m=0.090,
+            servo_map=((6, 4, 2), (12, 10, 8), (18, 16, 14), (17, 15, 13), (11, 9, 7), (5, 3, 1)),
+        )
 
     def neutral_foot(self, leg: int) -> tuple[float, float, float]:
         """Foot position in the body frame for the neutral stance."""

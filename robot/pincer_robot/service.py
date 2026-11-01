@@ -96,6 +96,8 @@ class ServiceHandlers(Protocol):
 
     async def climb(self, riser_m: float | None, tread_m: float, steps: int) -> str: ...
 
+    async def display(self, title: str, body: str, level: str, ttl_secs: float) -> None: ...
+
     async def name_room(self, name: str, radius: float | None, polygon: Any) -> dict[str, Any]: ...
 
     async def map_action(self, action: str, name: str | None) -> dict[str, Any]: ...
@@ -419,6 +421,13 @@ class RobotService:
                         "reason": res.reason,
                         "secs": round(float(res.secs)),
                     },  # fmt: skip
+                )
+            elif t == "display":
+                await self.handlers.display(
+                    str(msg.get("title", "")),
+                    str(msg.get("body", "")),
+                    str(msg.get("level", "low")),
+                    float(msg.get("ttl_secs", 60)),
                 )
             elif t == "climb":
                 riser = msg.get("riser")
