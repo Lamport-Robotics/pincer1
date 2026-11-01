@@ -31,6 +31,14 @@ curl -XPOST localhost:7401/pair/new                      # 4. the code the exten
 
 Devnet SOL for the wallet address the daemon prints at start: faucet.solana.com.
 
+## walking
+
+On this chassis the legs walk with its own gait controller (`PINCER_CHASSIS_GAIT=chassis`, the
+default): the body package drives the head and the arm, the chassis keeps its stance and walks the
+way it already knows how to, so the "turn to the owner and step closer" of the attention move is
+there. `PINCER_CHASSIS_GAIT=own` puts the body package's gait on the joints instead; try it on a stand
+first.
+
 ## the run
 
 1. Stand in front of the robot. The head turns to your face; the front panel says `watching`.
