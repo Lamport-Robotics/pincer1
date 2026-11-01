@@ -18,8 +18,9 @@ import logging
 import math
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Protocol
+from typing import Protocol
 
 from ..motion import GAIT_SPEED_MPS, TURN_RATE_DPS, RobotInterface, RobotStatus
 from .gait import GaitParams, GaitState, Velocity, feet_down, step
