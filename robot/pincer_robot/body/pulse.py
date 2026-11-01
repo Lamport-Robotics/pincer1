@@ -125,26 +125,61 @@ class RosbridgeClient:
     """One websocket to rosbridge: advertise, publish, subscribe. Messages are rosbridge's JSON
     protocol; a background thread reads and dispatches."""
 
-    def __init__(self, url: str, *, connect_timeout_s: float = 5.0):
-        from websockets.sync.client import connect
-
+    def __init__(self, url: str, *, connect_timeout_s: float = 5.0, reconnect_s: float = 2.0):
         self.url = url
-        try:
-            self._ws = connect(url, open_timeout=connect_timeout_s, close_timeout=1, legacy=True)
-        except TypeError:  # older websockets: no legacy flag, and no warning either
-            self._ws = connect(url, open_timeout=connect_timeout_s, close_timeout=1)
+        self._timeout = connect_timeout_s
+        self._reconnect_s = reconnect_s
         self._lock = threading.Lock()
         self._handlers: dict[str, Callable[[dict[str, Any]], None]] = {}
+        self._advertised: dict[str, str] = {}
+        self._subscribed: dict[str, dict[str, Any]] = {}
         self._alive = True
+        self._connected = False
+        self._ws = self._open()
+        self._connected = True
         self._reader = threading.Thread(target=self._read_loop, name="rosbridge", daemon=True)
         self._reader.start()
+
+    def _open(self):
+        from websockets.sync.client import connect
+
+        try:
+            return connect(self.url, open_timeout=self._timeout, close_timeout=1, legacy=True)
+        except TypeError:  # older websockets: no legacy flag, and no warning either
+            return connect(self.url, open_timeout=self._timeout, close_timeout=1)
+
+    def _reconnect(self) -> bool:
+        """The chassis rebooted or the network blinked: open again, re-advertise, re-subscribe."""
+        while self._alive:
+            try:
+                ws = self._open()
+            except Exception:
+                time.sleep(self._reconnect_s)
+                continue
+            with self._lock:
+                self._ws = ws
+                self._connected = True
+            for topic, msg_type in list(self._advertised.items()):
+                self._send({"op": "advertise", "topic": topic, "type": msg_type})
+            for sub in list(self._subscribed.values()):
+                self._send(sub)
+            log.info("rosbridge %s back", self.url)
+            return True
+        return False
 
     def _send(self, msg: dict[str, Any]) -> None:
         data = json.dumps(msg, separators=(",", ":"))
         with self._lock:
-            self._ws.send(data)
+            if not self._connected:
+                return  # dropped on the floor while the link is down; state resyncs on reconnect
+            try:
+                self._ws.send(data)
+            except Exception as exc:
+                self._connected = False
+                log.warning("rosbridge send failed: %s", exc)
 
     def advertise(self, topic: str, msg_type: str) -> None:
+        self._advertised[topic] = msg_type
         self._send({"op": "advertise", "topic": topic, "type": msg_type})
 
     def publish(self, topic: str, msg: dict[str, Any]) -> None:
@@ -160,43 +195,48 @@ class RosbridgeClient:
         queue_length: int = 1,
     ) -> None:
         self._handlers[topic] = handler
-        self._send(
-            {
-                "op": "subscribe",
-                "topic": topic,
-                "type": msg_type,
-                "throttle_rate": throttle_ms,
-                "queue_length": queue_length,
-            }
-        )
+        sub = {
+            "op": "subscribe",
+            "topic": topic,
+            "type": msg_type,
+            "throttle_rate": throttle_ms,
+            "queue_length": queue_length,
+        }
+        self._subscribed[topic] = sub
+        self._send(sub)
 
     def _read_loop(self) -> None:
-        try:
-            while self._alive:
+        while self._alive:
+            try:
                 raw = self._ws.recv()
-                try:
-                    msg = json.loads(raw)
-                except ValueError:
-                    continue
-                if msg.get("op") == "publish":
-                    handler = self._handlers.get(msg.get("topic", ""))
-                    if handler is not None:
-                        try:
-                            handler(msg.get("msg", {}))
-                        except Exception as exc:  # a bad frame must not kill the reader
-                            log.warning("rosbridge handler %s: %s", msg.get("topic"), exc)
-        except Exception as exc:
-            if self._alive:
-                log.warning("rosbridge connection lost: %s", exc)
-        finally:
-            self._alive = False
+            except Exception as exc:
+                if not self._alive:
+                    break
+                with self._lock:
+                    self._connected = False
+                log.warning("rosbridge connection lost (%s); reconnecting", exc)
+                if not self._reconnect():
+                    break
+                continue
+            try:
+                msg = json.loads(raw)
+            except ValueError:
+                continue
+            if msg.get("op") == "publish":
+                handler = self._handlers.get(msg.get("topic", ""))
+                if handler is not None:
+                    try:
+                        handler(msg.get("msg", {}))
+                    except Exception as exc:  # a bad frame must not kill the reader
+                        log.warning("rosbridge handler %s: %s", msg.get("topic"), exc)
 
     @property
     def alive(self) -> bool:
-        return self._alive
+        return self._alive and self._connected
 
     def close(self) -> None:
         self._alive = False
+        self._connected = False
         try:
             self._ws.close()
         except Exception:
