@@ -131,10 +131,15 @@ class Session:
     def sign(self, joint: Joint) -> int:
         p0 = self.neutral_pulse.get(joint.servo_id, self.bus.pulse(joint.servo_id))
         nudge = 10 * math.pi / 180 * PULSES_PER_RAD  # ten degrees
-        self._set(joint.servo_id, p0 + nudge, 0.6)
-        answer = self.ask(f"{joint.name}: did the {joint.positive_text}? [y/n] ")
-        self._set(joint.servo_id, p0, 0.6)
-        return 1 if answer.strip().lower().startswith("y") else -1
+        while True:
+            self.ask(f"\n{joint.name}: watch it, then press enter ")
+            self._set(joint.servo_id, p0 + nudge, 0.6)
+            self._set(joint.servo_id, p0, 0.6)
+            answer = self.ask(f"{joint.name}: did the {joint.positive_text}? [y/n, r to repeat] ")
+            a = answer.strip().lower()[:1]
+            if a == "r" or a == "":
+                continue
+            return 1 if a == "y" else -1
 
     def run(self, todo: list[Joint], *, do_jog: bool, do_signs: bool) -> PulseCalibration:
         for j in todo:

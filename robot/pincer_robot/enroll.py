@@ -198,7 +198,7 @@ def capture_face(cfg: Settings, *, frames: int = 10, min_pose_delta_deg: float =
     from .presence.face import CameraSource, InsightFaceRecognizer
 
     plan = cfg.compute_plan()
-    cam = CameraSource(cfg.camera_index)
+    cam = CameraSource(cfg.camera_url or cfg.camera_index)
     rec = InsightFaceRecognizer.from_plan(plan, cfg.face_det_size)
     kept: list[tuple[np.ndarray, tuple[float, float, float]]] = []
     prompts = [
@@ -283,7 +283,7 @@ def add_person(cfg: Settings, label: str, *, mock: bool, path: Path) -> Enrolmen
     return enrol
 
 
-def run_enrol(cfg: Settings, *, mock: bool, out: Path) -> Enrolment:
+def run_enrol(cfg: Settings, *, mock: bool, out: Path, no_voice: bool = False) -> Enrolment:
     if mock:
         enrol = build_mock_enrolment(cfg)
         save_enrolment(enrol, out)
@@ -292,7 +292,11 @@ def run_enrol(cfg: Settings, *, mock: bool, out: Path) -> Enrolment:
     passphrase = _ask_secret("Passphrase (2+ words)", min_words=2)
     duress = _ask_secret("Duress word (1-2 words, never used normally)", min_words=1)
     face_model, face_embs = capture_face(cfg)
-    voice_model, voice_emb, heard = capture_voice(cfg, passphrase)
+    if no_voice:
+        voice_model, voice_emb, heard = "none", None, []
+        print("  voice skipped: the passphrase is checked by its words only on this enrolment")
+    else:
+        voice_model, voice_emb, heard = capture_voice(cfg, passphrase)
     enrol = Enrolment(
         owner_name=name,
         passphrase_hashes=hash_phrase_pair(passphrase) + heard,
@@ -315,6 +319,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=None, help="path (default: PINCER_ENROL_PATH)")
     p.add_argument("--hash", metavar="PHRASE", help="print the hashes for a phrase and exit")
     p.add_argument(
+        "--no-voice", action="store_true", help="face and words only, no voice recording"
+    )
+    p.add_argument(
         "--add-person", metavar="LABEL", help="add another enrolled face (two-person rule)"
     )
     args = p.parse_args(argv)
@@ -329,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
             enrol = add_person(cfg, args.add_person.strip(), mock=args.mock, path=out)
             print(f"Enrolled people: {', '.join(enrol.labels())} -> {out}")
             return 0
-        enrol = run_enrol(cfg, mock=args.mock, out=out)
+        enrol = run_enrol(cfg, mock=args.mock, out=out, no_voice=args.no_voice)
     except KeyboardInterrupt:
         print("\naborted", file=sys.stderr)
         return 130

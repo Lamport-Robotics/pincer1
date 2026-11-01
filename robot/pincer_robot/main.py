@@ -332,6 +332,7 @@ class RobotApp:
                 imu_topic=self.cfg.imu_topic,
                 on_scan=self.on_scan,
                 on_imu=self.on_imu,
+                on_tap=self._on_body_tap,
             )
             if not bus.wait_for_state():
                 log.warning("joint backend: no servo state from the chassis yet")
@@ -668,12 +669,23 @@ class RobotApp:
                 ttl_secs, lambda: self.panel.show("PINCER1", "watching") if self.panel else None
             )
 
+    def _on_body_tap(self, taps: int) -> None:
+        """Two quick taps on the body are the touch on this chassis (the imu hears them); a single
+        tap is only logged."""
+        if taps >= 2:
+            self._relay_touch(long=False, source="double tap")
+        else:
+            log.debug("single tap on the body")
+
     def _on_body_button(self, button_id: int, state: int) -> None:
-        """A press of the button on the chassis' controller board stands in for the touch pad until
-        the shell has one: relayed to the daemon's touch input, long press as a long touch."""
+        """A press of a button on the chassis' controller board is a touch too: long press as a
+        long touch."""
         if state == 0:
             return
-        long = state >= 3  # the board reports 1 press, 2 double, 3 long
+        self._relay_touch(long=state >= 3, source=f"button {button_id} state {state}")
+
+    def _relay_touch(self, *, long: bool, source: str) -> None:
+        """Until the shell has its pad, the touch reaches the daemon's touch input over http."""
         try:
             import urllib.request
 
@@ -685,16 +697,11 @@ class RobotApp:
             )
             with urllib.request.urlopen(req, timeout=2) as r:
                 r.read()
-            log.info(
-                "body button %d (%s) relayed as a %s touch",
-                button_id,
-                state,
-                "long" if long else "short",
-            )
+            log.info("%s relayed as a %s touch", source, "long" if long else "short")
             if self.panel is not None:
                 self.panel.beep(freq=2400, on_s=0.05, repeat=1)
         except Exception as exc:
-            log.warning("button relay failed: %s", exc)
+            log.warning("touch relay failed: %s", exc)
 
     async def climb(self, riser_m: float | None, tread_m: float = 0.28, steps: int = 1) -> str:
         """Climb the riser the floor watch sees, or the one the caller names."""

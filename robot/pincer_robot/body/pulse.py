@@ -281,6 +281,40 @@ class RosbridgeServoBus:
         return False
 
 
+class TapDetector:
+    """A tap on the body is a short spike in the accelerometer while the body is still. Two taps
+    within ``double_s`` count as one confirmation (fires 2), a lone tap after the window fires 1.
+    Walking is excluded by the caller; a spike has to rise above the running mean by
+    ``threshold``."""
+
+    def __init__(
+        self, threshold_mps2: float = 3.0, refractory_s: float = 0.25, double_s: float = 0.7
+    ):
+        self.threshold, self.refractory, self.double = threshold_mps2, refractory_s, double_s
+        self._mean: float | None = None
+        self._last_tap = -1e9
+        self._pending_single: float | None = None
+
+    def update(self, accel: tuple[float, float, float], now: float) -> int:
+        mag = math.sqrt(sum(v * v for v in accel))
+        if self._mean is None:
+            self._mean = mag
+        spike = mag - self._mean > self.threshold
+        self._mean = 0.9 * self._mean + 0.1 * mag if not spike else self._mean
+        fired = 0
+        if spike and now - self._last_tap > self.refractory:
+            if self._pending_single is not None and now - self._pending_single <= self.double:
+                self._pending_single = None
+                fired = 2
+            else:
+                self._pending_single = now
+            self._last_tap = now
+        elif self._pending_single is not None and now - self._pending_single > self.double:
+            self._pending_single = None
+            fired = 1
+        return fired
+
+
 def quaternion_tilt(x: float, y: float, z: float, w: float) -> float:
     """Tilt in degrees, the larger of roll and pitch."""
     sinr_cosp = 2 * (w * x + y * z)
@@ -319,12 +353,15 @@ class RosbridgeSensors:
         imu_topic: str = "/imu",
         on_scan: Callable[[Scan], None] | None = None,
         on_imu: Callable[[tuple[float, float, float], float, float], None] | None = None,
+        on_tap: Callable[[int], None] | None = None,
     ):
         from ..ros_backend import front_clearance
 
         self._front = front_clearance
         self.status = status
         self._on_scan, self._on_imu = on_scan, on_imu
+        self._on_tap = on_tap
+        self.taps = TapDetector()
         client.subscribe(scan_topic, "sensor_msgs/LaserScan", self._scan, throttle_ms=100)
         client.subscribe(imu_topic, "sensor_msgs/Imu", self._imu, throttle_ms=100)
 
@@ -343,6 +380,12 @@ class RosbridgeSensors:
         )
         self.status.tilt_deg = tilt
         a = msg.get("linear_acceleration", {})
+        if self._on_tap is not None and not self.status.is_moving:
+            n = self.taps.update(
+                (float(a.get("x", 0)), float(a.get("y", 0)), float(a.get("z", 0))), time.monotonic()
+            )
+            if n:
+                self._on_tap(n)
         if self._on_imu is not None:
             self._on_imu(
                 (float(a.get("x", 0)), float(a.get("y", 0)), float(a.get("z", 0))),

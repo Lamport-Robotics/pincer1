@@ -140,7 +140,7 @@ def test_calibration_session_records_neutral_and_sign():
         srv.wait_for("subscribe")
         srv.push(STATE_TOPIC, {"servo_state": [{"id": 3, "position": 700}]})
         assert bus.wait_for_state(2.0)
-        answers = iter(["d", "d", "", "n"])  # jog +20, accept, then "it went the wrong way"
+        answers = iter(["d", "d", "", "", "n"])  # jog +20, accept, enter to nudge, then "wrong way"
         said: list[str] = []
         s = Session(bus, PulseCalibration(), ask=lambda _p="": next(answers), say=said.append)
         s._set = lambda sid, pulse, seconds=0.0: s.bus.client.publish(  # no sleeping in tests
