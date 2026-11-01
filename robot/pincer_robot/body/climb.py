@@ -26,6 +26,8 @@ from .kinematics import BodyPose, JointAngles, ReachError, Vec3, rotate, solve_b
 from .sim import _polygon_margin
 
 FRONT, MIDDLE, REAR = (0, 5), (1, 4), (2, 3)  # leg pairs: FR FL, MR ML, RR RL
+# length, width, depth below the top plate (sim/build.py): what has to clear the steps
+BODY_BOX_M = (0.230, 0.150, 0.045)
 COXA_SPAN_M = 0.186  # front coxa to rear coxa, for the pitch estimate
 
 
@@ -43,7 +45,8 @@ class Terrain:
     tread_m: float = 0.28
     steps: int = 1
     edge0_m: float = 0.30
-    floor_z: float = -0.09  # the lower floor in the climb frame
+    # the lower floor in the climb frame: the body starts at walking height
+    floor_z: float = -BodyGeometry().stance_height_m
 
     def edges(self) -> list[float]:
         return [self.edge0_m + k * self.tread_m for k in range(self.steps)]
@@ -61,18 +64,21 @@ class ClimbParams:
     riser_m: float
     tread_m: float = 0.28
     steps: int = 1
-    advance_m: float = 0.08  # body travel per cycle
+    advance_m: float = 0.11  # body travel per cycle
     # where a foot lands, as a fraction of the advance ahead of its neutral point. the rear feet land
     # well ahead so they are still under the body, not stretched out behind it, when they next swing
     place_ahead: tuple[float, float, float] = (0.5, 0.5, 0.8)  # front, middle, rear
-    stance_radius_m: float = 0.12  # front and rear feet closer under the body than when walking: more height
-    middle_radius_m: float = 0.155  # middle feet wide: a foot far out can sit above its own coxa
-    stance_height_m: float = 0.13  # leg extension the body aims for while climbing
-    lift_clearance_m: float = 0.03  # swing height above the higher of the two levels
-    swing_radius_m: float = 0.16  # how far out from the coxa a foot travels while it is in the air
+    stance_radius_m: float = 0.17  # front and rear feet closer under the body than when walking: more height
+    middle_radius_m: float = 0.215  # middle feet wide: a foot far out can sit above its own coxa
+    stance_height_m: float = 0.18  # leg extension the body aims for while climbing
+    lift_clearance_m: float = 0.04  # swing height above the higher of the two levels
+    swing_radius_m: float = 0.22  # how far out from the coxa a foot travels while it is in the air
     edge_margin_m: float = 0.045  # no foot within this of a riser's edge
-    pitch_max: float = math.radians(25)
-    margin_min_m: float = 0.012  # support margin the body's centre must keep
+    pitch_max: float = math.radians(30)
+    body_clearance_m: float = 0.015  # the body's underside keeps this much above the step below it
+    # support margin the body centre must keep; the head on its arm moves the real centre of mass
+    # a centimetre or two when the body is pitched
+    margin_min_m: float = 0.035
     pull_sub_m: float = 0.02  # body displacement per pull keyframe
     swing_s: float = 0.25  # per swing keyframe (up, over, down)
     pull_s: float = 0.35  # per pull keyframe
@@ -96,6 +102,18 @@ def body_centre_margin(feet: list[Vec3], down: list[bool], pose: BodyPose) -> fl
     return _polygon_margin(support, pose.x, pose.y)
 
 
+def body_lowest_gap(pose: BodyPose, terrain: Terrain) -> float:
+    """Smallest gap between the body's underside and the terrain under it: the four bottom
+    corners of the body box, placed by the pose, against the step height at each corner's x."""
+    length, width, depth = BODY_BOX_M
+    gap = math.inf
+    for sx in (-0.5, 0.5):
+        for sy in (-0.5, 0.5):
+            cx, cy, cz = rotate((sx * length, sy * width, -depth), pose.roll, pose.pitch, pose.yaw)
+            gap = min(gap, pose.z + cz - terrain.height(pose.x + cx))
+    return gap
+
+
 def check(geometry: BodyGeometry, kf: Keyframe, params: ClimbParams) -> list[JointAngles]:
     """Angles for a keyframe, or ClimbError when it does not solve or is not supported."""
     if sum(kf.down) < 3:
@@ -103,6 +121,9 @@ def check(geometry: BodyGeometry, kf: Keyframe, params: ClimbParams) -> list[Joi
     m = body_centre_margin(kf.feet_world, kf.down, kf.pose)
     if m < params.margin_min_m:
         raise ClimbError(f"support margin {m * 1000:.0f} mm", kf.note)
+    low = body_lowest_gap(kf.pose, params.terrain)
+    if low < params.body_clearance_m:
+        raise ClimbError(f"body {low * 1000:.0f} mm above the step", kf.note)
     try:
         return solve_body(geometry, kf.feet_world, kf.pose)
     except ReachError as e:
@@ -210,18 +231,54 @@ def climb_cycle(geometry: BodyGeometry, params: ClimbParams, steps: int | None =
                 feet[leg] = target
             frames += _pull(geometry, feet, down, x, x + adv / 3, params)
             x += adv / 3
-    # level out: the walking stance on the landing
+    # level out on the landing: first bring the body level and down to walking height over the
+    # climbing stance, in small checked steps, then walk the feet out to the walking radius one
+    # at a time. The other way round (feet out while the body is still pitched and high) drops
+    # the body onto the new stance in one go
+    final = BodyPose(x=x, z=terrain.top_z() + geometry.stance_height_m)
+    frames += _settle(geometry, feet, down, frames[-1].pose, final, params)
     for pair in (FRONT, MIDDLE, REAR):
         for leg in pair:
             ox, oy = neutral_offset(geometry, leg, radius0)
             target = (x + ox, oy, terrain.top_z())
             frames += _swing(geometry, feet, down, leg, target, frames[-1].pose, params)
             feet[leg] = target
-    final = BodyPose(x=x, z=terrain.top_z() + geometry.stance_height_m)
+    frames += _settle(geometry, feet, down, frames[-1].pose, final, params)
     kf = Keyframe(list(feet), final, [True] * 6, params.pull_s, "level")
     check(geometry, kf, params)
     frames.append(kf)
     return frames
+
+
+def _settle(
+    geometry: BodyGeometry,
+    feet: list[Vec3],
+    down: list[bool],
+    start: BodyPose,
+    goal: BodyPose,
+    params: ClimbParams,
+) -> list[Keyframe]:
+    """Body from ``start`` to ``goal`` over planted feet in steps of at most 1 cm and 5 degrees,
+    each checked; stops short at the last pose that still solves rather than failing the climb."""
+    n = max(1, int(math.ceil(max(
+        abs(goal.z - start.z) / 0.01,
+        abs(goal.pitch - start.pitch) / math.radians(5),
+        abs(goal.x - start.x) / params.pull_sub_m,
+    ))))
+    out: list[Keyframe] = []
+    for i in range(1, n + 1):
+        s = i / n
+        pose = BodyPose(
+            start.x + (goal.x - start.x) * s, start.y, start.z + (goal.z - start.z) * s,
+            0.0, start.pitch + (goal.pitch - start.pitch) * s, 0.0,
+        )
+        kf = Keyframe(list(feet), pose, list(down), params.pull_s, f"settle {i}/{n}")
+        try:
+            check(geometry, kf, params)
+        except ClimbError:
+            break
+        out.append(kf)
+    return out
 
 
 def _swing(
@@ -281,12 +338,30 @@ def _pull(
     return out
 
 
+# how fast the body may be moved between keyframes: a keyframe takes its own ``seconds`` or
+# longer when the pose change asks for it, so a 30 degree pitch change is not done in 0.35 s
+PITCH_RATE = math.radians(30)  # rad/s
+HEIGHT_RATE = 0.06  # m/s
+TRAVEL_RATE = 0.10  # m/s
+
+
+def seconds_between(prev: Keyframe, kf: Keyframe) -> float:
+    """Time from ``prev`` to ``kf``: the keyframe's duration, stretched for a large pose change."""
+    p, q = prev.pose, kf.pose
+    return max(
+        kf.seconds,
+        abs(q.pitch - p.pitch) / PITCH_RATE,
+        abs(q.z - p.z) / HEIGHT_RATE,
+        math.hypot(q.x - p.x, q.y - p.y) / TRAVEL_RATE,
+    )
+
+
 def interpolate(keyframes: list[Keyframe], dt: float = 0.02) -> Iterator[tuple[list[Vec3], BodyPose]]:
     """Linear in time between keyframes; the first keyframe is held for its own duration."""
     prev = keyframes[0]
     yield list(prev.feet_world), prev.pose
     for kf in keyframes[1:]:
-        n = max(1, int(round(kf.seconds / dt)))
+        n = max(1, int(round(seconds_between(prev, kf) / dt)))
         for i in range(1, n + 1):
             s = i / n
             feet = [
@@ -311,4 +386,7 @@ def angles_at(geometry: BodyGeometry, feet: list[Vec3], pose: BodyPose) -> list[
 
 
 def duration(keyframes: list[Keyframe]) -> float:
-    return sum(k.seconds for k in keyframes)
+    if not keyframes:
+        return 0.0
+    later = zip(keyframes, keyframes[1:], strict=False)
+    return keyframes[0].seconds + sum(seconds_between(a, b) for a, b in later)

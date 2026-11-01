@@ -12,6 +12,7 @@ from pincer_robot.body.climb import (
     climb_cycle,
     duration,
     interpolate,
+    seconds_between,
 )
 from pincer_robot.body.kinematics import ReachError
 
@@ -42,12 +43,13 @@ def test_interpolated_samples_are_reachable_and_supported():
     params = ClimbParams(riser_m=0.10)
     kfs = climb_cycle(G, params)
     samples = list(interpolate(kfs, 0.02))
-    assert len(samples) == 1 + sum(max(1, round(k.seconds / 0.02)) for k in kfs[1:])
+    pairs = list(zip(kfs, kfs[1:], strict=False))
+    assert len(samples) == 1 + sum(max(1, round(seconds_between(a, b) / 0.02)) for a, b in pairs)
     # between two keyframes a foot counts as planted when both ends say so, or when it landed at the
     # previous keyframe and does not move during this one
     i = 1
     for prev, kf in zip(kfs, kfs[1:]):
-        n = max(1, round(kf.seconds / 0.02))
+        n = max(1, round(seconds_between(prev, kf) / 0.02))
         both = [
             (a and b) or (b and pf == kf.feet_world[j])
             for j, (a, b, pf) in enumerate(zip(prev.down, kf.down, prev.feet_world))
@@ -63,7 +65,8 @@ def test_interpolated_samples_are_reachable_and_supported():
 def test_time_is_monotone_and_adds_up():
     kfs = climb_cycle(G, ClimbParams(riser_m=0.08))
     assert all(k.seconds > 0 for k in kfs)
-    assert math.isclose(duration(kfs), sum(k.seconds for k in kfs))
+    # a big pose change stretches its keyframe, never shortens it
+    assert duration(kfs) >= sum(k.seconds for k in kfs)
     # each keyframe becomes a whole number of 20 ms samples; the drift from rounding stays small
     assert abs(len(list(interpolate(kfs, 0.02))) * 0.02 - duration(kfs)) < 0.05 * duration(kfs)
 

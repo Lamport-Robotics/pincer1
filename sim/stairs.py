@@ -6,7 +6,8 @@ cycle is generated from the leg kinematics, interpolated at 50 Hz, and held by t
 servos; physics says whether the body gets up the step.
 
     python sim/stairs.py --riser 0.10                 # one step -> report
-    python sim/stairs.py --sweep                      # 0.06 .. 0.17, one step each, table
+    python sim/stairs.py --sweep                      # 0.08 .. 0.17, one step each, table
+    python sim/stairs.py --riser 0.13 --steps 3       # a staircase
     python sim/stairs.py --riser 0.10 --gif           # -> sim/stairs.gif
 """
 
@@ -39,7 +40,7 @@ FPS = 25
 GIF_SPEEDUP = 3  # the cycle is slow and careful; the gif plays it three times faster
 FRAME = (640, 400)
 GIF_LIMIT = 2_500_000
-SWEEP = (0.06, 0.08, 0.10, 0.12, 0.14, 0.17)
+SWEEP = (0.08, 0.10, 0.12, 0.13, 0.14, 0.15, 0.17)
 
 
 def load(params: ClimbParams, kp: float) -> tuple[mujoco.MjModel, mujoco.MjData]:
@@ -214,7 +215,7 @@ def describe(r: dict) -> str:
 
 def write_gif(frames: list[Image.Image], path: Path) -> None:
     """Same recipe as walk.py: one palette, unchanged pixels transparent, then fewer frames, then smaller."""
-    plans = [(1, 1.0), (2, 1.0), (2, 560 / FRAME[0]), (3, 480 / FRAME[0]), (4, 480 / FRAME[0])]
+    plans = [(1, 1.0), (2, 1.0), (2, 560 / FRAME[0]), (3, 480 / FRAME[0]), (4, 480 / FRAME[0]), (5, 480 / FRAME[0]), (5, 400 / FRAME[0]), (6, 400 / FRAME[0])]
     for stride, scale in plans:
         picked = frames[::stride]
         if scale != 1.0:
