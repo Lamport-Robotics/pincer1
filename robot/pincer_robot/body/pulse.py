@@ -479,6 +479,7 @@ class RosbridgePanel:
 
 
 CMD_VEL_TOPIC = "/controller/cmd_vel"
+TRAVELING_TOPIC = "/controller/traveling"
 
 
 class RosbridgeDrive:
@@ -500,6 +501,7 @@ class RosbridgeDrive:
         self.client, self.topic = client, topic
         self.max_vx, self.max_wz, self.rate_hz, self._sleep = max_vx, max_wz, rate_hz, sleep
         client.advertise(topic, "geometry_msgs/Twist")
+        client.advertise(TRAVELING_TOPIC, "kinematics_msgs/Traveling")
         self._sleep(0.3)  # let the advertise land, then make sure nothing is still walking
         self.stop()
 
@@ -527,4 +529,20 @@ class RosbridgeDrive:
             self.stop()  # whatever interrupts the walk, the chassis must not keep going
 
     def stop(self) -> None:
+        """A zero twist, and the gait controller's own stop: a walk started through its gait
+        interface does not end on a zero velocity alone."""
         self.twist(0.0, 0.0)
+        self.client.publish(
+            TRAVELING_TOPIC,
+            {
+                "gait": 0,
+                "stride": 0.0,
+                "height": 0.0,
+                "direction": 0.0,
+                "rotation": 0.0,
+                "time": 0.5,
+                "steps": 0,
+                "interrupt": True,
+                "relative_height": False,
+            },
+        )
