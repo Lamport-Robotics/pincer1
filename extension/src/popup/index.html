@@ -7,142 +7,160 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <header class="top">
-      <div class="brand">
-        <img src="/icons/icon48.png" alt="" width="24" height="24" />
-        <span class="brand-name">Pincer1</span>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+        <symbol id="g-solana" viewBox="0 0 24 24"><path d="M6 7.5h12l-2.5 2.5H3.5L6 7.5ZM6 16.5h12l-2.5 2.5H3.5L6 16.5ZM18 12H6l2.5 2.5h12L18 12Z"/></symbol>
+        <symbol id="g-evm" viewBox="0 0 24 24"><path d="m12 2 7 10.5L12 17 5 12.5 12 2Z"/><path d="m5 14 7 8 7-8-7 4.5L5 14Z"/></symbol>
+        <symbol id="g-bitcoin" viewBox="0 0 24 24"><path d="M9 6h5a2.5 2.5 0 0 1 0 5H9m0 0h6a2.5 2.5 0 0 1 0 5H9M9 6v10M11 4v2M13 4v2M11 16v2M13 16v2"/></symbol>
+      </defs>
+    </svg>
+
+    <header class="bar">
+      <div class="who">
+        <img src="/icons/icon48.png" alt="" width="30" height="30" />
+        <div class="who-text">
+          <span class="who-name">Pincer1</span>
+          <span class="status" id="status" data-state="idle"><span class="dot"></span><span id="statusText">Starting</span></span>
+        </div>
       </div>
-      <div class="status" id="status" data-state="idle">
-        <span class="dot"></span>
-        <span class="status-text" id="statusText">Starting</span>
-      </div>
+      <button class="icon-btn" id="gear" type="button" aria-label="settings" data-view="settings"><svg><use href="#i-gear"/></svg></button>
     </header>
 
     <main>
-      <section class="ask" id="approvalCard" hidden>
-        <h2>A site wants to connect</h2>
-        <ul class="asks" id="approvals"></ul>
-        <p class="hint">An approved site sees your addresses and can ask the robot to sign. Every signature still needs your touch on the robot.</p>
-      </section>
+      <!-- home -->
+      <section class="view" data-view="home">
+        <section class="sheet ask" id="approvalCard" hidden>
+          <div class="sheet-head">Connection request</div>
+          <ul class="asks" id="approvals"></ul>
+          <p class="fine">A connected site sees your addresses and can ask the robot to sign. Nothing is signed without your touch.</p>
+        </section>
 
-      <section class="now" id="pendingCard" hidden>
-        <div class="now-meta">
-          <span class="chain" id="pendingChain" data-chain="solana">Solana</span>
-          <span class="sep">·</span>
-          <span id="pendingKind">sign transaction</span>
-          <span class="sep">·</span>
-          <span id="pendingOrigin"></span>
-        </div>
-        <p class="summary" id="pendingSummary">The robot is reading the transaction…</p>
-        <ul class="reasons" id="pendingReasons"></ul>
-        <ul class="lines" id="pendingLines"></ul>
-        <div class="touch">
-          <span class="pulse"></span>
-          <span class="touch-text">Waiting for your touch on the robot</span>
-          <span class="risk" id="pendingRisk" data-risk="none">Reading</span>
-          <span class="timer" id="pendingTimer">0s</span>
-        </div>
-      </section>
-
-      <section class="idle" id="idleCard">
-        <p class="idle-title">Nothing to sign.</p>
-        <p class="hint" id="idleHint">The robot is watching the room. A request from a connected site will show up here, and on the robot.</p>
-      </section>
-
-      <section class="block" id="pairBlock">
-        <h2>Pair with your robot</h2>
-        <p class="hint">The robot speaks a six-digit code. Type it once; the token stays in this browser. The robot's address is under Settings.</p>
-        <form id="pairForm" class="row">
-          <input
-            class="mono code"
-            id="code"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]{6}"
-            maxlength="6"
-            placeholder="000000"
-            autocomplete="one-time-code"
-            aria-label="pairing code"
-          />
-          <button type="submit" class="accent">Pair</button>
-        </form>
-      </section>
-
-      <section class="block" id="pairedBlock" hidden>
-        <h2>Accounts</h2>
-        <div class="acct">
-          <span class="k">Solana</span>
-          <button class="v mono copy" id="addrSolana" data-chain="solana" title="copy">—</button>
-        </div>
-        <div class="acct">
-          <span class="k">Ethereum</span>
-          <button class="v mono copy" id="addrEvm" data-chain="evm" title="copy">—</button>
-        </div>
-        <div class="acct">
-          <span class="k">Bitcoin</span>
-          <button class="v mono copy" id="addrBitcoin" data-chain="bitcoin" title="copy">—</button>
-        </div>
-        <p class="hint" id="addrHint" hidden>Ethereum and Bitcoin addresses appear after the first connect from a site.</p>
-        <div class="acct sites-row">
-          <span class="k">Sites</span>
-          <div class="v sites-v">
-            <span id="origins" class="hint">none yet</span>
-            <ul class="sites" id="sites"></ul>
+        <section class="sheet request" id="pendingCard" hidden>
+          <div class="site-row">
+            <span class="site-mark" id="pendingSiteMark">l</span>
+            <div class="site-text">
+              <span class="site-host" id="pendingOrigin">localhost:8765</span>
+              <span class="site-sub"><span id="pendingChain" data-chain="solana">Solana</span> · <span id="pendingKind">sign and send</span></span>
+            </div>
+            <span class="risk" id="pendingRisk" data-risk="none">Reading</span>
           </div>
+          <h1 class="summary" id="pendingSummary">Reading the transaction…</h1>
+          <ul class="warn" id="pendingReasons"></ul>
+          <ul class="rows" id="pendingLines"></ul>
+          <div class="confirm">
+            <span class="pulse"></span>
+            <div class="confirm-text">
+              <span class="confirm-title">Touch the robot to confirm</span>
+              <span class="confirm-sub">It read the same bytes and shows them on its own screen.</span>
+            </div>
+            <span class="timer" id="pendingTimer">0s</span>
+          </div>
+        </section>
+
+        <section class="sheet idle" id="idleCard">
+          <span class="idle-title">Nothing waiting</span>
+          <span class="fine" id="idleHint">The robot is watching the room.</span>
+        </section>
+
+        <section class="sheet" id="pairBlock">
+          <div class="sheet-head">Pair with your robot</div>
+          <form id="pairForm" class="pair">
+            <input class="code" id="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="one-time-code" aria-label="pairing code" />
+            <button type="submit" class="primary">Pair</button>
+          </form>
+          <p class="fine">The robot speaks a six-digit code. The address it answers on is under settings.</p>
+        </section>
+
+        <section class="list" id="pairedBlock" hidden>
+          <div class="list-head">Accounts</div>
+          <button class="item copy" id="addrSolana" data-chain="solana" type="button">
+            <span class="glyph" data-chain="solana"><svg><use href="#g-solana"/></svg></span>
+            <span class="item-text"><span class="item-title">Solana</span><span class="item-sub mono addr">—</span></span>
+            <svg class="trail"><use href="#i-copy"/></svg>
+          </button>
+          <button class="item copy" id="addrEvm" data-chain="evm" type="button">
+            <span class="glyph" data-chain="evm"><svg><use href="#g-evm"/></svg></span>
+            <span class="item-text"><span class="item-title">Ethereum</span><span class="item-sub mono addr">—</span></span>
+            <svg class="trail"><use href="#i-copy"/></svg>
+          </button>
+          <button class="item copy" id="addrBitcoin" data-chain="bitcoin" type="button">
+            <span class="glyph" data-chain="bitcoin"><svg><use href="#g-bitcoin"/></svg></span>
+            <span class="item-text"><span class="item-title">Bitcoin</span><span class="item-sub mono addr">—</span></span>
+            <svg class="trail"><use href="#i-copy"/></svg>
+          </button>
+          <p class="fine" id="addrHint" hidden>Ethereum and Bitcoin addresses appear after the first site connects.</p>
+          <div class="list-head">Connected sites <span class="count" id="origins"></span></div>
+          <ul class="sites" id="sites"></ul>
+          <p class="fine" id="sitesEmpty">No site connected yet.</p>
+        </section>
+      </section>
+
+      <!-- activity -->
+      <section class="view" data-view="activity" hidden>
+        <div class="list">
+          <div class="list-head">Activity <span class="count" id="logCount"></span></div>
+          <ol class="log" id="log"></ol>
+          <p class="fine" id="logEmpty">Nothing signed yet.</p>
         </div>
       </section>
 
-      <details class="block settings">
-        <summary>Settings</summary>
-        <div class="settings-body">
-          <h3>Robot</h3>
-          <form id="hostForm" class="row">
+      <!-- settings -->
+      <section class="view" data-view="settings" hidden>
+        <div class="group">
+          <div class="list-head">Robot</div>
+          <form id="hostForm" class="field">
             <input class="mono" id="host" type="text" spellcheck="false" placeholder="ws://pincer1.local:7401" aria-label="robot address" />
-            <button type="submit" class="quiet">Save</button>
+            <button type="submit">Save</button>
           </form>
-          <p class="hint">The daemon the extension talks to. <button class="link" id="reconnect" type="button">Reconnect now</button></p>
-          <h3>Ethereum chain and RPC</h3>
-          <div class="row">
-            <select id="evmChain"></select>
-            <span class="hint" id="evmChainId"></span>
+          <div class="actions">
+            <button class="link" id="reconnect" type="button">Reconnect</button>
+            <button class="link danger" id="forget" type="button">Forget pairing</button>
           </div>
-          <form id="evmRpcForm" class="row">
-            <input class="mono" id="evmRpc" type="text" spellcheck="false" placeholder="https://…" aria-label="evm rpc" />
-            <button type="submit" class="quiet">Save</button>
+        </div>
+        <div class="group">
+          <div class="list-head">Ethereum</div>
+          <div class="field">
+            <select id="evmChain" aria-label="chain"></select>
+            <span class="fine" id="evmChainId"></span>
+          </div>
+          <form id="evmRpcForm" class="field">
+            <input class="mono" id="evmRpc" type="text" spellcheck="false" placeholder="RPC for this chain" aria-label="evm rpc" />
+            <button type="submit">Save</button>
           </form>
-          <p class="hint">Nonce, gas and fees are read from this RPC, never from the site's node. Empty means the default.</p>
           <label class="toggle">
             <input type="checkbox" id="takeover" />
             <span class="switch"></span>
-            <span class="toggle-text">
-              Answer as <span class="mono">window.ethereum</span>
-              <span class="hint">Off: sites find Pincer1 through EIP-6963. On: older sites that only read window.ethereum see Pincer1 instead of your other wallet. Reload their tabs after changing.</span>
-            </span>
+            <span class="toggle-text">Answer as <span class="mono">window.ethereum</span><span class="fine">For sites that ignore EIP-6963. Reload their tabs after changing.</span></span>
           </label>
-          <h3>Solana RPC</h3>
-          <form id="rpcForm" class="row">
+        </div>
+        <div class="group">
+          <div class="list-head">Solana</div>
+          <form id="rpcForm" class="field">
             <input class="mono" id="rpc" type="text" spellcheck="false" placeholder="https://api.mainnet-beta.solana.com" aria-label="solana rpc" />
-            <button type="submit" class="quiet">Save</button>
+            <button type="submit">Save</button>
           </form>
-          <h3>Bitcoin broadcast</h3>
-          <form id="btcForm" class="row">
+        </div>
+        <div class="group">
+          <div class="list-head">Bitcoin</div>
+          <form id="btcForm" class="field">
             <input class="mono" id="btcApi" type="text" spellcheck="false" placeholder="https://mempool.space/api" aria-label="bitcoin api" />
-            <button type="submit" class="quiet">Save</button>
+            <button type="submit">Save</button>
           </form>
-          <p class="hint">Esplora-style API; finalized transactions are posted to <span class="mono">{url}/tx</span>.</p>
-          <button class="link danger" id="forget" type="button">Forget this pairing</button>
         </div>
-      </details>
-
-      <section class="block history">
-        <div class="h-head">
-          <h2>Recent</h2>
-          <span class="hint" id="logCount"></span>
-        </div>
-        <ol class="log" id="log"></ol>
-        <p class="hint" id="logEmpty">Nothing signed yet.</p>
       </section>
     </main>
+
+    <nav class="tabs">
+      <button class="tab is-active" data-view="home" type="button"><svg><use href="#i-home"/></svg><span>Home</span></button>
+      <button class="tab" data-view="activity" type="button"><svg><use href="#i-clock"/></svg><span>Activity</span></button>
+      <button class="tab" data-view="settings" type="button"><svg><use href="#i-sliders"/></svg><span>Settings</span></button>
+    </nav>
 
     <div class="toast" id="toast" hidden></div>
     <script type="module" src="./popup.ts"></script>

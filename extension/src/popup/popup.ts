@@ -61,6 +61,8 @@ const ui = {
   toast: $('toast'),
   idleCard: $('idleCard'),
   idleHint: $('idleHint'),
+  sitesEmpty: $('sitesEmpty'),
+  pendingSiteMark: $('pendingSiteMark'),
 };
 
 const DEMO = typeof chrome === 'undefined' || !chrome.runtime?.connect || new URLSearchParams(location.search).has('demo');
@@ -178,13 +180,43 @@ function list(ul: HTMLElement, items: string[] | undefined): void {
   );
 }
 
+/** "fee 0.000005 SOL" -> a label and a value; a line without that shape stays one cell. */
+function rows(ul: HTMLElement, items: string[] | undefined): void {
+  ul.replaceChildren(
+    ...(items ?? []).map((line) => {
+      const li = document.createElement('li');
+      const m = /^([A-Za-z][\w ]{0,14}?)\s+(.+)$/.exec(line.trim());
+      if (m && m[2].length > 1) {
+        const k = document.createElement('span');
+        k.className = 'k';
+        k.textContent = m[1];
+        const v = document.createElement('span');
+        v.className = 'vv';
+        v.textContent = m[2];
+        v.title = m[2];
+        li.append(k, v);
+      } else {
+        const v = document.createElement('span');
+        v.className = 'vv';
+        v.style.textAlign = 'left';
+        v.textContent = line;
+        li.append(v);
+      }
+      return li;
+    }),
+  );
+}
+
 function renderAddress(btn: HTMLButtonElement, value: string | undefined): void {
+  const addr = btn.querySelector<HTMLElement>('.addr') ?? btn;
   if (value) {
-    btn.textContent = value;
+    addr.textContent = value;
+    addr.title = value;
     btn.dataset.full = value;
     btn.disabled = false;
   } else {
-    btn.textContent = 'not reported yet';
+    addr.textContent = 'after the first connect';
+    addr.title = '';
     delete btn.dataset.full;
     btn.disabled = true;
   }
@@ -223,8 +255,8 @@ function render(): void {
     renderAddress(ui.addrEvm, state.addresses.evm);
     renderAddress(ui.addrBitcoin, state.addresses.bitcoin);
     ui.addrHint.hidden = Boolean(state.addresses.evm && state.addresses.bitcoin);
-    ui.origins.textContent = state.approvedOrigins.length ? '' : 'none yet';
-    ui.origins.hidden = state.approvedOrigins.length > 0;
+    ui.origins.textContent = state.approvedOrigins.length ? String(state.approvedOrigins.length) : '';
+    ui.sitesEmpty.hidden = state.approvedOrigins.length > 0;
     renderSites(state.approvedOrigins, state.connectedOrigins);
   }
   renderApprovals(state.pendingApprovals);
@@ -241,12 +273,13 @@ function render(): void {
     ui.pendingChain.dataset.chain = chain;
     ui.pendingKind.textContent = KIND_LABEL[p.kind] ?? p.kind;
     ui.pendingOrigin.textContent = originLabel(p.origin);
+    ui.pendingSiteMark.textContent = originLabel(p.origin).replace(/^www\./, '').slice(0, 1) || '?';
     if (p.explain) {
       ui.pendingRisk.textContent = RISK_LABEL[p.explain.risk] ?? p.explain.risk;
       ui.pendingRisk.dataset.risk = p.explain.risk;
       ui.pendingSummary.textContent = p.explain.summary;
       list(ui.pendingReasons, p.explain.reasons);
-      list(ui.pendingLines, p.explain.lines);
+      rows(ui.pendingLines, p.explain.lines);
     } else {
       ui.pendingRisk.textContent = RISK_LABEL.none;
       ui.pendingRisk.dataset.risk = 'none';
@@ -260,7 +293,7 @@ function render(): void {
               : 'transaction';
       ui.pendingSummary.textContent = `The robot is reading the ${what}…`;
       list(ui.pendingReasons, []);
-      list(ui.pendingLines, []);
+      rows(ui.pendingLines, []);
     }
     ui.pendingTimer.textContent = ago(p.startedAt);
   }
@@ -321,31 +354,46 @@ function renderLog(log: LogEntry[]): void {
   ui.logCount.textContent = log.length ? `${log.length}` : '';
   ui.log.replaceChildren(
     ...log.map((e) => {
+      const chain = chainOf(e);
       const li = document.createElement('li');
-      const o = document.createElement('span');
-      o.className = 'o';
-      o.dataset.outcome = e.outcome;
-      o.title = e.outcome;
+      const g = document.createElement('span');
+      g.className = 'glyph';
+      g.dataset.chain = chain;
+      g.innerHTML = `<svg><use href="#g-${chain}"/></svg>`;
       const what = document.createElement('span');
       what.className = 'what';
       const s = document.createElement('span');
       s.className = 's';
       s.textContent = e.summary ?? KIND_LABEL[e.kind] ?? e.kind;
       const m = document.createElement('span');
-      m.className = 'm mono';
-      const chain = document.createElement('span');
-      chain.className = 'chain';
-      chain.dataset.chain = chainOf(e);
-      chain.textContent = CHAIN_LABEL[chainOf(e)] ?? chainOf(e);
-      m.append(chain, ' · ', [originLabel(e.origin), e.outcome, e.risk ? RISK_LABEL[e.risk] ?? e.risk : '', e.detail].filter(Boolean).join(' · '));
+      m.className = 'm';
+      m.textContent = [originLabel(e.origin), e.risk ? RISK_LABEL[e.risk] ?? e.risk : '', e.detail].filter(Boolean).join(' · ');
       what.append(s, m);
+      const side = document.createElement('span');
+      side.className = 'side';
+      const o = document.createElement('span');
+      o.className = 'o';
+      o.dataset.outcome = e.outcome;
+      o.textContent = e.outcome;
       const t = document.createElement('span');
-      t.className = 't mono';
+      t.className = 't';
       t.textContent = ago(e.ts);
-      li.append(o, what, t);
+      side.append(o, t);
+      li.append(g, what, side);
       return li;
     }),
   );
+}
+
+// views: home / activity / settings, from the tab bar and the gear
+function setView(name: string): void {
+  for (const v of document.querySelectorAll<HTMLElement>('.view')) v.hidden = v.dataset.view !== name;
+  for (const b of document.querySelectorAll<HTMLElement>('.tab')) b.classList.toggle('is-active', b.dataset.view === name);
+  document.querySelector('main')?.scrollTo({ top: 0 });
+}
+for (const b of document.querySelectorAll<HTMLElement>('[data-view]')) {
+  if (b.classList.contains('view')) continue;
+  b.addEventListener('click', () => setView(b.dataset.view ?? 'home'));
 }
 
 // keep the pending timer and "ago" labels moving while the popup is open
