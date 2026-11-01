@@ -41,7 +41,7 @@ class CameraPose:
 
     x: float = 0.07
     y: float = 0.0
-    z: float = 0.36
+    z: float = 0.40
     tilt: float = 0.0  # elevation, positive up
     yaw: float = 0.0  # positive left
 

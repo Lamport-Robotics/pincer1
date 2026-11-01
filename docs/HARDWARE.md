@@ -14,7 +14,7 @@ to an open CAD body. Nothing here depends on a single vendor's kit; every part i
 | legs | Feetech STS3215 serial-bus servo (12 V, 30 kg·cm, magnetic encoder) | 18 | daisy-chained bus, position feedback, cheap to replace |
 | arm | Feetech STS3215 | 4 | same bus and brackets as the legs; carries the camera head |
 | servo bus driver | Waveshare Bus Servo Adapter (UART ↔ TTL bus) | 1 | one serial line from the Jetson to all 22 servos |
-| chassis | 3 mm aluminium top/bottom plates + STS3215 bracket kit (CNC, open DXF in v2) | 1 | body, leg brackets, arm base |
+| chassis | 3 mm aluminium top/bottom plates + STS3215 bracket kit (CNC, open DXF in v2) | 1 | body, leg brackets, arm base; legs 110 mm femur, 160 mm tibia axis to axis, sized for 17 cm stairs (`docs/BODY.md`) |
 | head camera | Luxonis OAK-D Lite (stereo depth + 4K RGB, USB-C, 61 g) | 1 | depth for liveness, light enough for the arm, JetPack 6 drivers |
 | front display | Waveshare 4.3" HDMI IPS 800×480, capacitive touch | 1 | reads out amounts; HDMI + USB touch, no DSI needed on the dev kit |
 | lidar | Slamtec RPLIDAR C1 (360°, 12 m, USB) | 1 | `/scan` for presence, room fingerprint, SLAM |

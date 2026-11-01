@@ -5,11 +5,12 @@ Frames (right-handed, metres, radians):
 * body frame: origin at the centre of the top plate, x forward, y left, z up.
 * leg frame i: origin at leg i's coxa axis, x pointing outward along the mount yaw, z up.
 
-Legs are numbered clockwise from the front right: 0 FR, 1 MR, 2 RR, 3 RL, 4 ML, 5 FL. The default
-numbers are the v1 chassis as measured: axis-to-axis segment lengths and coxa positions about the
-centre of the leg mounts. The knee servo sits 22° off the femur line and the foot 5° off the tibia; both
-are absorbed by the servo zero in `Calibration`, so the kinematics see straight segments. A different
-build changes the dataclass, not the code.
+Legs are numbered clockwise from the front right: 0 FR, 1 MR, 2 RR, 3 RL, 4 ML, 5 FL. The defaults are
+the v1 body: coxa positions about the centre of the leg mounts as measured on the first test chassis,
+femur and tibia 110 / 160 mm axis to axis, the length that takes a 17 cm stair (`climb.py`,
+`sim/stairs.py`). Bracket angles between a servo and its segment are absorbed by the servo zero in
+`Calibration`, so the kinematics see straight segments. A different build changes the dataclass, not
+the code.
 """
 
 from __future__ import annotations
@@ -32,8 +33,8 @@ class JointLimits:
 @dataclass(frozen=True)
 class BodyGeometry:
     coxa_m: float = 0.045
-    femur_m: float = 0.077
-    tibia_m: float = 0.116
+    femur_m: float = 0.110
+    tibia_m: float = 0.160
     # coxa axis positions in the body frame (x, y) and the mount yaw, per leg
     mounts: tuple[tuple[float, float, float], ...] = (
         (0.093, -0.051, -math.radians(45)),  # FR
@@ -45,8 +46,8 @@ class BodyGeometry:
     )
     limits: JointLimits = field(default_factory=JointLimits)
     # neutral stance: foot this far out along the mount yaw, body this high above the ground
-    stance_radius_m: float = 0.145
-    stance_height_m: float = 0.090
+    stance_radius_m: float = 0.200
+    stance_height_m: float = 0.125
     # servo ids: leg i uses ids base + 3*i + (0 coxa, 1 femur, 2 tibia)
     servo_id_base: int = 1
 

@@ -78,11 +78,13 @@ negated on the way out, the same convention as `sim/pincer1.urdf`.
 geometry in `geometry.py` is what the kinematics see: straight segments, axis to axis. The brackets are
 not straight, and the difference goes into the zero, not the maths.
 
-Segment lengths and mount positions were taken off the v1 chassis: coxa 45 mm, femur 77 mm, tibia
-116 mm; front and rear coxa axes at (±93, ±51) mm from the plate centre on 45° mounts, middle at
-(0, ±74) mm on 90°; the coxa axis 16.6 mm above the top plate. The knee servo sits 22° off the femur line
-and the foot tip 5° off the tibia line, so a femur reading of zero is not a horizontal femur. Those two
-angles are the offsets of every femur and tibia servo once the legs are measured.
+The v1 legs are coxa 45 mm, femur 110 mm, tibia 160 mm axis to axis: long enough for a 17 cm stair
+(see "stairs"). Mount positions come from the first test chassis: front and rear coxa axes at
+(±93, ±51) mm from the plate centre on 45° mounts, middle at (0, ±74) mm on 90°, the coxa axis 16.6 mm
+above the top plate. On that chassis (femur 77, tibia 116) the knee servo sits 22° off the femur line
+and the foot tip 5° off the tibia line, so a femur reading of zero is not a horizontal femur; the v1
+brackets have their own two angles. Either way they are the offsets of every femur and tibia servo
+once the legs are measured, and `BodyGeometry(femur_m=0.077, tibia_m=0.116)` runs the short legs.
 
 Procedure, body on a stand, feet in the air:
 
