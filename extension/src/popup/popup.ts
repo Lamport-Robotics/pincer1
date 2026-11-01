@@ -59,9 +59,14 @@ const ui = {
   logEmpty: $('logEmpty'),
   logCount: $('logCount'),
   toast: $('toast'),
+  idleCard: $('idleCard'),
+  idleHint: $('idleHint'),
 };
 
-let port = chrome.runtime.connect({ name: PORT_POPUP });
+const DEMO = typeof chrome === 'undefined' || !chrome.runtime?.connect || new URLSearchParams(location.search).has('demo');
+let port: chrome.runtime.Port = DEMO
+  ? ({ postMessage() {}, onMessage: { addListener() {} }, onDisconnect: { addListener() {} } } as unknown as chrome.runtime.Port)
+  : chrome.runtime.connect({ name: PORT_POPUP });
 let state: StateView | null = null;
 let hostDirty = false;
 let rpcDirty = false;
@@ -109,10 +114,19 @@ function toast(text: string, kind: 'ok' | 'err'): void {
 }
 
 const STATUS_LABEL: Record<StateView['socket'], string> = {
-  idle: 'idle',
-  connecting: 'connecting',
-  open: 'robot online',
-  reconnecting: 'reconnecting',
+  idle: 'Not connected',
+  connecting: 'Connecting',
+  open: 'Robot online',
+  reconnecting: 'Reconnecting',
+};
+
+const CHAIN_LABEL: Record<Chain, string> = { solana: 'Solana', evm: 'Ethereum', bitcoin: 'Bitcoin' };
+const RISK_LABEL: Record<string, string> = {
+  none: 'Reading',
+  low: 'Looks fine',
+  medium: 'Worth a look',
+  high: 'High risk',
+  block: 'Blocked',
 };
 
 /** Human label for what the dapp asked, per chain. */
@@ -209,27 +223,32 @@ function render(): void {
     renderAddress(ui.addrEvm, state.addresses.evm);
     renderAddress(ui.addrBitcoin, state.addresses.bitcoin);
     ui.addrHint.hidden = Boolean(state.addresses.evm && state.addresses.bitcoin);
-    ui.origins.textContent = state.connectedOrigins.length ? state.connectedOrigins.map(originLabel).join(', ') : 'none connected';
-    renderSites(state.approvedOrigins);
+    ui.origins.textContent = state.approvedOrigins.length ? '' : 'none yet';
+    ui.origins.hidden = state.approvedOrigins.length > 0;
+    renderSites(state.approvedOrigins, state.connectedOrigins);
   }
   renderApprovals(state.pendingApprovals);
 
   const p = state.pending;
   ui.pendingCard.hidden = !p;
+  ui.idleCard.hidden = Boolean(p) || state.pendingApprovals.length > 0;
+  ui.idleHint.textContent = state.paired
+    ? 'The robot is watching the room. A request from a connected site shows up here, and on the robot.'
+    : 'Pair with your robot below; requests from sites show up here once it is connected.';
   if (p) {
     const chain = chainOf(p);
-    ui.pendingChain.textContent = chain;
+    ui.pendingChain.textContent = CHAIN_LABEL[chain] ?? chain;
     ui.pendingChain.dataset.chain = chain;
     ui.pendingKind.textContent = KIND_LABEL[p.kind] ?? p.kind;
     ui.pendingOrigin.textContent = originLabel(p.origin);
     if (p.explain) {
-      ui.pendingRisk.textContent = p.explain.risk;
+      ui.pendingRisk.textContent = RISK_LABEL[p.explain.risk] ?? p.explain.risk;
       ui.pendingRisk.dataset.risk = p.explain.risk;
       ui.pendingSummary.textContent = p.explain.summary;
       list(ui.pendingReasons, p.explain.reasons);
       list(ui.pendingLines, p.explain.lines);
     } else {
-      ui.pendingRisk.textContent = 'reading…';
+      ui.pendingRisk.textContent = RISK_LABEL.none;
       ui.pendingRisk.dataset.risk = 'none';
       const what =
         p.kind === 'signMessage' || p.kind === 'evm_signMessage' || p.kind === 'btc_signMessage'
@@ -276,7 +295,7 @@ function renderApprovals(origins: string[]): void {
   );
 }
 
-function renderSites(origins: string[]): void {
+function renderSites(origins: string[], connected: string[] = []): void {
   ui.sites.replaceChildren(
     ...origins.map((origin) => {
       const li = document.createElement('li');
@@ -284,7 +303,14 @@ function renderSites(origins: string[]): void {
       site.className = 'site';
       site.textContent = originLabel(origin);
       site.title = origin;
-      li.append(site, siteButton('Remove', 'small ghost', () => send({ t: 'removeOrigin', origin })));
+      li.append(site);
+      if (connected.includes(origin)) {
+        const live = document.createElement('span');
+        live.className = 'live';
+        live.textContent = 'open now';
+        li.append(live);
+      }
+      li.append(siteButton('Remove', 'small ghost', () => send({ t: 'removeOrigin', origin })));
       return li;
     }),
   );
@@ -310,8 +336,8 @@ function renderLog(log: LogEntry[]): void {
       const chain = document.createElement('span');
       chain.className = 'chain';
       chain.dataset.chain = chainOf(e);
-      chain.textContent = chainOf(e);
-      m.append(chain, ' ', [originLabel(e.origin), e.outcome, e.risk, e.detail].filter(Boolean).join(' · '));
+      chain.textContent = CHAIN_LABEL[chainOf(e)] ?? chainOf(e);
+      m.append(chain, ' · ', [originLabel(e.origin), e.outcome, e.risk ? RISK_LABEL[e.risk] ?? e.risk : '', e.detail].filter(Boolean).join(' · '));
       what.append(s, m);
       const t = document.createElement('span');
       t.className = 't mono';
@@ -403,4 +429,50 @@ for (const btn of [ui.addrSolana, ui.addrEvm, ui.addrBitcoin]) {
       toast('clipboard blocked', 'err');
     }
   });
+}
+
+if (DEMO) {
+  const now = Date.now();
+  const scene = new URLSearchParams(location.search).get('demo') || 'pending';
+  state = {
+    socket: 'open',
+    lastError: null,
+    daemonUrl: 'ws://127.0.0.1:7401',
+    rpcUrl: '',
+    btcApiUrl: '',
+    evmChainId: 1,
+    evmRpcUrls: {},
+    takeoverEthereum: false,
+    paired: true,
+    pubkey: '2MXsi6TVF3x2cEZKk6d1eEgPornPQJUaa59jTG7AVJPu',
+    addresses: {
+      solana: '2MXsi6TVF3x2cEZKk6d1eEgPornPQJUaa59jTG7AVJPu',
+      evm: '0x24eC70214230AE62F4cD13553da38caa8D711231',
+      bitcoin: 'bc1qyqea6dngw90nqwpxepmy4v3mgk53hp6zxup02a',
+    },
+    connectedOrigins: ['http://localhost:8765'],
+    approvedOrigins: ['http://localhost:8765'],
+    pendingApprovals: scene === 'ask' ? ['https://jup.ag'] : [],
+    pending:
+      scene === 'pending'
+        ? {
+            id: 'd1',
+            kind: 'signAndSendTransaction',
+            chain: 'solana',
+            origin: 'http://localhost:8765',
+            startedAt: now - 7000,
+            explain: {
+              risk: 'low',
+              summary: '0.01 SOL to 9xQe…VFin',
+              reasons: ['First time you send to this address.'],
+              lines: ['fee 0.000005 SOL', 'devnet'],
+            },
+          }
+        : null,
+    log: [
+      { ts: now - 3600e3, kind: 'signAndSendTransaction', chain: 'solana', origin: 'http://localhost:8765', outcome: 'sent', summary: '0.05 SOL to 9xQe…VFin', risk: 'low' },
+      { ts: now - 86400e3, kind: 'evm_signTypedData', chain: 'evm', origin: 'https://app.uniswap.org', outcome: 'denied', summary: 'Permit USDC, unlimited', risk: 'high' },
+    ],
+  } as unknown as StateView;
+  render();
 }

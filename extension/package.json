@@ -12,7 +12,7 @@
   "packageManager": "pnpm@10.30.3",
   "scripts": {
     "icons": "node scripts/make-icons.mjs",
-    "build": "node scripts/make-icons.mjs && node scripts/build.mjs",
+    "build": "node scripts/build.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

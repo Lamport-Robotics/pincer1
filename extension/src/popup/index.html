@@ -9,140 +9,134 @@
   <body>
     <header class="top">
       <div class="brand">
-        <img src="/icons/icon48.png" alt="" width="22" height="22" />
+        <img src="/icons/icon48.png" alt="" width="24" height="24" />
         <span class="brand-name">Pincer1</span>
       </div>
       <div class="status" id="status" data-state="idle">
         <span class="dot"></span>
-        <span class="status-text" id="statusText">idle</span>
+        <span class="status-text" id="statusText">Starting</span>
       </div>
     </header>
 
     <main>
-      <section class="card ask" id="approvalCard" hidden>
-        <div class="card-head">
-          <span class="eyebrow">Site wants to connect</span>
-        </div>
+      <section class="ask" id="approvalCard" hidden>
+        <h2>A site wants to connect</h2>
         <ul class="asks" id="approvals"></ul>
-        <p class="hint">Approved sites can see your addresses and ask the robot to sign. Every signature still needs the touch.</p>
+        <p class="hint">An approved site sees your addresses and can ask the robot to sign. Every signature still needs your touch on the robot.</p>
       </section>
 
-      <section class="card" id="pendingCard" hidden>
-        <div class="card-head">
-          <span class="head-left">
-            <span class="chain" id="pendingChain" data-chain="solana">solana</span>
-            <span class="eyebrow" id="pendingKind">signTransaction</span>
-          </span>
-          <span class="risk" id="pendingRisk" data-risk="none">reading…</span>
+      <section class="now" id="pendingCard" hidden>
+        <div class="now-meta">
+          <span class="chain" id="pendingChain" data-chain="solana">Solana</span>
+          <span class="sep">·</span>
+          <span id="pendingKind">sign transaction</span>
+          <span class="sep">·</span>
+          <span id="pendingOrigin"></span>
         </div>
         <p class="summary" id="pendingSummary">The robot is reading the transaction…</p>
         <ul class="reasons" id="pendingReasons"></ul>
-        <ul class="lines mono" id="pendingLines"></ul>
+        <ul class="lines" id="pendingLines"></ul>
         <div class="touch">
           <span class="pulse"></span>
-          <span>waiting for touch on the robot…</span>
-          <span class="mono" id="pendingTimer">0s</span>
+          <span class="touch-text">Waiting for your touch on the robot</span>
+          <span class="risk" id="pendingRisk" data-risk="none">Reading</span>
+          <span class="timer" id="pendingTimer">0s</span>
         </div>
-        <div class="origin mono" id="pendingOrigin"></div>
       </section>
 
-      <section class="card">
-        <div class="card-head">
-          <span class="eyebrow">Robot</span>
-          <button class="ghost" id="reconnect" title="reconnect">↻</button>
-        </div>
-        <form id="hostForm" class="row">
-          <input class="mono" id="host" type="text" spellcheck="false" placeholder="ws://pincer1.local:7401" />
-          <button type="submit">Save</button>
-        </form>
+      <section class="idle" id="idleCard">
+        <p class="idle-title">Nothing to sign.</p>
+        <p class="hint" id="idleHint">The robot is watching the room. A request from a connected site will show up here, and on the robot.</p>
+      </section>
 
-        <div id="pairBlock">
-          <form id="pairForm" class="row">
-            <input
-              class="mono code"
-              id="code"
-              type="text"
-              inputmode="numeric"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              placeholder="6-digit code"
-              autocomplete="one-time-code"
-            />
-            <button type="submit" class="accent">Pair</button>
+      <section class="block" id="pairBlock">
+        <h2>Pair with your robot</h2>
+        <p class="hint">The robot speaks a six-digit code. Type it once; the token stays in this browser. The robot's address is under Settings.</p>
+        <form id="pairForm" class="row">
+          <input
+            class="mono code"
+            id="code"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            placeholder="000000"
+            autocomplete="one-time-code"
+            aria-label="pairing code"
+          />
+          <button type="submit" class="accent">Pair</button>
+        </form>
+      </section>
+
+      <section class="block" id="pairedBlock" hidden>
+        <h2>Accounts</h2>
+        <div class="acct">
+          <span class="k">Solana</span>
+          <button class="v mono copy" id="addrSolana" data-chain="solana" title="copy">—</button>
+        </div>
+        <div class="acct">
+          <span class="k">Ethereum</span>
+          <button class="v mono copy" id="addrEvm" data-chain="evm" title="copy">—</button>
+        </div>
+        <div class="acct">
+          <span class="k">Bitcoin</span>
+          <button class="v mono copy" id="addrBitcoin" data-chain="bitcoin" title="copy">—</button>
+        </div>
+        <p class="hint" id="addrHint" hidden>Ethereum and Bitcoin addresses appear after the first connect from a site.</p>
+        <div class="acct sites-row">
+          <span class="k">Sites</span>
+          <div class="v sites-v">
+            <span id="origins" class="hint">none yet</span>
+            <ul class="sites" id="sites"></ul>
+          </div>
+        </div>
+      </section>
+
+      <details class="block settings">
+        <summary>Settings</summary>
+        <div class="settings-body">
+          <h3>Robot</h3>
+          <form id="hostForm" class="row">
+            <input class="mono" id="host" type="text" spellcheck="false" placeholder="ws://pincer1.local:7401" aria-label="robot address" />
+            <button type="submit" class="quiet">Save</button>
           </form>
-          <p class="hint">The robot speaks the code. Type it once; the token stays in this browser.</p>
-        </div>
-
-        <div id="pairedBlock" hidden>
-          <div class="kv">
-            <span class="k"><span class="chain" data-chain="solana">solana</span></span>
-            <button class="v mono copy" id="addrSolana" data-chain="solana" title="copy">—</button>
+          <p class="hint">The daemon the extension talks to. <button class="link" id="reconnect" type="button">Reconnect now</button></p>
+          <h3>Ethereum chain and RPC</h3>
+          <div class="row">
+            <select id="evmChain"></select>
+            <span class="hint" id="evmChainId"></span>
           </div>
-          <div class="kv">
-            <span class="k"><span class="chain" data-chain="evm">evm</span></span>
-            <button class="v mono copy" id="addrEvm" data-chain="evm" title="copy">—</button>
-          </div>
-          <div class="kv">
-            <span class="k"><span class="chain" data-chain="bitcoin">bitcoin</span></span>
-            <button class="v mono copy" id="addrBitcoin" data-chain="bitcoin" title="copy">—</button>
-          </div>
-          <p class="hint" id="addrHint" hidden>EVM and bitcoin addresses appear after the first dapp connect.</p>
-          <div class="kv">
-            <span class="k">sites</span>
-            <span class="v mono" id="origins">—</span>
-          </div>
-          <ul class="sites" id="sites"></ul>
-          <button class="ghost danger" id="forget">Forget pairing</button>
+          <form id="evmRpcForm" class="row">
+            <input class="mono" id="evmRpc" type="text" spellcheck="false" placeholder="https://…" aria-label="evm rpc" />
+            <button type="submit" class="quiet">Save</button>
+          </form>
+          <p class="hint">Nonce, gas and fees are read from this RPC, never from the site's node. Empty means the default.</p>
+          <label class="toggle">
+            <input type="checkbox" id="takeover" />
+            <span class="switch"></span>
+            <span class="toggle-text">
+              Answer as <span class="mono">window.ethereum</span>
+              <span class="hint">Off: sites find Pincer1 through EIP-6963. On: older sites that only read window.ethereum see Pincer1 instead of your other wallet. Reload their tabs after changing.</span>
+            </span>
+          </label>
+          <h3>Solana RPC</h3>
+          <form id="rpcForm" class="row">
+            <input class="mono" id="rpc" type="text" spellcheck="false" placeholder="https://api.mainnet-beta.solana.com" aria-label="solana rpc" />
+            <button type="submit" class="quiet">Save</button>
+          </form>
+          <h3>Bitcoin broadcast</h3>
+          <form id="btcForm" class="row">
+            <input class="mono" id="btcApi" type="text" spellcheck="false" placeholder="https://mempool.space/api" aria-label="bitcoin api" />
+            <button type="submit" class="quiet">Save</button>
+          </form>
+          <p class="hint">Esplora-style API; finalized transactions are posted to <span class="mono">{url}/tx</span>.</p>
+          <button class="link danger" id="forget" type="button">Forget this pairing</button>
         </div>
-      </section>
+      </details>
 
-      <section class="card">
-        <div class="card-head">
-          <span class="eyebrow">EVM chain &amp; RPC</span>
-          <span class="hint mono" id="evmChainId"></span>
-        </div>
-        <div class="row">
-          <select id="evmChain" class="mono"></select>
-        </div>
-        <form id="evmRpcForm" class="row">
-          <input class="mono" id="evmRpc" type="text" spellcheck="false" placeholder="https://…" />
-          <button type="submit">Save</button>
-        </form>
-        <p class="hint">Nonce, gas and fees are read from this RPC, never from the dapp's node. Empty = default.</p>
-        <label class="toggle">
-          <input type="checkbox" id="takeover" />
-          <span class="switch"></span>
-          <span class="toggle-text">
-            take over <span class="mono">window.ethereum</span>
-            <span class="hint">off: dapps find Pincer1 via EIP-6963 only. On: legacy dapps that only read window.ethereum see Pincer1 instead of your other wallet. Reload tabs after changing.</span>
-          </span>
-        </label>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <span class="eyebrow">Solana RPC (mainnet sends)</span>
-        </div>
-        <form id="rpcForm" class="row">
-          <input class="mono" id="rpc" type="text" spellcheck="false" placeholder="https://api.mainnet-beta.solana.com" />
-          <button type="submit">Save</button>
-        </form>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <span class="eyebrow">Bitcoin API (broadcast)</span>
-        </div>
-        <form id="btcForm" class="row">
-          <input class="mono" id="btcApi" type="text" spellcheck="false" placeholder="https://mempool.space/api" />
-          <button type="submit">Save</button>
-        </form>
-        <p class="hint">Esplora-style: finalized transactions are POSTed to <span class="mono">{url}/tx</span>.</p>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <span class="eyebrow">Last requests</span>
+      <section class="block history">
+        <div class="h-head">
+          <h2>Recent</h2>
           <span class="hint" id="logCount"></span>
         </div>
         <ol class="log" id="log"></ol>

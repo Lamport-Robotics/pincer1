@@ -154,7 +154,7 @@ testnet/signet, Stacks methods.
 manifest.json              MV3: inpage.js (world MAIN) + content.js on <all_urls> at document_start, module
                            service worker, popup; permissions "storage" + "scripting" (+ host_permissions
                            <all_urls>, needed for the dynamically registered takeover script)
-scripts/make-icons.mjs     pure-Node PNG encoder → public/icons/icon{16,48,128}.png + src/generated/icon.ts
+public/icons, src/generated/icon.ts   the Lamport mark, rendered by `node render.mjs` in brand/
 scripts/build.mjs          five Vite builds (background ESM; content, inpage, takeover IIFE; popup page) → dist/
 src/protocol.ts            §3 message types (with chain payloads) + the extension-internal frames
 src/inpage.ts              Wallet Standard wallet (PincerWallet) + installWallets(): window.pincer1, EIP-6963,
