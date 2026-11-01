@@ -261,6 +261,22 @@ export class BackgroundCore {
 
   // ───────────── socket ─────────────
 
+  /** Where a daemon usually is: the robot's own name, or the laptop the daemon runs on while the
+   * body is still a test chassis. Until the user types an address of their own, the extension
+   * walks this list on every failed attempt and keeps the one that answers. */
+  private static readonly DISCOVERY = ['ws://pincer1.local:7401', 'ws://127.0.0.1:7401', 'ws://localhost:7401'];
+
+  private discovering(): boolean {
+    return BackgroundCore.DISCOVERY.includes(this.settings.daemonUrl);
+  }
+
+  private pickUrl(): string {
+    if (!this.discovering()) return this.settings.daemonUrl;
+    const list = BackgroundCore.DISCOVERY;
+    const start = Math.max(0, list.indexOf(this.settings.daemonUrl));
+    return list[(start + this.attempts) % list.length];
+  }
+
   private openSocket(): void {
     if (this.reconnectTimer) {
       this.clearT(this.reconnectTimer);
@@ -272,9 +288,10 @@ export class BackgroundCore {
     }
     this.closedByUs = false;
     this.status = this.attempts === 0 ? 'connecting' : 'reconnecting';
+    const url = this.pickUrl();
     let sock: SocketLike;
     try {
-      sock = this.deps.createSocket(this.settings.daemonUrl);
+      sock = this.deps.createSocket(url);
     } catch (e) {
       this.lastError = `cannot open socket: ${(e as Error).message}`;
       this.scheduleReconnect();
@@ -286,6 +303,11 @@ export class BackgroundCore {
       this.status = 'open';
       this.attempts = 0;
       this.lastError = null;
+      if (url !== this.settings.daemonUrl) {
+        // discovery found the daemon somewhere else on the list: remember it
+        this.settings.daemonUrl = url;
+        void this.deps.storage.set({ daemonUrl: url });
+      }
       for (const w of this.openWaiters.splice(0)) {
         this.clearT(w.timer);
         w.resolve();
@@ -298,7 +320,7 @@ export class BackgroundCore {
     };
     sock.onerror = () => {
       if (this.socket !== sock) return;
-      this.lastError = `socket error (${this.settings.daemonUrl})`;
+      this.lastError = `socket error (${url})`;
     };
     sock.onclose = () => {
       if (this.socket !== sock) return;

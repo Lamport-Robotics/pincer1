@@ -208,3 +208,12 @@ button.link.danger:hover { color: var(--bad); }
 /* toast */
 .toast { position: fixed; left: 12px; right: 12px; bottom: 66px; background: var(--ink); color: #f2eee3; border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 12.5px; }
 .toast[data-kind='err'] { background: var(--bad); color: #fff; }
+
+/* advanced settings, folded */
+details.advanced { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+details.advanced summary { list-style: none; cursor: pointer; padding: 12px 14px; font-weight: 700; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+details.advanced summary::-webkit-details-marker { display: none; }
+details.advanced summary::after { content: '+'; color: var(--faint); font-size: 15px; line-height: 1; }
+details.advanced[open] summary::after { content: '–'; }
+.advanced-body { display: flex; flex-direction: column; gap: 10px; padding: 0 10px 10px; }
+.advanced-body .group { border-color: var(--line); background: var(--surface-2); }

@@ -74,7 +74,7 @@
             <input class="code" id="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" autocomplete="one-time-code" aria-label="pairing code" />
             <button type="submit" class="primary">Pair</button>
           </form>
-          <p class="fine">The robot speaks a six-digit code. The address it answers on is under settings.</p>
+          <p class="fine">The robot says a six-digit code out loud. Type it once.</p>
         </section>
 
         <section class="list" id="pairedBlock" hidden>
@@ -123,6 +123,9 @@
             <button class="link danger" id="forget" type="button">Forget pairing</button>
           </div>
         </div>
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <div class="advanced-body">
         <div class="group">
           <div class="list-head">Ethereum</div>
           <div class="field">
@@ -153,6 +156,8 @@
             <button type="submit">Save</button>
           </form>
         </div>
+          </div>
+        </details>
       </section>
     </main>
 
