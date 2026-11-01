@@ -647,6 +647,8 @@ class RobotApp:
                 if report is not None:
                     with self.shared.lock:
                         self.shared.floor = report
+                    # the motion layer refuses a forward walk into whatever ends the floor
+                    self.robot.get_status().floor_clearance_m = min(99.0, report.walkable_m)
                 time.sleep(max(0.0, period - (time.time() - t0)))
         finally:
             source.close()

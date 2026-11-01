@@ -44,3 +44,12 @@ def test_idle_sway_is_small_and_symmetric() -> None:
     asyncio.run(MotionController(robot).idle_sway())
     net = sum(ang * dur for _, ang, dur in robot.log)
     assert abs(net) < 1e-9
+
+
+def test_the_floor_ahead_refuses_a_forward_walk_too() -> None:
+    robot = MockRobot()
+    robot.get_status().floor_clearance_m = 0.2
+    assert robot.walk("forward", 0.5).startswith("REFUSED: the floor ahead")
+    assert robot.walk("backward", 0.2).startswith("OK")
+    robot.get_status().floor_clearance_m = 9.0
+    assert robot.walk("forward", 0.2).startswith("OK")
