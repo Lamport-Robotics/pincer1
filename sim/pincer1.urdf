@@ -99,22 +99,22 @@
   </joint>
   <link name="fr_femur_link">
     <inertial>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
       <mass value="0.08"/>
-      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="4.345e-05" iyz="0" izz="4.345e-05"/>
+      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="8.459e-05" iyz="0" izz="8.459e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
     </collision>
   </link>
   <joint name="fr_tibia" type="revolute">
-    <origin xyz="0.077 0 0" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0" rpy="0 0 0"/>
     <parent link="fr_femur_link"/>
     <child link="fr_tibia_link"/>
     <axis xyz="0 -1 0"/>
@@ -123,18 +123,18 @@
   </joint>
   <link name="fr_tibia_link">
     <inertial>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
       <mass value="0.045"/>
-      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="5.266e-05" iyz="0" izz="5.266e-05"/>
+      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="9.821e-05" iyz="0" izz="9.821e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
     </collision>
   </link>
   <link name="fr_foot">
@@ -154,7 +154,7 @@
     </collision>
   </link>
   <joint name="fr_foot_tip" type="fixed">
-    <origin xyz="0.116 0 0" rpy="0 0 0"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
     <parent link="fr_tibia_link"/>
     <child link="fr_foot"/>
   </joint>
@@ -194,22 +194,22 @@
   </joint>
   <link name="mr_femur_link">
     <inertial>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
       <mass value="0.08"/>
-      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="4.345e-05" iyz="0" izz="4.345e-05"/>
+      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="8.459e-05" iyz="0" izz="8.459e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
     </collision>
   </link>
   <joint name="mr_tibia" type="revolute">
-    <origin xyz="0.077 0 0" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0" rpy="0 0 0"/>
     <parent link="mr_femur_link"/>
     <child link="mr_tibia_link"/>
     <axis xyz="0 -1 0"/>
@@ -218,18 +218,18 @@
   </joint>
   <link name="mr_tibia_link">
     <inertial>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
       <mass value="0.045"/>
-      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="5.266e-05" iyz="0" izz="5.266e-05"/>
+      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="9.821e-05" iyz="0" izz="9.821e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
     </collision>
   </link>
   <link name="mr_foot">
@@ -249,7 +249,7 @@
     </collision>
   </link>
   <joint name="mr_foot_tip" type="fixed">
-    <origin xyz="0.116 0 0" rpy="0 0 0"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
     <parent link="mr_tibia_link"/>
     <child link="mr_foot"/>
   </joint>
@@ -289,22 +289,22 @@
   </joint>
   <link name="rr_femur_link">
     <inertial>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
       <mass value="0.08"/>
-      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="4.345e-05" iyz="0" izz="4.345e-05"/>
+      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="8.459e-05" iyz="0" izz="8.459e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
     </collision>
   </link>
   <joint name="rr_tibia" type="revolute">
-    <origin xyz="0.077 0 0" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0" rpy="0 0 0"/>
     <parent link="rr_femur_link"/>
     <child link="rr_tibia_link"/>
     <axis xyz="0 -1 0"/>
@@ -313,18 +313,18 @@
   </joint>
   <link name="rr_tibia_link">
     <inertial>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
       <mass value="0.045"/>
-      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="5.266e-05" iyz="0" izz="5.266e-05"/>
+      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="9.821e-05" iyz="0" izz="9.821e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
     </collision>
   </link>
   <link name="rr_foot">
@@ -344,7 +344,7 @@
     </collision>
   </link>
   <joint name="rr_foot_tip" type="fixed">
-    <origin xyz="0.116 0 0" rpy="0 0 0"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
     <parent link="rr_tibia_link"/>
     <child link="rr_foot"/>
   </joint>
@@ -384,22 +384,22 @@
   </joint>
   <link name="rl_femur_link">
     <inertial>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
       <mass value="0.08"/>
-      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="4.345e-05" iyz="0" izz="4.345e-05"/>
+      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="8.459e-05" iyz="0" izz="8.459e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
     </collision>
   </link>
   <joint name="rl_tibia" type="revolute">
-    <origin xyz="0.077 0 0" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0" rpy="0 0 0"/>
     <parent link="rl_femur_link"/>
     <child link="rl_tibia_link"/>
     <axis xyz="0 -1 0"/>
@@ -408,18 +408,18 @@
   </joint>
   <link name="rl_tibia_link">
     <inertial>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
       <mass value="0.045"/>
-      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="5.266e-05" iyz="0" izz="5.266e-05"/>
+      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="9.821e-05" iyz="0" izz="9.821e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
     </collision>
   </link>
   <link name="rl_foot">
@@ -439,7 +439,7 @@
     </collision>
   </link>
   <joint name="rl_foot_tip" type="fixed">
-    <origin xyz="0.116 0 0" rpy="0 0 0"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
     <parent link="rl_tibia_link"/>
     <child link="rl_foot"/>
   </joint>
@@ -479,22 +479,22 @@
   </joint>
   <link name="ml_femur_link">
     <inertial>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
       <mass value="0.08"/>
-      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="4.345e-05" iyz="0" izz="4.345e-05"/>
+      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="8.459e-05" iyz="0" izz="8.459e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
     </collision>
   </link>
   <joint name="ml_tibia" type="revolute">
-    <origin xyz="0.077 0 0" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0" rpy="0 0 0"/>
     <parent link="ml_femur_link"/>
     <child link="ml_tibia_link"/>
     <axis xyz="0 -1 0"/>
@@ -503,18 +503,18 @@
   </joint>
   <link name="ml_tibia_link">
     <inertial>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
       <mass value="0.045"/>
-      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="5.266e-05" iyz="0" izz="5.266e-05"/>
+      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="9.821e-05" iyz="0" izz="9.821e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
     </collision>
   </link>
   <link name="ml_foot">
@@ -534,7 +534,7 @@
     </collision>
   </link>
   <joint name="ml_foot_tip" type="fixed">
-    <origin xyz="0.116 0 0" rpy="0 0 0"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
     <parent link="ml_tibia_link"/>
     <child link="ml_foot"/>
   </joint>
@@ -574,22 +574,22 @@
   </joint>
   <link name="fl_femur_link">
     <inertial>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
       <mass value="0.08"/>
-      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="4.345e-05" iyz="0" izz="4.345e-05"/>
+      <inertia ixx="7.840e-06" ixy="0" ixz="0" iyy="8.459e-05" iyz="0" izz="8.459e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.0385 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.077"/></geometry>
+      <origin xyz="0.055 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.11"/></geometry>
     </collision>
   </link>
   <joint name="fl_tibia" type="revolute">
-    <origin xyz="0.077 0 0" rpy="0 0 0"/>
+    <origin xyz="0.11 0 0" rpy="0 0 0"/>
     <parent link="fl_femur_link"/>
     <child link="fl_tibia_link"/>
     <axis xyz="0 -1 0"/>
@@ -598,18 +598,18 @@
   </joint>
   <link name="fl_tibia_link">
     <inertial>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
       <mass value="0.045"/>
-      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="5.266e-05" iyz="0" izz="5.266e-05"/>
+      <inertia ixx="4.410e-06" ixy="0" ixz="0" iyy="9.821e-05" iyz="0" izz="9.821e-05"/>
     </inertial>
     <visual>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
       <material name="shell"/>
     </visual>
     <collision>
-      <origin xyz="0.058 0 0" rpy="0 1.5708 0"/>
-      <geometry><cylinder radius="0.014" length="0.116"/></geometry>
+      <origin xyz="0.074 0 0" rpy="0 1.5708 0"/>
+      <geometry><cylinder radius="0.014" length="0.148"/></geometry>
     </collision>
   </link>
   <link name="fl_foot">
@@ -629,7 +629,7 @@
     </collision>
   </link>
   <joint name="fl_foot_tip" type="fixed">
-    <origin xyz="0.116 0 0" rpy="0 0 0"/>
+    <origin xyz="0.16 0 0" rpy="0 0 0"/>
     <parent link="fl_tibia_link"/>
     <child link="fl_foot"/>
   </joint>

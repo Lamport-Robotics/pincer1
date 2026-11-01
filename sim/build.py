@@ -30,6 +30,8 @@ BODY_L, BODY_W, BODY_H = 0.230, 0.150, 0.045  # top-plate footprint and the dept
 BODY_MASS = 1.70  # plates, Jetson, battery pack, bus driver, consent module
 SERVO_MASS = 0.060  # one bus servo with its bracket
 SEG_R = 0.014  # radius of the leg / arm segment visuals
+FOOT_R = 0.009  # the foot ball
+SHIN_GAP = 0.012  # the shin cylinder ends this far above the foot joint, so the ball, not the rim, touches down
 
 # arm: yaw at the base, three pitch joints, camera head on the last link
 ARM_BASE = (0.060, 0.0, 0.0)  # where the arm sits on the top plate (body frame)
@@ -148,10 +150,13 @@ def build() -> str:
         klo, khi = lim.tibia
         joint(f"{n}_tibia", f"{n}_femur_link", f"{n}_tibia_link", (G.femur_m, 0, 0), (0, 0, 0), (0, -1, 0),
               (klo - math.pi, khi - math.pi))
-        link(f"{n}_tibia_link", 0.045, inertia_rod(0.045, G.tibia_m, SEG_R), rod(G.tibia_m),
-             origin=(G.tibia_m / 2, 0, 0), rpy=(0, math.pi / 2, 0))
+        # the shin cylinder stops short of the tip so that only the foot ball below it meets the ground;
+        # the kinematic length (where the foot joint sits) stays G.tibia_m
+        shin = G.tibia_m - SHIN_GAP
+        link(f"{n}_tibia_link", 0.045, inertia_rod(0.045, G.tibia_m, SEG_R), rod(shin),
+             origin=(shin / 2, 0, 0), rpy=(0, math.pi / 2, 0))
         # the foot is a small rubber ball: the contact point for simulators and the frame the IK solves for
-        link(f"{n}_foot", 0.006, (1e-7, 1e-7, 1e-7), '<sphere radius="0.009"/>', color="shell")
+        link(f"{n}_foot", 0.006, (1e-7, 1e-7, 1e-7), f'<sphere radius="{fmt(FOOT_R)}"/>', color="shell")
         joint(f"{n}_foot_tip", f"{n}_tibia_link", f"{n}_foot", (G.tibia_m, 0, 0))
         w()
 
@@ -197,14 +202,21 @@ def check(urdf_path: Path) -> None:
     floor = spec.worldbody.add_geom(name="floor", type=mujoco.mjtGeom.mjGEOM_PLANE, size=[2, 2, 0.1], rgba=[0.86, 0.86, 0.85, 1])
     floor.friction = [0.9, 0.01, 0.001]
     spec.worldbody.add_light(pos=[0.5, -0.5, 1.5], dir=[-0.3, 0.3, -1])
+    spec.option.integrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
     body = spec.body("body")
     body.add_freejoint()
     body.pos = [0, 0, G.stance_height_m + 0.01]
+    # one position servo per hinge, the same model walk.py and stairs.py use
+    for j in spec.joints:
+        if j.type == mujoco.mjtJoint.mjJNT_HINGE:
+            a = spec.add_actuator(name=j.name, target=j.name, trntype=mujoco.mjtTrn.mjTRN_JOINT)
+            a.set_to_position(kp=16.0, kv=0.3)
     model = spec.compile()
     data = mujoco.MjData(model)
 
     def set_joint(name: str, value: float) -> None:
         data.qpos[model.joint(name).qposadr[0]] = value
+        data.ctrl[model.actuator(name).id] = value
 
     for i, leg in enumerate(LEG_NAMES):
         n = leg.lower()
@@ -217,9 +229,7 @@ def check(urdf_path: Path) -> None:
     set_joint("arm_wrist", -0.5)
     mujoco.mj_forward(model, data)
 
-    target = data.qpos[7:].copy()
     for _ in range(1500):
-        data.qfrc_applied[6:] = 8.0 * (target - data.qpos[7:]) - 0.3 * data.qvel[6:]
         mujoco.mj_step(model, data)
 
     roll, pitch = np.degrees(quat_to_rp(data.qpos[3:7]))
@@ -228,7 +238,7 @@ def check(urdf_path: Path) -> None:
     for l in LEG_NAMES:
         b = model.body(f"{l.lower()}_tibia_link").id
         tip = data.xpos[b] + data.xmat[b].reshape(3, 3) @ np.array([G.tibia_m, 0, 0])
-        feet_z.append(float(tip[2]) - 0.009)
+        feet_z.append(float(tip[2]) - FOOT_R)
     print(f"{model.njnt - 1} revolute joints, {model.nbody - 1} bodies, {float(sum(model.body_mass)):.2f} kg")
     print(f"body height {float(data.qpos[2]):.3f} m (stance {G.stance_height_m:.3f}), roll {roll:.1f} deg, pitch {pitch:.1f} deg")
     print("feet above floor (mm):", [round(z * 1000, 1) for z in feet_z])

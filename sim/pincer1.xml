@@ -8,14 +8,14 @@
       <joint name="fr_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
       <body name="fr_femur_link" pos="0.045 0 0">
-        <inertial pos="0.0385 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="4.345e-05 4.345e-05 7.84e-06"/>
+        <inertial pos="0.055 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="8.459e-05 8.459e-05 7.84e-06"/>
         <joint name="fr_femur" range="-1.22173 1.5708" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-        <geom size="0.014 0.0385" pos="0.0385 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-        <body name="fr_tibia_link" pos="0.077 0 0">
-          <inertial pos="0.0648235 0 0" quat="0.707107 2.05847e-06 2.05847e-06 0.707107" mass="0.051" diaginertia="7.05694e-05 5.276e-05 2.23194e-05"/>
+        <geom size="0.014 0.055" pos="0.055 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+        <body name="fr_tibia_link" pos="0.11 0 0">
+          <inertial pos="0.0841176 0 0" quat="0.707107 2.22923e-06 2.22923e-06 0.707107" mass="0.051" diaginertia="0.000137465 9.831e-05 4.36653e-05"/>
           <joint name="fr_tibia" range="-2.70526 -0.2618" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-          <geom size="0.014 0.058" pos="0.058 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-          <frame pos="0.116 0 0">
+          <geom size="0.014 0.074" pos="0.074 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+          <frame pos="0.16 0 0">
             <geom size="0.009" rgba="0.13 0.13 0.14 1"/>
           </frame>
         </body>
@@ -26,14 +26,14 @@
       <joint name="mr_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
       <body name="mr_femur_link" pos="0.045 0 0">
-        <inertial pos="0.0385 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="4.345e-05 4.345e-05 7.84e-06"/>
+        <inertial pos="0.055 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="8.459e-05 8.459e-05 7.84e-06"/>
         <joint name="mr_femur" range="-1.22173 1.5708" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-        <geom size="0.014 0.0385" pos="0.0385 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-        <body name="mr_tibia_link" pos="0.077 0 0">
-          <inertial pos="0.0648235 0 0" quat="0.707107 2.05847e-06 2.05847e-06 0.707107" mass="0.051" diaginertia="7.05694e-05 5.276e-05 2.23194e-05"/>
+        <geom size="0.014 0.055" pos="0.055 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+        <body name="mr_tibia_link" pos="0.11 0 0">
+          <inertial pos="0.0841176 0 0" quat="0.707107 2.22923e-06 2.22923e-06 0.707107" mass="0.051" diaginertia="0.000137465 9.831e-05 4.36653e-05"/>
           <joint name="mr_tibia" range="-2.70526 -0.2618" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-          <geom size="0.014 0.058" pos="0.058 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-          <frame pos="0.116 0 0">
+          <geom size="0.014 0.074" pos="0.074 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+          <frame pos="0.16 0 0">
             <geom size="0.009" rgba="0.13 0.13 0.14 1"/>
           </frame>
         </body>
@@ -44,14 +44,14 @@
       <joint name="rr_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
       <body name="rr_femur_link" pos="0.045 0 0">
-        <inertial pos="0.0385 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="4.345e-05 4.345e-05 7.84e-06"/>
+        <inertial pos="0.055 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="8.459e-05 8.459e-05 7.84e-06"/>
         <joint name="rr_femur" range="-1.22173 1.5708" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-        <geom size="0.014 0.0385" pos="0.0385 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-        <body name="rr_tibia_link" pos="0.077 0 0">
-          <inertial pos="0.0648235 0 0" quat="0.707107 2.05847e-06 2.05847e-06 0.707107" mass="0.051" diaginertia="7.05694e-05 5.276e-05 2.23194e-05"/>
+        <geom size="0.014 0.055" pos="0.055 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+        <body name="rr_tibia_link" pos="0.11 0 0">
+          <inertial pos="0.0841176 0 0" quat="0.707107 2.22923e-06 2.22923e-06 0.707107" mass="0.051" diaginertia="0.000137465 9.831e-05 4.36653e-05"/>
           <joint name="rr_tibia" range="-2.70526 -0.2618" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-          <geom size="0.014 0.058" pos="0.058 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-          <frame pos="0.116 0 0">
+          <geom size="0.014 0.074" pos="0.074 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+          <frame pos="0.16 0 0">
             <geom size="0.009" rgba="0.13 0.13 0.14 1"/>
           </frame>
         </body>
@@ -62,14 +62,14 @@
       <joint name="rl_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
       <body name="rl_femur_link" pos="0.045 0 0">
-        <inertial pos="0.0385 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="4.345e-05 4.345e-05 7.84e-06"/>
+        <inertial pos="0.055 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="8.459e-05 8.459e-05 7.84e-06"/>
         <joint name="rl_femur" range="-1.22173 1.5708" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-        <geom size="0.014 0.0385" pos="0.0385 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-        <body name="rl_tibia_link" pos="0.077 0 0">
-          <inertial pos="0.0648235 0 0" quat="0.707107 2.05847e-06 2.05847e-06 0.707107" mass="0.051" diaginertia="7.05694e-05 5.276e-05 2.23194e-05"/>
+        <geom size="0.014 0.055" pos="0.055 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+        <body name="rl_tibia_link" pos="0.11 0 0">
+          <inertial pos="0.0841176 0 0" quat="0.707107 2.22923e-06 2.22923e-06 0.707107" mass="0.051" diaginertia="0.000137465 9.831e-05 4.36653e-05"/>
           <joint name="rl_tibia" range="-2.70526 -0.2618" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-          <geom size="0.014 0.058" pos="0.058 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-          <frame pos="0.116 0 0">
+          <geom size="0.014 0.074" pos="0.074 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+          <frame pos="0.16 0 0">
             <geom size="0.009" rgba="0.13 0.13 0.14 1"/>
           </frame>
         </body>
@@ -80,14 +80,14 @@
       <joint name="ml_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
       <body name="ml_femur_link" pos="0.045 0 0">
-        <inertial pos="0.0385 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="4.345e-05 4.345e-05 7.84e-06"/>
+        <inertial pos="0.055 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="8.459e-05 8.459e-05 7.84e-06"/>
         <joint name="ml_femur" range="-1.22173 1.5708" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-        <geom size="0.014 0.0385" pos="0.0385 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-        <body name="ml_tibia_link" pos="0.077 0 0">
-          <inertial pos="0.0648235 0 0" quat="0.707107 2.05847e-06 2.05847e-06 0.707107" mass="0.051" diaginertia="7.05694e-05 5.276e-05 2.23194e-05"/>
+        <geom size="0.014 0.055" pos="0.055 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+        <body name="ml_tibia_link" pos="0.11 0 0">
+          <inertial pos="0.0841176 0 0" quat="0.707107 2.22923e-06 2.22923e-06 0.707107" mass="0.051" diaginertia="0.000137465 9.831e-05 4.36653e-05"/>
           <joint name="ml_tibia" range="-2.70526 -0.2618" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-          <geom size="0.014 0.058" pos="0.058 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-          <frame pos="0.116 0 0">
+          <geom size="0.014 0.074" pos="0.074 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+          <frame pos="0.16 0 0">
             <geom size="0.009" rgba="0.13 0.13 0.14 1"/>
           </frame>
         </body>
@@ -98,14 +98,14 @@
       <joint name="fl_coxa" range="-0.7854 0.7854" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02"/>
       <geom size="0.014 0.0225" pos="0.0225 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.62 0.64 0.66 1"/>
       <body name="fl_femur_link" pos="0.045 0 0">
-        <inertial pos="0.0385 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="4.345e-05 4.345e-05 7.84e-06"/>
+        <inertial pos="0.055 0 0" quat="1 0 1.8366e-06 0" mass="0.08" diaginertia="8.459e-05 8.459e-05 7.84e-06"/>
         <joint name="fl_femur" range="-1.22173 1.5708" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-        <geom size="0.014 0.0385" pos="0.0385 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-        <body name="fl_tibia_link" pos="0.077 0 0">
-          <inertial pos="0.0648235 0 0" quat="0.707107 2.05847e-06 2.05847e-06 0.707107" mass="0.051" diaginertia="7.05694e-05 5.276e-05 2.23194e-05"/>
+        <geom size="0.014 0.055" pos="0.055 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+        <body name="fl_tibia_link" pos="0.11 0 0">
+          <inertial pos="0.0841176 0 0" quat="0.707107 2.22923e-06 2.22923e-06 0.707107" mass="0.051" diaginertia="0.000137465 9.831e-05 4.36653e-05"/>
           <joint name="fl_tibia" range="-2.70526 -0.2618" actuatorfrcrange="-3 3" damping="0.05" frictionloss="0.02" axis="0 -1 0"/>
-          <geom size="0.014 0.058" pos="0.058 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
-          <frame pos="0.116 0 0">
+          <geom size="0.014 0.074" pos="0.074 0 0" quat="0.707105 0 0.707108 0" type="cylinder" rgba="0.13 0.13 0.14 1"/>
+          <frame pos="0.16 0 0">
             <geom size="0.009" rgba="0.13 0.13 0.14 1"/>
           </frame>
         </body>
