@@ -186,7 +186,7 @@ def build() -> str:
 
 # ---- optional MuJoCo check -----------------------------------------------------------------------
 
-def check(urdf_path: Path) -> None:
+def check(urdf_path: Path, render_png: bool = True) -> None:
     """Load the URDF in MuJoCo, put the body on a floor in the neutral stance, hold the joints with soft
     position servos for three seconds and report what the body did. A wrong axis or limit shows up here as
     a leg folding the wrong way, a body height far from the stance height, or a tilt."""
@@ -242,7 +242,8 @@ def check(urdf_path: Path) -> None:
     print(f"{model.njnt - 1} revolute joints, {model.nbody - 1} bodies, {float(sum(model.body_mass)):.2f} kg")
     print(f"body height {float(data.qpos[2]):.3f} m (stance {G.stance_height_m:.3f}), roll {roll:.1f} deg, pitch {pitch:.1f} deg")
     print("feet above floor (mm):", [round(z * 1000, 1) for z in feet_z])
-    render(model, data, urdf_path.with_suffix(".png"))
+    if render_png:
+        render(model, data, urdf_path.with_suffix(".png"))
 
 
 def quat_to_rp(q):
@@ -286,4 +287,4 @@ if __name__ == "__main__":
     print(f"wrote {dst}")
     if "--check" in sys.argv:
         write_mjcf(dst)
-        check(dst)
+        check(dst, render_png="--no-render" not in sys.argv)  # no gl on a ci runner
