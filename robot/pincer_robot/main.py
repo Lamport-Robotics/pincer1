@@ -934,6 +934,8 @@ class RobotApp:
             await asyncio.sleep(0.1)
 
     async def _sway_loop(self) -> None:
+        if not self.cfg.idle_sway:
+            return
         while not self._stop.is_set():
             await asyncio.sleep(30.0)
             st = self.service.state

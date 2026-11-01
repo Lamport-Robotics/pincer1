@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     # on the chassis profile: walk with the chassis' own gait controller (cmd_vel over rosbridge),
     # or with the body package's gait on the joints
     chassis_gait: Literal["chassis", "own"] = "chassis"
+    # the small turn-in-place the body makes now and then while the owner is around; off when the
+    # gait is a stepping one that makes it look like fidgeting
+    idle_sway: bool = True
     daemon_http: str = (
         "http://127.0.0.1:7401"  # where a press of the body button is relayed as a touch
     )
