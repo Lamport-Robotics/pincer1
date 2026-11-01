@@ -9,6 +9,7 @@ gait.py        tripod / ripple / wave: phase per leg, stance slides, swing lifts
 servo.py       serial-bus servo protocol: ping, read, write, sync write; calibration (sign, zero)
 sim.py         forward kinematics + support polygon: which feet are down, how much margin the centre has
 controller.py  Body (velocity in, joint angles out, 50 Hz) and BodyBackend for the motion layer
+gaze.py        the camera head on the arm: face position in, pan / tilt out, hold and scan when it is gone
 ```
 
 Frames: body x forward, y left, z up; legs numbered clockwise from front right (FR MR RR RL ML FL).
@@ -49,10 +50,53 @@ body.tick(0.02); print(sim.report())   # feet down, support margin, swing cleara
 The tests walk every gait through full cycles and require three feet down and a positive support
 margin at every tick, round-trip IK/FK, and check the bus packets byte for byte.
 
+## head
+
+The camera rides the four-axis arm (servo ids 19 yaw, 20 shoulder, 21 elbow, 22 wrist) on the same bus.
+`Gaze` takes the face centre in image coordinates (-1..1, right and down positive) and moves pan and
+tilt toward it: a fraction of the error per frame, rate limited, inside the arm's limits. Lost face:
+hold the bearing for two seconds, drift back to centre, then sweep slowly until someone is there.
+`GazeHead` wires it to the bus and parks the shoulder and elbow upright so the camera sits as high as the
+arm allows.
+
+```python
+from pincer_robot.body import Bus, Gaze, GazeConfig, GazeHead, SerialTransport
+
+head = GazeHead(Bus(SerialTransport("/dev/ttyUSB0")), Gaze(GazeConfig(hfov_deg=62)))
+head.raise_head()                          # arm up, camera level
+head.observe(faces, ts)                    # every camera frame; faces may be empty
+```
+
+The service does this on the `bus` backend from the presence loop: the biggest face the recogniser
+returns steers the head, so the robot is looking at the person it is about to talk to. The arm's pitch
+joints turn about +y, so a positive wrist angle tips the camera down; `tilt` is camera elevation and is
+negated on the way out, the same convention as `sim/pincer1.urdf`.
+
 ## calibration
 
-Each servo has a sign and a zero offset in `Calibration`; `to_ticks` clamps to the 12-bit range.
-Bring a leg to the neutral stance by hand with torque off, read the positions, and store the
-difference from 2048 as that joint's offset. Tripod on a bench with the body on a stand first;
-feet on the ground only after the limits in `JointLimits` have been checked against the real
-brackets.
+`Calibration` holds a sign and a zero offset per servo; `to_ticks` clamps to the 12-bit range. The
+geometry in `geometry.py` is what the kinematics see: straight segments, axis to axis. The brackets are
+not straight, and the difference goes into the zero, not the maths.
+
+Segment lengths and mount positions were taken off the v1 chassis: coxa 45 mm, femur 77 mm, tibia
+116 mm; front and rear coxa axes at (±93, ±51) mm from the plate centre on 45° mounts, middle at
+(0, ±74) mm on 90°; the coxa axis 16.6 mm above the top plate. The knee servo sits 22° off the femur line
+and the foot tip 5° off the tibia line, so a femur reading of zero is not a horizontal femur. Those two
+angles are the offsets of every femur and tibia servo once the legs are measured.
+
+Procedure, body on a stand, feet in the air:
+
+1. Torque off (`bus.torque(ids, False)`). Bring one leg to the neutral stance by hand: coxa along its
+   mount, femur horizontal, tibia vertical, foot under the knee. A square against the plate is enough.
+2. Read every joint (`bus.position` with an empty `Calibration` returns radians from 2048). Store
+   `offset_ticks[id] = ticks - 2048` for each servo of that leg; repeat for the six legs.
+3. Signs: command +0.2 rad on each joint in turn. Coxa must swing the foot toward the front of the body,
+   femur must lift the knee, tibia must lift the foot. A joint that goes the other way gets `sign = -1`.
+4. Check `JointLimits` against the brackets with torque off: move each joint to its limit by hand and
+   read it; the limits in code are the inside of what the metal allows, never the metal itself.
+5. `body.stand()` on the stand, watch the six feet meet one plane. Then `walk` in tripod, slowly, still
+   on the stand, before the feet touch the floor.
+
+The arm takes the same treatment with its own neutral: arm straight up (shoulder and elbow zero) and the
+camera level (wrist zero). That pose is the `rest` in `GazeConfig`; the head's limits are the pan and tilt
+ranges the shell window and the cable loop allow, and are narrower than the servos'.
