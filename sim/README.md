@@ -11,6 +11,7 @@ pincer1.xml    the same robot as MuJoCo MJCF
 pincer1.png    what MuJoCo shows after the stance check
 build.py       writes the two files from geometry.py; --check loads the URDF in MuJoCo and stands it up
 walk.py        walks the URDF in MuJoCo with the robot package's gait and records walk.gif
+stairs.py      climbs box steps with the body package's stair cycle; --sweep tables the risers, --gif records stairs.gif
 ```
 
 Joint zero is a straight leg pointing out along its mount; the tibia joint is the knee angle minus π, so
@@ -34,3 +35,13 @@ drives the same `Body` controller the robot runs: the gait and leg IK produce th
 the commanded speed, the body height, the largest roll and pitch, and whether anything but a foot
 touched the floor, then writes `walk.gif` (one palette, unchanged pixels left transparent, so it stays
 small). `--gait ripple` and `wave` run the other two.
+
+```
+python sim/stairs.py --riser 0.12 --gif
+python sim/stairs.py --sweep --steps 1
+```
+
+plays `pincer_robot.body.climb` over one or more box steps and reports whether the body got onto each
+tread, the largest roll and pitch, the 99th percentile and peak of the leg joint torque against what a
+servo can hold, anything but a foot touching the ground, and when it fell if it did. The gif plays the
+climb three times faster than the cycle runs.
