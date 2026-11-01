@@ -34,7 +34,9 @@ MAX_TURN_DEG = 180.0
 MAX_SPEED = 1.0
 SAFE_TILT_DEG = 35.0
 MIN_FRONT_CLEARANCE_M = 0.30
-GAIT_SPEED_MPS = 0.15  # at speed 1.0
+# at speed 1.0: the everyday tripod pace. the gait holds 0.40 m/s at the default stride and 0.6 at a
+# 0.5 s cycle (sim/walk.py)
+GAIT_SPEED_MPS = 0.30
 TURN_RATE_DPS = 45.0  # at speed 1.0
 
 ATTENTION_STEP_M = 0.10

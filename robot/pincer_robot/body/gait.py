@@ -49,9 +49,9 @@ class Velocity:
 @dataclass
 class GaitParams:
     name: str = "tripod"
-    cycle_s: float = 1.2
-    step_length_m: float = 0.06  # longest stride a foot may take per cycle
-    step_height_m: float = 0.035
+    cycle_s: float = 0.6
+    step_length_m: float = 0.12  # longest stride per cycle: 0.40 m/s in tripod at this cycle
+    step_height_m: float = 0.045
 
     @property
     def duty(self) -> float:

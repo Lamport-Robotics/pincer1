@@ -1,7 +1,7 @@
 import asyncio
 import math
 
-from pincer_robot.motion import ATTENTION_STEP_M, MockRobot, MotionController
+from pincer_robot.motion import ATTENTION_STEP_M, GAIT_SPEED_MPS, MockRobot, MotionController
 
 
 def test_attention_turns_toward_bearing_then_steps() -> None:
@@ -14,7 +14,7 @@ def test_attention_turns_toward_bearing_then_steps() -> None:
     assert abs(dur - 40 / (45.0 * 0.5)) < 1e-6
     lin, ang, dur = robot.log[1]
     assert lin > 0 and ang == 0.0
-    assert abs(dur - ATTENTION_STEP_M / (0.15 * 0.5)) < 1e-6
+    assert abs(dur - ATTENTION_STEP_M / (GAIT_SPEED_MPS * 0.5)) < 1e-6
 
 
 def test_attention_without_bearing_or_small_bearing_only_steps() -> None:

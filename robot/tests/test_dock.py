@@ -21,7 +21,7 @@ from pincer_robot.dock import (
     DockStore,
     rear_range_from_scan,
 )
-from pincer_robot.motion import MockRobot, MotionController
+from pincer_robot.motion import GAIT_SPEED_MPS, MockRobot, MotionController
 from pincer_robot.nav import MockNav, Navigator, RoomRegistry
 
 WALL_M = 0.25  # lidar range to the wall when sitting on the plate
@@ -137,10 +137,10 @@ class Rig:
         raise AssertionError(f"never reached {state}; at {self.ctrl.state}, states {self.states}")
 
     def backward_m(self) -> float:
-        return sum(abs(lin) * dur * 0.15 for lin, _ang, dur in self.robot.log if lin < 0)
+        return sum(abs(lin) * dur * GAIT_SPEED_MPS for lin, _ang, dur in self.robot.log if lin < 0)
 
     def forward_m(self) -> float:
-        return sum(lin * dur * 0.15 for lin, _ang, dur in self.robot.log if lin > 0)
+        return sum(lin * dur * GAIT_SPEED_MPS for lin, _ang, dur in self.robot.log if lin > 0)
 
 
 def test_rear_range_from_scan_picks_beams_behind() -> None:
@@ -196,8 +196,9 @@ def test_happy_path_navigate_approach_charge_undock(tmp_path: Path) -> None:
         assert rig.backward_m() == pytest.approx(0.5, abs=1e-6)
         assert rig.on_plate() and rig.battery().charging  # type: ignore[union-attr]
         assert rig.ctrl.attempts == 1 and rig.events == [] and rig.spoken == []
-        # Backward steps were slow: 0.05 m/s = speed 1/3 of the 0.15 m/s gait.
-        assert all(abs(lin) == pytest.approx(1 / 3) for lin, _a, _d in rig.robot.log)
+        # Backward steps were slow: speed 1/3 of the gait's full pace.
+        slow = pytest.approx(0.05 / GAIT_SPEED_MPS)
+        assert all(abs(lin) == slow for lin, _a, _d in rig.robot.log)
         # Charging: stays below 90 %, leaves at 90 %.
         rig.sensor.set_pct(89.0)
         for _ in range(5):
