@@ -156,6 +156,11 @@ full before the touch.
 - **Bench validation is in progress.** The firmware's hardware paths (secure boot, the SE050 channel, the
   in-chip PIN) are built against the vendor SDKs and validated on the bench before any unit ships; see
   the README.
+- The firmware you can read is the firmware that ships, as far as bytes go: the production image is
+  reproducible (no build date, no machine-specific content; CI builds it twice and compares), every
+  release lists the hashes, and the signed image carries the hash of the signing key. What this does not
+  give you is remote attestation: a board can only be compared with the file over USB while it still
+  answers picotool (`firmware/README.md`, "Reproducible builds").
 - No attestation: the daemon cannot distinguish our signed firmware from a controller that was never
   provisioned (an unprovisioned Pico 2 runs unsigned images). `hello` reports `dev_keys:true` when the
   SCP03 keys came from the build rather than OTP; the daemon must refuse production mode on it.

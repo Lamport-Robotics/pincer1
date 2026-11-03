@@ -177,6 +177,7 @@ else()
         ${PINCER_UECC_DEFINES}
         PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=0
         PICO_FLASH_ASSUME_CORE1_SAFE=1
+        PICO_NO_BI_PROGRAM_BUILD_DATE=1   # no build date in the image: the same sources give the same bytes
     )
     target_compile_options(pincer1_consent PRIVATE -Wall -Wextra -Wno-unused-parameter)
     set_source_files_properties(third_party/micro-ecc/uECC.c third_party/bech32/segwit_addr.c

@@ -7,6 +7,8 @@ Everything here except this README is ignored by git (`*.pem`, `*.key`, `*.bin`,
 - `cmake -DPINCER_SIGN_KEY=firmware/keys/pincer1-boot.pem` signs the image and writes
   `<build>/pincer1_consent.otp.json` with the public-key hash.
 - `scripts/provision-otp.sh` burns that hash into a board's OTP and enables secure boot. **One-way.**
+- `scripts/publish-signed.sh <tag> <build>` puts the signed image, its hash and the public-key hash on
+  the release page, next to the reproducible unsigned builds the workflow made.
 
 Rules: the private key never leaves an offline medium except to sign a release build; one key per
 product line, not per board (the hash is in every board's OTP forever); the public key is safe to share.

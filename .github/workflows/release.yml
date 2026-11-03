@@ -18,7 +18,11 @@ jobs:
       - run: sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
       - run: cmake -S firmware -B firmware/build-target -DPICO_BOARD=pico2
       - run: cmake --build firmware/build-target --parallel
-      - run: cmake -S firmware -B firmware/build-soft -DPICO_BOARD=pico2 -DPINCER_SOFT_SIGNER=ON
+      # built twice; the release carries only bytes a second build reproduced
+      - run: cmake -S firmware -B /tmp/pincer1-again -DPICO_BOARD=pico2 -DPICO_SDK_PATH=$PWD/firmware/build-target/_deps/pico_sdk-src
+      - run: cmake --build /tmp/pincer1-again --parallel
+      - run: cmp firmware/build-target/pincer1_consent.uf2 /tmp/pincer1-again/pincer1_consent.uf2
+      - run: cmake -S firmware -B firmware/build-soft -DPICO_BOARD=pico2 -DPINCER_SOFT_SIGNER=ON -DPICO_SDK_PATH=$PWD/firmware/build-target/_deps/pico_sdk-src
       - run: cmake --build firmware/build-soft --parallel
       - run: |
           mkdir -p out

@@ -43,6 +43,12 @@ jobs:
       - run: cmake -S firmware -B firmware/build-target -DPICO_BOARD=pico2
       - run: cmake --build firmware/build-target --parallel
       - run: ls -la firmware/build-target/pincer1_consent.uf2
+      # the same sources must give the same bytes from another directory: what a release lists is what anyone rebuilds
+      - run: cmake -S firmware -B /tmp/pincer1-again -DPICO_BOARD=pico2 -DPICO_SDK_PATH=$PWD/firmware/build-target/_deps/pico_sdk-src
+      - run: cmake --build /tmp/pincer1-again --parallel
+      - run: |
+          sha256sum firmware/build-target/pincer1_consent.uf2 /tmp/pincer1-again/pincer1_consent.uf2
+          cmp firmware/build-target/pincer1_consent.uf2 /tmp/pincer1-again/pincer1_consent.uf2
 
   firmware-fuzz:
     # libFuzzer + ASan/UBSan over the wire-facing parsers, a few minutes per push

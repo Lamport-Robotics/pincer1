@@ -17,3 +17,10 @@ are still welcome as issues, not as reports.
 Firmware images are signed and the controller boots only images whose signing key hash is in its OTP;
 `hello` reports the firmware version it runs. A controller that boots an image we did not sign, or
 reports a version we did not ship, is a report too.
+
+Every release lists the SHA-256 of its images. The unsigned builds are reproducible: build the tag from
+source and the hash matches `SHA256SUMS`, which CI checks by building twice. The signed image provisioned
+boards run is uploaded to the same release with its hash and the hash of the signing key
+(`SHA256SUMS.signed`); `firmware/scripts/verify-image.sh` checks a file against the list and, with
+`--board`, a controller's flash against the file. A release whose listed hash you cannot reproduce from
+the tag is a report too.
