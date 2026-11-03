@@ -25,8 +25,8 @@ owner from social engineering; it never sees the key.
                                                  `-- /cmd_vel (Twist)          <- motion.py
 ```
 
-The same code runs on a laptop in `--mock` mode (no hardware, no GPU, no torch) and on a
-Raspberry Pi 5 as a CPU fallback; `PINCER_DEVICE=auto` picks the backend.
+The same code runs on a laptop in `--mock` mode (no hardware, no GPU, no torch) and on any
+CPU-only board as a fallback; `PINCER_DEVICE=auto` picks the backend.
 
 ## Layout
 
@@ -199,7 +199,7 @@ asyncio.run(main())
 EOF
 ```
 
-### 3. Raspberry Pi 5 (CPU fallback; Ubuntu 22.04 + ROS2 Humble)
+### 3. CPU-only board (fallback; Ubuntu 22.04 + ROS2 Humble)
 
 ```bash
 sudo apt install python3-venv python3-dev portaudio19-dev espeak-ng libgl1 libglib2.0-0
@@ -222,17 +222,17 @@ Notes that apply to both boards:
 * Resemblyzer is optional at runtime: without it the voice check is passphrase-only and
   logs a warning.
 * `PINCER_FACE_MODEL`, `PINCER_WHISPER_MODEL`, `PINCER_WHISPER_COMPUTE_TYPE` override the
-  per-device defaults (e.g. `buffalo_l` on the Pi if you accept ~1 fps; `medium` on the
+  per-device defaults (e.g. `buffalo_l` on a CPU-only board if you accept ~1 fps; `medium` on the
   Jetson if the room is noisy). `PINCER_FORCE_NO_CUDA=1` makes `auto` pick CPU without
   touching the install, for A/B latency checks.
 
 ### Expected latencies
 
 **Estimates until measured on the robot.** Derived from published benchmarks of the same
-models on the Orin Nano (Super, MAXN) / Pi 5 / a 2023 laptop CPU; the first real numbers
+models on the Orin Nano (Super, MAXN) / a CPU-only board / a 2023 laptop CPU; the first real numbers
 replace this table.
 
-| step | Jetson Orin Nano Super (CUDA) | Raspberry Pi 5 (CPU) | laptop `--mock` |
+| step | Jetson Orin Nano Super (CUDA) | CPU-only board | laptop `--mock` |
 | --- | --- | --- | --- |
 | face detect + embed, 640x480, one face (`buffalo_l` / `buffalo_sc`) | ~25-40 ms (20-30 fps possible; capped at `camera_fps` 8) | ~150-250 ms (`buffalo_sc`, 4-6 fps) | 0 (scripted) |
 | passphrase STT, 5 s clip (`small` fp16 / `base` int8) | ~0.4-0.8 s | ~2-4 s | 0 (mock STT) |

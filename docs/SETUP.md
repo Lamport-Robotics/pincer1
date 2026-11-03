@@ -29,7 +29,7 @@ pincer-enroll                           # face (10 frames), voice + passphrase, 
 sudo systemctl start pincer-robot       # presence service on :7402, ROS2 /scan and /imu, camera, mic
 ```
 
-Laptop mock mode and the Raspberry Pi fallback are in `robot/README.md`.
+Laptop mock mode and the CPU-only fallback are in `robot/README.md`.
 
 ## 4. Install and start the daemon (Jetson)
 

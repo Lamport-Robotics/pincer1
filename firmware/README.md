@@ -69,7 +69,7 @@ Identical to the Pico: same GPIO numbers, same footprint.
 | 3V3 / GND | power | OLED VCC / GND (2.42" 128×64 SSD1309, 4-wire SPI) |
 | GP25 | on-board LED | heartbeat idle · slow blink touch · fast blink long touch · double blink PIN · solid while touched |
 | GP26 | ADC0, left floating | extra entropy for the RNG |
-| USB | CDC serial | Pi 5 (`/dev/ttyACM0`) |
+| USB | CDC serial | Jetson (`/dev/pincer-consent` via the udev rule, `/dev/ttyACM0` without it) |
 
 Full details and placement in `docs/HARDWARE.md`.
 
@@ -149,6 +149,27 @@ The script asks you to type `BURN`. It runs `picotool otp load <otp.json>` (boot
 secure boot enable), `picotool otp load -e -s 0xC0 scp03-keys.bin` (24 ECC rows, `src/secrets.h`
 `SECRETS_OTP_ROW`) and sets `PAGE3_LOCK1` so page 3 is read-only for secure firmware and inaccessible
 to non-secure code and to the USB bootloader. **OTP bits only go 0→1. There is no undo.**
+
+## Reproducible builds and release hashes
+
+The image carries no build date (`PICO_NO_BI_PROGRAM_BUILD_DATE`) and nothing else that depends on the
+machine or the directory it was built in, so the same tag with the same SDK and toolchain gives the same
+bytes. CI builds the production image twice in two directories on every push and refuses to pass if they
+differ; the release workflow does the same before it lists `SHA256SUMS`. To check a release yourself,
+build the tag as above and compare:
+
+```bash
+firmware/scripts/verify-image.sh build-pico2/pincer1_consent.uf2 SHA256SUMS       # hash, version, signature, listed or not
+firmware/scripts/verify-image.sh pincer1-consent-v0.2.0-pico2-signed.uf2 --board  # and the flash of the plugged-in board
+```
+
+The signed image, the one a provisioned board runs, cannot come out of CI: the key is offline. It is built
+on the workstation and uploaded to the same release with `firmware/scripts/publish-signed.sh <tag>
+<signed build dir>`, as `pincer1-consent-<tag>-pico2-signed.uf2` / `.bin` and `SHA256SUMS.signed`, which
+also carries the SHA-256 of the signing public key: the `bootkey0` value in every provisioned board's OTP.
+`picotool info -a` on the file shows the signature and hash as verified; `picotool verify` compares a
+board's flash with it while the board still answers over USB (`--disable-picoboot` ends that, and such
+a board runs nothing its OTP key hash does not accept).
 
 ## SCP03 (SE050 platform binding)
 
@@ -506,7 +527,7 @@ test/                host unit tests, assert-based, no framework
   destination, change is recognised by re-deriving the key from the account xpub, fee and sighash must be
   declared, `SIGHASH_NONE` is never signed.
 - Daily limits are kept per chain (lamports, wei, sats), an elevate raises one chain for one request.
-- Daily limit, elevation, allowance, lock, duress are enforced and persisted here, not on the Pi.
+- Daily limit, elevation, allowance, lock, duress are enforced and persisted here, not on the Jetson.
 - The inheritance timer is powered uptime counted here; the daemon cannot advance it, and neither
   `lock`, `duress` nor the PIN wipe can cancel a stored inheritance (only a long touch via `inheritance_clear`).
 - Unlock after a lock, and policy changes, need the PIN rhythm verified inside the SE050; five failures wipe.

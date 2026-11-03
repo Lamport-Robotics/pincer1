@@ -1,6 +1,6 @@
 # pincerd
 
-The wallet daemon that runs on Pincer1's Raspberry Pi 5. It is the untrusted middle: it parses and explains
+The wallet daemon that runs on Pincer1's main computer, the Jetson Orin Nano. It is the untrusted middle: it parses and explains
 every transaction, runs the scam filter, checks that the owner is in the room, makes the robot speak, and
 then asks the consent controller for a signature. It never holds a key.
 

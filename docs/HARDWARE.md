@@ -75,7 +75,7 @@ viewpoint (parallax strengthens liveness) and look up at a standing person.
 
 | part | role | notes |
 |---|---|---|
-| Raspberry Pi Pico 2 (RP2350) | consent controller | runs `firmware/` in Arm secure mode; signed firmware, boot key and SE050 channel keys in OTP; USB to the Pi 5 |
+| Raspberry Pi Pico 2 (RP2350) | consent controller | runs `firmware/` in Arm secure mode; signed firmware, boot key and SE050 channel keys in OTP; USB to the Jetson |
 | NXP SE050 (OM-SE050ARD or any I2C breakout, SE050C/E variants work) | secure element | ed25519, CC EAL6+; key never leaves it |
 | TTP223 capacitive touch module | the touch pad | mounted under the robot's head shell |
 | 2.42" 128×64 monochrome OLED, SSD1309 controller, 4-wire SPI (7-pin module: GND VCC SCK SDA RES DC CS) | the trusted display | driven by the Pico 2 only; shows what is about to be signed, the PIN dots, the seed words at init. The 2.42" size is readable at arm's length through the shell window; the firmware's init sequence is for the SSD1309 |

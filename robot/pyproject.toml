@@ -39,7 +39,7 @@ jetson = [
     "anthropic==2.3.0",              # PINCER_BRAIN=anthropic (optional at runtime)
     "depthai>=2.29,<3",              # the head camera's stereo depth (depth.py); the v3 API is different
 ]
-# Raspberry Pi 5 / any CPU-only box (Ubuntu 22.04 + ROS2 Humble): everything from PyPI.
+# Any CPU-only board (Ubuntu 22.04 + ROS2 Humble): everything from PyPI.
 # onnxruntime (CPU) + buffalo_sc, faster-whisper base int8, resemblyzer on CPU torch (~1 GB wheel).
 pi = [
     "opencv-python-headless==4.11.0.86",
