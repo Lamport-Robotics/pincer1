@@ -45,7 +45,9 @@ async function main() {
     mkdirSync(cfg.DATA_DIR, { recursive: true });
     const seedPath = join(cfg.DATA_DIR, "sim-seed");
     if (!existsSync(seedPath)) writeFileSync(seedPath, randomBytes(32), { mode: 0o600 });
-    const sim = new SimController({ dailyLimitLamports: cfg.dailyLimitLamports, serial: cfg.PINCER_SERIAL || undefined, seed: new Uint8Array(readFileSync(seedPath)) });
+    const idPath = join(cfg.DATA_DIR, "sim-identity.json");
+    let savedIdentity = null; try { if (existsSync(idPath)) savedIdentity = JSON.parse(readFileSync(idPath, "utf8")); } catch { savedIdentity = null; }
+    const sim = new SimController({ dailyLimitLamports: cfg.dailyLimitLamports, serial: cfg.PINCER_SERIAL || undefined, seed: new Uint8Array(readFileSync(seedPath)), identity: savedIdentity, onIdentityChange: (c) => writeFileSync(idPath, JSON.stringify(c), { mode: 0o600 }) });
     devTouch = (long) => sim.touch(long);
     controller = sim;
     log.warn("using the SOFTWARE signer (sim). Not for real funds.");

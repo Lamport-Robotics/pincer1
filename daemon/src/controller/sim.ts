@@ -35,6 +35,9 @@ export interface SimOptions {
   initialized?: boolean;
   /** Unit serial the sim reports in `hello` (the real controller reads it from OTP). */
   serial?: string;
+  /** Identity config restored from the last run (the real controller keeps it in the SE050). */
+  identity?: IdentityConfig | null;
+  onIdentityChange?: (cfg: IdentityConfig | null) => void;
 }
 
 /** The identity key signs fee-only transactions; this caps what a runaway daemon could burn per call (0.5 PEAQ: peaq runs at 100 gwei and an activation is about a million gas). */
@@ -102,6 +105,7 @@ export class SimController implements ControllerClient {
     this.initialized = opts.initialized ?? true;
     this.pinSet = this.initialized;
     this.btcNetwork = opts.btcNetwork ?? "mainnet";
+    this.identity = opts.identity ?? null;
     this.policy = {
       daily_limit_lamports: (opts.dailyLimitLamports ?? 2_000_000_000n).toString(), spent_today_lamports: "0", day: Math.floor(this.nowUnix / 86_400),
       daily_limit_wei: (opts.dailyLimitWei ?? 10n ** 18n).toString(), spent_today_wei: "0",
@@ -210,13 +214,14 @@ export class SimController implements ControllerClient {
     const ok = await this.waitTouch(`id${Date.now()}`, "long_touch", ttlMs);
     if (!ok) return { ok: false, reason: "timeout" };
     this.identity = { chain_id: chainId, allow };
+    this.opts.onIdentityChange?.(this.identity);
     return { ok: true, identity: this.identityStatus() };
   }
   async identityDisable(onPending?: PendingHook, ttlMs = 120_000): Promise<boolean> {
     if (!this.identity) return true;
     onPending?.({ need: "long_touch" });
     const ok = await this.waitTouch(`idoff${Date.now()}`, "long_touch", ttlMs);
-    if (ok) this.identity = null;
+    if (ok) { this.identity = null; this.opts.onIdentityChange?.(null); }
     return ok;
   }
   /** Zero-value call to an allowed contract on the configured chain, bounded fee, no touch. */

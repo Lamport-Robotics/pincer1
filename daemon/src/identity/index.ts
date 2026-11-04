@@ -207,6 +207,13 @@ export class Identity {
     } finally { this.busy = null; }
   }
 
+  /** The real controller keeps the identity enabled across reboots; a controller that does not asks for the long touch again. */
+  private async ensureEnabled(onPending?: PendingHook): Promise<void> {
+    const h = await this.controller.hello()
+    if (h.identity?.enabled && h.identity.chain_id === this.dep.chainId) return
+    await this.enable(onPending)
+  }
+
   private async enable(onPending?: PendingHook): Promise<IdentityStatus> {
     this.busy = "waiting for the owner's long touch";
     const r = await this.controller.identityEnable({ chain_id: this.dep.chainId, allow: this.allowList() }, onPending);
@@ -227,6 +234,7 @@ export class Identity {
     if (this.busy) return { ok: false, reason: `busy: ${this.busy}` };
     this.busy = "heartbeat";
     try {
+      await this.ensureEnabled()
       const steps = BigInt(Math.max(0, Math.floor((await this.opts.steps?.()) ?? 0)));
       const hours = Math.min(0xffffffff, Math.floor(this.uptimeHours()));
       const tx = await this.send(st.address, this.opts.unitsContract, encodeFunctionData({ abi: pincer1UnitsAbi, functionName: "heartbeat", args: [BigInt(st.machineId), hours, steps] }));
@@ -245,6 +253,7 @@ export class Identity {
     if (this.busy) return { ok: false, reason: `busy: ${this.busy}` };
     this.busy = "firmware";
     try {
+      await this.ensureEnabled()
       const tx = await this.send(st.address, this.opts.unitsContract, encodeFunctionData({ abi: pincer1UnitsAbi, functionName: "setFirmware", args: [BigInt(st.machineId), v] }));
       try { await this.send(st.address, this.dep.machineRegistry, encodeFunctionData({ abi: machineRegistryAbi, functionName: "setServiceEndpoints", args: [BigInt(st.machineId), this.endpoints(v)] })); } catch (e) { log.warn("identity: DID firmware endpoint not updated", String(e)); }
       st.firmware = v; st.txs.firmware = tx; this.save();
@@ -263,6 +272,7 @@ export class Identity {
     if (this.busy) return { ok: false, reason: `busy: ${this.busy}` }
     this.busy = "controller"
     try {
+      await this.ensureEnabled()
       const tx = await this.send(st.address, this.dep.machineRegistry, encodeFunctionData({ abi: machineRegistryAbi, functionName: "setController", args: [BigInt(st.machineId), getAddress(controller)] }));
       return { ok: true, tx }
     } catch (e) { return { ok: false, reason: String(e) }; } finally { this.busy = null; }
