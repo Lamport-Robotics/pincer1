@@ -42,8 +42,9 @@ tap rhythm verified in the chip, duress wallet (word or second rhythm), scam fil
 
 Optional, off by default: room lock, two-person rule, offline payments (durable nonce + QR), air-gap relay,
 dead-man's switch, wake-up alarm, morning briefing, overnight agent with a touch-granted budget, home
-mapping, charging dock, locator beacon, swaps through allowlisted routers. Brain: Lamport-8B on the robot
-(offline), or Claude / ChatGPT / DeepSeek.
+mapping, charging dock, locator beacon, swaps through allowlisted routers, a machine identity on peaq (own key,
+machine NFT and DID, firmware version and a weekly heartbeat on chain; `identity/`). Brain: Lamport-8B on the
+robot (offline), or Claude / ChatGPT / DeepSeek.
 
 ## run it on a laptop
 

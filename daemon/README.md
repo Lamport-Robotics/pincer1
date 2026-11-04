@@ -166,6 +166,16 @@ Safety rules, every swap, no exceptions (`src/swap/verify.ts`, `src/swap/index.t
 | `unlimitedApproveToRouters` | tolerate unlimited ERC-20 approvals when the spender is an allowlisted router (default off: exact amounts only) |
 | `swapMaxSlippageBps` | lower the 1 % swap slippage cap |
 
+## Machine identity (peaq)
+
+Off unless `IDENTITY_CHAIN=agung|peaq` (plus `IDENTITY_UNITS`, `IDENTITY_SERVICE_URL`, `IDENTITY_MANUFACTURER`).
+Even then nothing happens until the owner asks (`POST /identity/activate`) and holds the touch pad: the
+controller derives the identity key and limits it to the four contracts named (PROTOCOL §1 "identity"). The
+robot then funds itself through Lamport's activation service, bonds the Entry tier, activates in peaq's
+`MachineStateAndSync` (machine NFT + DID, `did:peaq:<id>`), writes Lamport's attestation into `Pincer1Units`,
+and from then on reports its firmware version and a weekly heartbeat (uptime hours, steps) on its own, with no
+touch and even while the wallet is locked. `src/identity/`, `identity/README.md`, `test/identity.test.ts` (anvil).
+
 ## Files
 
 | path | role |
