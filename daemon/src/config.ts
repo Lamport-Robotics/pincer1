@@ -57,6 +57,12 @@ const Env = z.object({
   THORNODE_URL_2: z.string().url().default("https://thornode.thorchain.liquify.com"),
   SWAP_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(1).max(100).default(100),
   EVM_ROUTER_ALLOWLIST: z.string().default(""),
+  // ── machine identity on peaq (src/identity) ──
+  IDENTITY_CHAIN: z.enum(["off", "agung", "peaq"]).default("off"),
+  IDENTITY_RPC: z.string().default(""),            // empty = the published public RPC for the chain
+  IDENTITY_UNITS: z.string().default(""),          // Pincer1Units contract on that chain
+  IDENTITY_SERVICE_URL: z.string().default(""),    // Lamport activation service
+  IDENTITY_MANUFACTURER: z.string().default(""),   // recorded as manufacturer in MachineRegistry
 });
 
 export type Config = z.infer<typeof Env> & { addressBook: Record<string, string>; originAllowlist: string[]; dailyLimitLamports: bigint; dailyLimitWei: bigint; dailyLimitSats: bigint; evmRouterAllowlist: string[] };

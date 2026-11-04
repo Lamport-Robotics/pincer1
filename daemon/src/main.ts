@@ -26,6 +26,8 @@ import { BitcoinAdapter } from "./chains/bitcoin/index.js";
 import { Esplora } from "./chains/bitcoin/esplora.js";
 import { SwapService } from "./swap/index.js";
 import { OneInchProvider, ZeroXProvider } from "./swap/providers.js";
+import { Identity } from "./identity/index.js";
+import type { Address } from "viem";
 
 async function main() {
   const cfg = config();
@@ -152,11 +154,20 @@ async function main() {
   const briefing = new Briefing({ robot, settings: () => settings.get(), conn, getOwner: owner, agentReport: () => agent?.lastReport()?.items ?? null, offlinePending: () => offline.pending().length, inheritance: () => inheritance.status().then((s) => s as any).catch(() => null) });
   briefing.start();
 
-  const api = new ApiServer({ signer, controller, robot, agent, settings, offline, inheritance, alerts, briefing, swap, conn, getOwner: owner, dataDir: cfg.DATA_DIR, bind: cfg.BIND, port: cfg.PORT, devTouch, prod: cfg.PINCER_MODE === "prod" });
-  await api.listen();
-  log.info(`pincerd ready. mode=${cfg.PINCER_MODE} controller=${cfg.CONTROLLER} robot=${cfg.ROBOT_WS} chains=${signer.chains().join(",")} wallet=${settings.get().mode}`);
+  // machine identity on peaq: off unless configured; the owner still has to enable it with a long touch (POST /identity/activate)
+  let identity: Identity | undefined;
+  if (cfg.IDENTITY_CHAIN !== "off") {
+    if (!cfg.IDENTITY_UNITS || !cfg.IDENTITY_SERVICE_URL || !cfg.IDENTITY_MANUFACTURER) throw new Error("IDENTITY_CHAIN is set: IDENTITY_UNITS, IDENTITY_SERVICE_URL and IDENTITY_MANUFACTURER are required");
+    if (hello.identity === undefined) log.warn("controller firmware predates the machine identity; /identity will refuse until it is updated");
+    identity = new Identity(controller, { chainId: cfg.IDENTITY_CHAIN === "peaq" ? 3338 : 9990, rpcUrl: cfg.IDENTITY_RPC || undefined, unitsContract: cfg.IDENTITY_UNITS as Address, serviceUrl: cfg.IDENTITY_SERVICE_URL, manufacturer: cfg.IDENTITY_MANUFACTURER as Address, dataDir: cfg.DATA_DIR, firmware: async () => (await controller.hello()).fw });
+    identity.start();
+  }
 
-  const shutdown = async () => { api.close(); agent?.stop(); alerts.stop(); briefing.stop(); robot.close(); await controller.close(); process.exit(0); };
+  const api = new ApiServer({ signer, controller, robot, agent, settings, offline, inheritance, alerts, briefing, swap, identity, conn, getOwner: owner, dataDir: cfg.DATA_DIR, bind: cfg.BIND, port: cfg.PORT, devTouch, prod: cfg.PINCER_MODE === "prod" });
+  await api.listen();
+  log.info(`pincerd ready. mode=${cfg.PINCER_MODE} controller=${cfg.CONTROLLER} robot=${cfg.ROBOT_WS} chains=${signer.chains().join(",")} wallet=${settings.get().mode} identity=${identity ? cfg.IDENTITY_CHAIN : "off"}`);
+
+  const shutdown = async () => { api.close(); agent?.stop(); alerts.stop(); briefing.stop(); identity?.stop(); robot.close(); await controller.close(); process.exit(0); };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }

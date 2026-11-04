@@ -1,0 +1,11 @@
+{
+  "name": "pincer1-activation-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Checks a Pincer1 serial, funds the robot's peaq address, signs Lamport's attestation.",
+  "bin": { "pincer1-activation": "server.mjs" },
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": { "viem": "2.57.4" },
+  "engines": { "node": ">=20" }
+}

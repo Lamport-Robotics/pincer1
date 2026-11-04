@@ -28,6 +28,7 @@ import { nonceAccountCreateTx } from "../offline/index.js";
 import type { Connection } from "@solana/web3.js";
 import { log } from "../config.js";
 import { flashFirmware, confirmFirmware, checkImage } from "../firmware.js";
+import type { Identity } from "../identity/index.js";
 
 export interface ServerDeps {
   signer: Signer;
@@ -40,6 +41,7 @@ export interface ServerDeps {
   alerts?: Alerts;
   briefing?: Briefing;
   swap?: SwapService;
+  identity?: Identity;
   conn?: Connection;
   getOwner: () => string;
   dataDir: string;
@@ -307,6 +309,13 @@ export class ApiServer {
       if (req.method === "POST" && url.pathname === "/firmware/commit") return json(200, await confirmFirmware(this.d.controller));
       if (req.method === "POST" && url.pathname === "/firmware/abort") { await this.d.controller.updateAbort(); return json(200, { ok: true }); }
       return json(404, { error: "not_found" });
+    }
+    if (url.pathname.startsWith("/identity")) {
+      if (!this.d.identity) return json(400, { error: "identity_disabled" });
+      if (req.method === "GET" && url.pathname === "/identity") return json(200, await this.d.identity.status());
+      if (req.method === "POST" && url.pathname === "/identity/activate") { try { return json(200, await this.d.identity.activate()); } catch (e) { return json(409, { error: String((e as Error)?.message ?? e) }); } }
+      if (req.method === "POST" && url.pathname === "/identity/heartbeat") { const r = await this.d.identity.heartbeat(); return json(r.ok ? 200 : 409, r); }
+      if (req.method === "POST" && url.pathname === "/identity/disable") return json(200, { ok: await this.d.identity.disable() });
     }
     if (req.method === "POST" && url.pathname === "/lock") { await this.d.controller.lock(); return json(200, { ok: true }); }
     if (req.method === "POST" && url.pathname === "/unlock") return json(200, { ok: await this.d.controller.unlock() });
