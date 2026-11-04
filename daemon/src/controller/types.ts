@@ -48,6 +48,24 @@ export type MsgClaims =
 
 export type AnyClaims = SolanaClaims | EvmClaims | BtcClaims | MsgClaims;
 
+/**
+ * The machine identity key (PROTOCOL §1 "identity"): a second secp256k1 key the controller derives from the
+ * same seed, used only to be the robot's address on peaq. It is not a wallet. The owner enables it once with a
+ * long touch and names the chain and the contracts it may call; after that it signs zero-value calls to those
+ * contracts and short tagged messages without a touch, so heartbeats go out while nobody is home.
+ */
+export interface IdentityConfig {
+  chain_id: number;
+  /** Contract addresses the identity key may call (lowercase 0x…). Everything else is refused. */
+  allow: string[];
+}
+export interface IdentityStatus extends IdentityConfig {
+  address: string;
+  /** Compressed secp256k1 public key, hex, for the DID document. */
+  pubkey: string;
+  enabled: boolean;
+}
+
 export interface Policy {
   daily_limit_lamports: string;
   spent_today_lamports: string;
@@ -108,6 +126,10 @@ export interface Hello {
   inheritance?: { armed: boolean; inactivity_days: number; days_since_touch: number } | null;
   /** Firmware update state (PROTOCOL §1 "update"): which A/B partition runs, whether a verified image waits in the other one, and whether this image is still on trial (boots counted, not yet committed). Absent on firmware before 0.5.0. */
   update?: { partition: number; staged: boolean; trial: boolean; secure_boot?: boolean };
+  /** Unit serial number as printed on the robot (controller OTP). Absent on firmware before 0.6.0 and on bench boards. */
+  serial?: string;
+  /** Machine identity key (PROTOCOL §1 "identity"); null until the owner enables it. Absent on firmware before 0.6.0. */
+  identity?: IdentityStatus | null;
 }
 
 export type UpdateReason = "not_supported" | "state" | "size" | "offset" | "length" | "flash" | "hash" | "image" | "version" | DenyReason;
@@ -119,8 +141,10 @@ export type UpdateResult = { ok: true } | { ok: false; reason: UpdateReason };
  * evm_tx: unsigned RLP (legacy or EIP-1559) → 65-byte r‖s‖v. evm_msg: EIP-191 bytes or an EIP-712 digest.
  * btc_psbt: BIP-174 PSBT → the same PSBT with the controller's partial signatures (returned in `sig`).
  * btc_msg: BIP-322 simple (reserved; not built by this daemon yet).
+ * id_tx / id_msg: the machine identity key (PROTOCOL §1 "identity"): an unsigned EVM transaction to an allowed
+ * contract on the configured chain with zero value, or an EIP-191 message starting with "pincer1-identity:". No touch.
  */
-export type SignKind = "tx" | "msg" | "evm_tx" | "evm_msg" | "btc_psbt" | "btc_msg";
+export type SignKind = "tx" | "msg" | "evm_tx" | "evm_msg" | "btc_psbt" | "btc_msg" | "id_tx" | "id_msg";
 export type PolicyChain = "solana" | "evm" | "bitcoin";
 
 export type DenyReason = "timeout" | "claims_mismatch" | "over_daily_limit" | "locked" | "policy" | "user" | "duress" | "not_initialized" | "busy" | "pin_not_set" | "wrong_pin" | "pin_mismatch" | "wiped";
@@ -160,6 +184,9 @@ export interface ControllerClient {
   updateApply(onPending?: PendingHook, ttlMs?: number): Promise<UpdateResult>;
   updateCommit(): Promise<{ ok: true; was_trial: boolean; bought: boolean } | { ok: false; reason: UpdateReason }>;
   updateAbort(): Promise<void>;
+  /** Machine identity (PROTOCOL §1 "identity"): the owner's long touch turns the key on for one chain and a contract list; another long touch turns it off. */
+  identityEnable(cfg: IdentityConfig, onPending?: PendingHook, ttlMs?: number): Promise<{ ok: true; identity: IdentityStatus } | { ok: false; reason: DenyReason | "not_supported" }>;
+  identityDisable(onPending?: PendingHook, ttlMs?: number): Promise<boolean>;
   onEvent(cb: (e: ControllerEvent) => void): void;
   /** For the UI: is a request waiting for a touch, a long touch or the PIN rhythm right now? */
   pending(): { id: string; need: "touch" | "long_touch" | "pin" } | null;

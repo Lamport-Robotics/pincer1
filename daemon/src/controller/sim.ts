@@ -17,7 +17,7 @@ import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage } from "../tx/
 import { looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
 import { parseTypedData, typedDataDigest } from "../chains/evm/message.js";
 import { netOf, parsePsbt, type BtcNetwork } from "../chains/bitcoin/psbt.js";
-import type { Addresses, Allowance, AnyClaims, BtcClaims, Claims, ControllerClient, ControllerEvent, DenyReason, EvmClaims, Hello, InheritanceStatus, MsgClaims, PendingHook, Policy, PolicyChain, SignKind, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
+import type { Addresses, Allowance, AnyClaims, BtcClaims, Claims, ControllerClient, ControllerEvent, DenyReason, EvmClaims, Hello, IdentityConfig, IdentityStatus, InheritanceStatus, MsgClaims, PendingHook, Policy, PolicyChain, SignKind, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
 import { FW_CHUNK, FW_PAGE, checkImage } from "../firmware.js";
 import { JUPITER_V6, SYSTEM } from "../tx/known.js";
 import { EVM_ROUTERS } from "../swap/routers.js";
@@ -33,21 +33,27 @@ export interface SimOptions {
   /** Long-touch requests too. */
   autoLongTouch?: boolean;
   initialized?: boolean;
+  /** Unit serial the sim reports in `hello` (the real controller reads it from OTP). */
+  serial?: string;
 }
+
+/** The identity key signs fee-only transactions; this caps what a runaway daemon could burn per call (0.05 PEAQ). */
+const IDENTITY_MAX_FEE_WEI = 5n * 10n ** 16n;
+const IDENTITY_MSG_PREFIX = "pincer1-identity:";
 
 interface Pending { id: string; need: "touch" | "long_touch" | "pin"; resolve: (ok: boolean) => void; timer: NodeJS.Timeout }
 
 type SignResult = { ok: true; sig: Uint8Array } | { ok: false; reason: DenyReason };
 
-/** One key family set: ed25519 for Solana, one secp256k1 key for EVM and one for Bitcoin. */
-interface KeySet { sol: nacl.SignKeyPair; evm: Uint8Array; btc: Uint8Array }
+/** One key family set: ed25519 for Solana, one secp256k1 key for EVM, one for Bitcoin, one for the machine identity. */
+interface KeySet { sol: nacl.SignKeyPair; evm: Uint8Array; btc: Uint8Array; id: Uint8Array }
 
 const derive = (seed: Uint8Array | undefined, label: string): Uint8Array => {
   if (!seed) return secp256k1.utils.randomPrivateKey();
   const k = createHash("sha256").update(Buffer.concat([Buffer.from(seed), Buffer.from(label)])).digest();
   return secp256k1.utils.isValidPrivateKey(k) ? new Uint8Array(k) : secp256k1.utils.randomPrivateKey();
 };
-const makeKeys = (seed?: Uint8Array): KeySet => ({ sol: seed ? nacl.sign.keyPair.fromSeed(seed) : nacl.sign.keyPair(), evm: derive(seed, "pincer-evm"), btc: derive(seed, "pincer-btc") });
+const makeKeys = (seed?: Uint8Array): KeySet => ({ sol: seed ? nacl.sign.keyPair.fromSeed(seed) : nacl.sign.keyPair(), evm: derive(seed, "pincer-evm"), btc: derive(seed, "pincer-btc"), id: derive(seed, "pincer-identity") });
 const evmAddressOf = (priv: Uint8Array) => publicKeyToAddress(("0x" + Buffer.from(secp256k1.getPublicKey(priv, false)).toString("hex")) as Hex);
 const btcAddressOf = (priv: Uint8Array, network: BtcNetwork) => bitcoin.payments.p2wpkh({ pubkey: Buffer.from(secp256k1.getPublicKey(priv, true)), network: netOf(network) }).address!;
 /** 65-byte r‖s‖v. legacyV: 27/28 (legacy transactions and messages), otherwise 0/1 (typed transactions). */
@@ -78,6 +84,8 @@ export class SimController implements ControllerClient {
   readonly solRouters = new Set<string>([JUPITER_V6]);
   private elevatedLimit = 0n;
   private pend: Pending | null = null;
+  /** Machine identity: null until the owner enables it with a long touch. Survives lock and duress (it is not a wallet). */
+  private identity: IdentityConfig | null = null;
   private listeners: ((e: ControllerEvent) => void)[] = [];
   private nowUnix = Math.floor(Date.now() / 1000);
   /** Powered-uptime seconds, the controller's own clock for the dead-man's switch (tests drive it). */
@@ -181,7 +189,55 @@ export class SimController implements ControllerClient {
 
   async hello(): Promise<Hello> {
     this.rollDay();
-    return { t: "hello", fw: this.fw, se050: false, initialized: this.initialized, pubkey: this.initialized ? this.publicKey : null, addresses: this.initialized ? this.addresses : undefined, locked: this.locked, policy: { ...this.policy }, allowance: this.allow ? { ...this.allow } : null, duress_pin_set: this.duressPinSet, pin_set: this.pinSet, pin_failures: 0, dev_keys: false, display: false, board: "sim", inheritance: this.inh ? { armed: true, inactivity_days: this.inh.inactivityDays, days_since_touch: this.daysSinceTouch() } : null, update: { partition: this.partition, staged: this.upd?.state === "verified", trial: this.trial, secure_boot: false } };
+    return { t: "hello", fw: this.fw, se050: false, initialized: this.initialized, pubkey: this.initialized ? this.publicKey : null, addresses: this.initialized ? this.addresses : undefined, locked: this.locked, policy: { ...this.policy }, allowance: this.allow ? { ...this.allow } : null, duress_pin_set: this.duressPinSet, pin_set: this.pinSet, pin_failures: 0, dev_keys: false, display: false, board: "sim", inheritance: this.inh ? { armed: true, inactivity_days: this.inh.inactivityDays, days_since_touch: this.daysSinceTouch() } : null, update: { partition: this.partition, staged: this.upd?.state === "verified", trial: this.trial, secure_boot: false }, serial: this.opts.serial ?? "SIM-0001", identity: this.initialized ? this.identityStatus() : null };
+  }
+
+  // ── machine identity (PROTOCOL §1 "identity") ──
+  /** The identity key is derived from the real seed only: the decoy wallet has no identity, the robot is the same robot. */
+  get identityAddress(): string { return evmAddressOf(this.real.id); }
+  private identityStatus(): IdentityStatus {
+    return { address: this.identityAddress, pubkey: "0x" + Buffer.from(secp256k1.getPublicKey(this.real.id, true)).toString("hex"), enabled: !!this.identity, chain_id: this.identity?.chain_id ?? 0, allow: this.identity ? [...this.identity.allow] : [] };
+  }
+  async identityEnable(cfg: IdentityConfig, onPending?: PendingHook, ttlMs = 120_000): Promise<{ ok: true; identity: IdentityStatus } | { ok: false; reason: DenyReason | "not_supported" }> {
+    if (!this.initialized) return { ok: false, reason: "not_initialized" };
+    if (!this.pinSet) return { ok: false, reason: "pin_not_set" };
+    if (this.locked) return { ok: false, reason: "locked" };
+    if (this.duressActive) return { ok: false, reason: "duress" };
+    const chainId = Number(cfg.chain_id);
+    const allow = (cfg.allow ?? []).map((a) => String(a).toLowerCase());
+    if (!Number.isInteger(chainId) || chainId <= 0 || allow.length === 0 || allow.length > 8 || !allow.every((a) => /^0x[0-9a-f]{40}$/.test(a))) return { ok: false, reason: "policy" };
+    onPending?.({ need: "long_touch", parsed: { chain_id: chainId, allow } });
+    const ok = await this.waitTouch(`id${Date.now()}`, "long_touch", ttlMs);
+    if (!ok) return { ok: false, reason: "timeout" };
+    this.identity = { chain_id: chainId, allow };
+    return { ok: true, identity: this.identityStatus() };
+  }
+  async identityDisable(onPending?: PendingHook, ttlMs = 120_000): Promise<boolean> {
+    if (!this.identity) return true;
+    onPending?.({ need: "long_touch" });
+    const ok = await this.waitTouch(`idoff${Date.now()}`, "long_touch", ttlMs);
+    if (ok) this.identity = null;
+    return ok;
+  }
+  /** Zero-value call to an allowed contract on the configured chain, bounded fee, no touch. */
+  private signIdentityTx(bytes: Uint8Array, claims: EvmClaims): SignResult {
+    const id = this.identity;
+    if (!id) return { ok: false, reason: "policy" };
+    let parsed;
+    try { parsed = parseEvmTx(bytes, { owner: this.identityAddress }, { routers: new Set() }); } catch { return { ok: false, reason: "policy" }; }
+    if (parsed.chainId !== id.chain_id || parsed.chainId !== Number(claims.chain_id)) return { ok: false, reason: "claims_mismatch" };
+    if (!parsed.to || !id.allow.includes(parsed.to.toLowerCase()) || parsed.to.toLowerCase() !== String(claims.to ?? "").toLowerCase()) return { ok: false, reason: "policy" };
+    if (parsed.value !== 0n) return { ok: false, reason: "policy" };
+    if (parsed.maxFeeWei > IDENTITY_MAX_FEE_WEI || parsed.maxFeeWei > BigInt(claims.max_fee_wei)) return { ok: false, reason: "policy" };
+    const digest = hexBytes(keccak256(("0x" + Buffer.from(bytes).toString("hex")) as Hex));
+    return { ok: true, sig: sig65(digest, this.real.id, parsed.type === "legacy") };
+  }
+  /** EIP-191 over a short tagged message (proof of key possession for the activation service), no touch. */
+  private signIdentityMessage(bytes: Uint8Array): SignResult {
+    if (!this.identity) return { ok: false, reason: "policy" };
+    if (bytes.length > 256 || Buffer.from(bytes.subarray(0, IDENTITY_MSG_PREFIX.length)).toString("utf8") !== IDENTITY_MSG_PREFIX) return { ok: false, reason: "policy" };
+    if (looksLikeEvmTx(bytes) || looksLikeMessage(bytes)) return { ok: false, reason: "policy" };
+    return { ok: true, sig: sig65(hexBytes(hashMessage({ raw: bytes })), this.real.id, true) };
   }
 
   async init() {
@@ -209,6 +265,9 @@ export class SimController implements ControllerClient {
     this.rollDay();
     if (!this.initialized) return { ok: false, reason: "not_initialized" };
     if (!this.pinSet) return { ok: false, reason: "pin_not_set" };
+    // the identity key is not behind the lock: the robot keeps reporting while the owner is away
+    if (kind === "id_tx") return this.signIdentityTx(bytes, claims as EvmClaims);
+    if (kind === "id_msg") return this.signIdentityMessage(bytes);
     if (this.locked) return { ok: false, reason: "locked" };
     switch (kind) {
       case "tx": case "msg": return this.signSolana(kind, bytes, claims as Claims, ttlMs, onPending);

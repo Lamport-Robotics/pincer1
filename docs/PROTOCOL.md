@@ -490,6 +490,41 @@ and reboots; the bootrom then finds only the previous image and the controller i
 PIN, policy, routers and the inheritance arrangement live in flash regions outside both partitions and
 are never touched by an update; a rolled-back update leaves them as they were.
 
+### identity (machine identity on peaq, owner's long touch; firmware 0.6.0)
+
+A second secp256k1 key, derived from the same seed (`m/44'/60'/1'/0/0`), that is the robot's own address on peaq.
+It is not a wallet: it holds the gas the activation service gave it and nothing else, and it can only call the
+contracts the owner named when enabling it. `hello` reports `serial` (the unit serial from OTP) and `identity`
+(`null` until enabled):
+
+```json
+"serial":"P1-0001",
+"identity":{"address":"0x…","pubkey":"02…(33 bytes hex)","enabled":true,"chain_id":3338,"allow":["0x…","0x…"]}
+```
+
+```json
+→ {"t":"identity_enable","id":"i1","chain_id":3338,"allow":["0x…peaqToken","0x…MachineStateAndSync","0x…MachineRegistry","0x…Pincer1Units"],"ttl_ms":120000}
+← {"t":"pending","id":"i1","need":"long_touch"}     // display: PEAQ IDENTITY  chain 3338  4 contracts  hold 3s
+← {"t":"identity","id":"i1","identity":{…}} | {"t":"denied","id":"i1","reason":"timeout"|"locked"|"duress"|"pin_not_set"|"policy"}
+→ {"t":"identity_disable","id":"i2"}                 // long touch; the key stays derivable, it just stops signing
+← {"t":"identity_disable","id":"i2","ok":true}
+```
+
+`allow` is 1–8 lowercase addresses; `chain_id` > 0. Enabling again replaces both. `sign` gains two kinds that
+need **no touch** and work while the controller is locked (the robot reports while the owner is away) but never
+in duress and never before init:
+
+- `kind:"id_tx"`, `bytes` = unsigned legacy EIP-155 or EIP-1559 payload, `claims` as for `evm_tx`. Checks: chain
+  id equals the enabled `chain_id` and the claim; `to` is in `allow` and equals the claim; `value` is 0;
+  `gas_limit × fee` ≤ 0.05 PEAQ and ≤ `claims.max_fee_wei`. Anything else is `denied:policy` (chain:
+  `claims_mismatch`). Signature: 65-byte `r‖s‖v`, `v` 27/28 legacy, 0/1 typed.
+- `kind:"id_msg"`, `bytes` = ≤ 256 bytes starting with `pincer1-identity:` (the activation proof
+  `pincer1-identity:activate:<serial>:<address>`); anything that parses as a transaction is refused. EIP-191,
+  `v` 27/28.
+
+The identity key never signs Solana, Bitcoin, EVM wallet kinds, or messages without the prefix; the wallet keys
+never sign `id_*`. The daily limits do not apply (there is no value to count).
+
 ### time
 
 ```json
@@ -825,6 +860,15 @@ POST /explain {tx}      → {summary, risk, reasons, parsed}
 GET  /agent             → {budget, open, pnl, report}
 POST /agent/budget      → {lamports}
 GET  /agent/report      → the last morning report
+```
+
+Machine identity on peaq (`IDENTITY_CHAIN=agung|peaq`, see identity/README.md):
+
+```
+GET  /identity            → {supported, enabled, activated, serial, address, did, machineId, chain:{id,name,explorer}, firmware, lastHeartbeat, uptimeHours, busy, contracts, txs}
+POST /identity/activate   → long touch on the robot, then: activation service → bond approve → activateMachine → Pincer1Units.attest; resumable; 409 {error} when it stops
+POST /identity/heartbeat  → {ok, tx} sends this week's heartbeat now (uptime hours, steps); no touch
+POST /identity/disable    → {ok} long touch; the key stops signing, the peaq record stays
 ```
 
 ```

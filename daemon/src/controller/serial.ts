@@ -3,7 +3,7 @@
  * unsolicited events. See docs/PROTOCOL.md §1.
  */
 import { SerialPort } from "serialport";
-import type { Addresses, Allowance, AnyClaims, Claims, ControllerClient, ControllerEvent, DenyReason, Hello, InheritanceStatus, PolicyChain, SignKind, PendingHook, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
+import type { Addresses, Allowance, AnyClaims, Claims, ControllerClient, ControllerEvent, DenyReason, Hello, IdentityConfig, IdentityStatus, InheritanceStatus, PolicyChain, SignKind, PendingHook, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
 
 type Waiter = { resolve: (m: any) => void; reject: (e: Error) => void; onPending?: PendingHook };
 
@@ -139,6 +139,13 @@ export class SerialController implements ControllerClient {
     return m.ok ? { ok: true as const, was_trial: !!m.was_trial, bought: !!m.bought } : { ok: false as const, reason: (m.reason ?? "state") as UpdateReason };
   }
   async updateAbort() { await this.request({ t: "update_abort" }, undefined, 10_000); }
+  // ── machine identity (PROTOCOL §1 "identity") ──
+  async identityEnable(cfg: IdentityConfig, onPending?: PendingHook, ttlMs = 120_000) {
+    const m = await this.request<any>({ t: "identity_enable", chain_id: cfg.chain_id, allow: cfg.allow, ttl_ms: ttlMs }, undefined, ttlMs + 10_000, onPending);
+    if (m.t === "identity" && m.identity) return { ok: true as const, identity: m.identity as IdentityStatus };
+    return { ok: false as const, reason: (m.t === "error" ? "not_supported" : m.reason ?? "policy") as DenyReason | "not_supported" };
+  }
+  async identityDisable(onPending?: PendingHook, ttlMs = 120_000) { const m = await this.request<any>({ t: "identity_disable", ttl_ms: ttlMs }, undefined, ttlMs + 10_000, onPending); return !!m.ok; }
 
   async close() { await new Promise<void>((r) => this.port.close(() => r())); }
   get info() { return this.lastHello; }
