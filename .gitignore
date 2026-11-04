@@ -22,3 +22,11 @@ firmware/keys/*
 *.pem
 *.otp.json
 firmware/scp03-keys*.bin
+
+# identity: forge build output, broadcast logs, activation service state
+identity/contracts/out/
+identity/contracts/cache/
+identity/contracts/broadcast/
+identity/service/activations.json
+identity/service/serials.json
+identity/service/node_modules/

@@ -1,0 +1,13 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.28"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 2000
+fs_permissions = []
+
+[rpc_endpoints]
+agung = "https://peaq-agung.api.onfinality.io/public"
+peaq = "https://peaq-rpc.publicnode.com"
