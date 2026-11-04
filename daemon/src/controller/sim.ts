@@ -37,8 +37,8 @@ export interface SimOptions {
   serial?: string;
 }
 
-/** The identity key signs fee-only transactions; this caps what a runaway daemon could burn per call (0.05 PEAQ). */
-const IDENTITY_MAX_FEE_WEI = 5n * 10n ** 16n;
+/** The identity key signs fee-only transactions; this caps what a runaway daemon could burn per call (0.5 PEAQ: peaq runs at 100 gwei and an activation is about a million gas). */
+const IDENTITY_MAX_FEE_WEI = 5n * 10n ** 17n;
 const IDENTITY_MSG_PREFIX = "pincer1-identity:";
 
 interface Pending { id: string; need: "touch" | "long_touch" | "pin"; resolve: (ok: boolean) => void; timer: NodeJS.Timeout }

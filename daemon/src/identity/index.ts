@@ -304,6 +304,7 @@ export class Identity {
     const unsigned = serializeTransaction(tx);
     const bytes = new Uint8Array(Buffer.from(unsigned.slice(2), "hex"));
     const claims: EvmClaims = { chain_id: this.dep.chainId, to, value_wei: "0", token_out: [], max_fee_wei: (gas * price).toString(), routers: [], dangerous: [] };
+    log.info("identity: signing", { to, nonce, gas: gas.toString(), gasPrice: price.toString(), maxFeeWei: (gas * price).toString() });
     const r = await this.controller.sign("id_tx", bytes, claims);
     if (!r.ok) throw new Error(`controller refused the identity transaction (${r.reason})`);
     const sig = r.sig;

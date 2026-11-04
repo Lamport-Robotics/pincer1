@@ -63,6 +63,7 @@ const Env = z.object({
   IDENTITY_UNITS: z.string().default(""),          // Pincer1Units contract on that chain
   IDENTITY_SERVICE_URL: z.string().default(""),    // Lamport activation service
   IDENTITY_MANUFACTURER: z.string().default(""),   // recorded as manufacturer in MachineRegistry
+  PINCER_SERIAL: z.string().default(""),           // sim controller only: the serial it reports (the real one comes from OTP)
 });
 
 export type Config = z.infer<typeof Env> & { addressBook: Record<string, string>; originAllowlist: string[]; dailyLimitLamports: bigint; dailyLimitWei: bigint; dailyLimitSats: bigint; evmRouterAllowlist: string[] };

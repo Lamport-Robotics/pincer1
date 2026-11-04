@@ -51,7 +51,7 @@ export function createService(o) {
   const readBody = (req) => new Promise((resolve, reject) => { let s = ""; req.on("data", (c) => { s += c; if (s.length > 4096) { reject(new Error("too large")); req.destroy(); } }); req.on("end", () => resolve(s)); req.on("error", reject); });
 
   async function activate(req, res) {
-    const ip = req.socket.remoteAddress ?? "?";
+    const ip = String(req.headers["x-real-ip"] ?? req.socket.remoteAddress ?? "?");
     const now = Date.now();
     const hits = (recent.get(ip) ?? []).filter((t) => now - t < 60_000);
     if (hits.length >= 10) return json(res, 429, { error: "slow down" });

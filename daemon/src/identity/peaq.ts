@@ -22,6 +22,8 @@ export interface PeaqDeployment {
   machineSubscription: Address;
   /** Where machines.peaq.xyz / the MCR API read 2.0 machines (mainnet only today). */
   mcrApi?: string;
+  /** Pincer1Units on this chain, when deployed (IDENTITY_UNITS overrides). */
+  units?: Address;
 }
 
 export const PEAQ_TOKEN: Address = "0x0000000000000000000000000000000000000809";
@@ -34,6 +36,7 @@ export const DEPLOYMENTS: Record<number, PeaqDeployment> = {
     machineStateAndSync: "0xcD1917FB2a56459AcA34FDD118e08776dE0890f2",
     machineSubscription: "0x9e37AD189c334C92e6B8a812Ca4c02f35Ac43895",
     mcrApi: "https://mcr.peaq.xyz",
+    units: "0x3e6A4a540344E844db6Ba1640Bf92DB927D60F9a",
   },
   9990: {
     id: "agung-2026-08-28", chainId: 9990, name: "agung", rpc: "https://peaq-agung.api.onfinality.io/public", explorer: "https://agung-testnet.subscan.io",

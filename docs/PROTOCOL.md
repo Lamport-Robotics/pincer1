@@ -516,7 +516,7 @@ in duress and never before init:
 
 - `kind:"id_tx"`, `bytes` = unsigned legacy EIP-155 or EIP-1559 payload, `claims` as for `evm_tx`. Checks: chain
   id equals the enabled `chain_id` and the claim; `to` is in `allow` and equals the claim; `value` is 0;
-  `gas_limit × fee` ≤ 0.05 PEAQ and ≤ `claims.max_fee_wei`. Anything else is `denied:policy` (chain:
+  `gas_limit × fee` ≤ 0.5 PEAQ and ≤ `claims.max_fee_wei`. Anything else is `denied:policy` (chain:
   `claims_mismatch`). Signature: 65-byte `r‖s‖v`, `v` 27/28 legacy, 0/1 typed.
 - `kind:"id_msg"`, `bytes` = ≤ 256 bytes starting with `pincer1-identity:` (the activation proof
   `pincer1-identity:activate:<serial>:<address>`); anything that parses as a transaction is refused. EIP-191,

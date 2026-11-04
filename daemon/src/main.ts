@@ -6,6 +6,9 @@
  *   CONTROLLER=/dev/ttyACM0 PINCER_MODE=prod            robot: real consent controller + SE050
  */
 import { Connection } from "@solana/web3.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { join } from "node:path";
 import { config, log } from "./config.js";
 import { SimController } from "./controller/sim.js";
 import { SerialController } from "./controller/serial.js";
@@ -27,6 +30,7 @@ import { Esplora } from "./chains/bitcoin/esplora.js";
 import { SwapService } from "./swap/index.js";
 import { OneInchProvider, ZeroXProvider } from "./swap/providers.js";
 import { Identity } from "./identity/index.js";
+import { DEPLOYMENTS } from "./identity/peaq.js";
 import type { Address } from "viem";
 
 async function main() {
@@ -37,7 +41,11 @@ async function main() {
   let devTouch: ((long: boolean) => void) | undefined;
   if (cfg.CONTROLLER === "sim") {
     if (cfg.PINCER_MODE === "prod") throw new Error("PINCER_MODE=prod refuses the software signer. Set CONTROLLER=/dev/ttyACM0.");
-    const sim = new SimController({ dailyLimitLamports: cfg.dailyLimitLamports });
+    // the sim keeps one seed per DATA_DIR so its addresses (and its peaq identity) survive restarts
+    mkdirSync(cfg.DATA_DIR, { recursive: true });
+    const seedPath = join(cfg.DATA_DIR, "sim-seed");
+    if (!existsSync(seedPath)) writeFileSync(seedPath, randomBytes(32), { mode: 0o600 });
+    const sim = new SimController({ dailyLimitLamports: cfg.dailyLimitLamports, serial: cfg.PINCER_SERIAL || undefined, seed: new Uint8Array(readFileSync(seedPath)) });
     devTouch = (long) => sim.touch(long);
     controller = sim;
     log.warn("using the SOFTWARE signer (sim). Not for real funds.");
@@ -157,9 +165,11 @@ async function main() {
   // machine identity on peaq: off unless configured; the owner still has to enable it with a long touch (POST /identity/activate)
   let identity: Identity | undefined;
   if (cfg.IDENTITY_CHAIN !== "off") {
-    if (!cfg.IDENTITY_UNITS || !cfg.IDENTITY_SERVICE_URL || !cfg.IDENTITY_MANUFACTURER) throw new Error("IDENTITY_CHAIN is set: IDENTITY_UNITS, IDENTITY_SERVICE_URL and IDENTITY_MANUFACTURER are required");
+    const chainId = cfg.IDENTITY_CHAIN === "peaq" ? 3338 : 9990;
+    const units = (cfg.IDENTITY_UNITS || DEPLOYMENTS[chainId]?.units) as Address | undefined;
+    if (!units || !cfg.IDENTITY_SERVICE_URL || !cfg.IDENTITY_MANUFACTURER) throw new Error("IDENTITY_CHAIN is set: IDENTITY_SERVICE_URL and IDENTITY_MANUFACTURER are required (and IDENTITY_UNITS where no Pincer1Units is published for the chain)");
     if (hello.identity === undefined) log.warn("controller firmware predates the machine identity; /identity will refuse until it is updated");
-    identity = new Identity(controller, { chainId: cfg.IDENTITY_CHAIN === "peaq" ? 3338 : 9990, rpcUrl: cfg.IDENTITY_RPC || undefined, unitsContract: cfg.IDENTITY_UNITS as Address, serviceUrl: cfg.IDENTITY_SERVICE_URL, manufacturer: cfg.IDENTITY_MANUFACTURER as Address, dataDir: cfg.DATA_DIR, firmware: async () => (await controller.hello()).fw });
+    identity = new Identity(controller, { chainId, rpcUrl: cfg.IDENTITY_RPC || undefined, unitsContract: units, serviceUrl: cfg.IDENTITY_SERVICE_URL, manufacturer: cfg.IDENTITY_MANUFACTURER as Address, dataDir: cfg.DATA_DIR, firmware: async () => (await controller.hello()).fw });
     identity.start();
   }
 

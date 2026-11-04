@@ -27,7 +27,7 @@ What never leaves the robot: the owner, their wallets, where the robot is, what 
 - `../daemon/src/identity/` — the robot side (`Identity`), and `peaq.ts` with the published contract addresses
   and ABI fragments. Transactions are legacy EIP-155, signed by the controller as `id_tx`.
 - `../daemon/src/controller/` — the key policy. `id_tx`: zero value, chain id and `to` from the owner's enable
-  list, fee ≤ 0.05 PEAQ, no touch. `id_msg`: EIP-191 over a message starting with `pincer1-identity:`, no touch.
+  list, fee ≤ 0.5 PEAQ, no touch. `id_msg`: EIP-191 over a message starting with `pincer1-identity:`, no touch.
   Enable and disable are long touches. The sim implements it; the firmware spec is PROTOCOL §1 "identity".
 
 ## peaq side
@@ -43,7 +43,11 @@ release page of the running controller firmware, and `#maker`, lamportrobotics.c
 | agung (test) | 9990 | `0x538da35489B1F0035799a8351E67835ae4ABb377` | `0xA7D33726232aae30622643a18047f0Ca3e159da9` | `0xaDCc5dD8CD57E3198B881c3388F25D2fD69B5aDc` |
 | peaq | 3338 | `0x64b93Cc29b251fAFa83BD110cDB1C24207f85536` | `0xcD1917FB2a56459AcA34FDD118e08776dE0890f2` | `0x9e37AD189c334C92e6B8a812Ca4c02f35Ac43895` |
 
-Source: docs.peaq.xyz/peaqos/concepts/contracts. Pincer1Units addresses go here once deployed.
+Source: docs.peaq.xyz/peaqos/concepts/contracts.
+
+Pincer1Units on peaq: [`0x3e6A4a540344E844db6Ba1640Bf92DB927D60F9a`](https://peaq.subscan.io/account/0x3e6A4a540344E844db6Ba1640Bf92DB927D60F9a)
+(attester and manufacturer `0x7Ab91e76Fd0224739B7EA55E11A516Bd3771BBc3`). Activation service: `https://lamportrobotics.com/activate`
+(health at `/activate/health`). Not deployed on agung.
 
 ## Deploy
 
