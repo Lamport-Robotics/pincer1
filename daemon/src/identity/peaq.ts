@@ -72,6 +72,8 @@ export const machineRegistryAbi = parseAbi([
   "function serviceEndpointsOf(uint256 tokenId) view returns (ServiceEndpoint[])",
   "function verificationMethodsOf(uint256 tokenId) view returns (VerificationMethod[])",
   "function setServiceEndpoints(uint256 tokenId, ServiceEndpoint[] endpoints)",
+  "function setController(uint256 tokenId, address controller)",
+  "event ControllerUpdated(uint256 indexed tokenId, address indexed previous, address indexed controller)",
   "event MachineMinted(uint256 indexed tokenId, address indexed to, address indexed controller, string machineType)",
 ]);
 

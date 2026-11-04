@@ -316,6 +316,8 @@ export class ApiServer {
       if (req.method === "POST" && url.pathname === "/identity/activate") { try { return json(200, await this.d.identity.activate()); } catch (e) { return json(409, { error: String((e as Error)?.message ?? e) }); } }
       if (req.method === "POST" && url.pathname === "/identity/heartbeat") { const r = await this.d.identity.heartbeat(); return json(r.ok ? 200 : 409, r); }
       if (req.method === "POST" && url.pathname === "/identity/disable") return json(200, { ok: await this.d.identity.disable() });
+      if (req.method === "POST" && url.pathname === "/identity/controller") { const b = await body(); const r = await this.d.identity.setController(String(b.address ?? "") as `0x${string}`); return json(r.ok ? 200 : 409, r); }
+      if (req.method === "GET" && url.pathname === "/identity/controller") return json(200, { controller: await this.d.identity.didController() });
     }
     if (req.method === "POST" && url.pathname === "/lock") { await this.d.controller.lock(); return json(200, { ok: true }); }
     if (req.method === "POST" && url.pathname === "/unlock") return json(200, { ok: await this.d.controller.unlock() });

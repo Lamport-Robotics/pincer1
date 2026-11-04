@@ -252,6 +252,28 @@ export class Identity {
     } catch (e) { return { ok: false, reason: String(e) }; } finally { this.busy = null; }
   }
 
+  /**
+   * Hand the DID's controller role to another address (the owner's browser wallet, for a site that asks the
+   * machine's controller to sign a challenge). The robot stays the owner of the NFT and keeps writing its record.
+   */
+  async setController(controller: Address): Promise<{ ok: true; tx: Hex } | { ok: false; reason: string }> {
+    const st = this.state
+    if (!st?.attestedAt) return { ok: false, reason: "not_activated" }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(controller)) return { ok: false, reason: "bad_address" }
+    if (this.busy) return { ok: false, reason: `busy: ${this.busy}` }
+    this.busy = "controller"
+    try {
+      const tx = await this.send(st.address, this.dep.machineRegistry, encodeFunctionData({ abi: machineRegistryAbi, functionName: "setController", args: [BigInt(st.machineId), getAddress(controller)] }));
+      return { ok: true, tx }
+    } catch (e) { return { ok: false, reason: String(e) }; } finally { this.busy = null; }
+  }
+
+  async didController(): Promise<Address | null> {
+    const st = this.state
+    if (!st) return null
+    try { return await this.client.readContract({ address: this.dep.machineRegistry, abi: machineRegistryAbi, functionName: "controllerOf", args: [BigInt(st.machineId)] }) } catch { return null }
+  }
+
   /** Weekly heartbeat, and a catch-up on boot when the last one is older than a week or the firmware moved. */
   start() {
     if (!this.state?.attestedAt) return;

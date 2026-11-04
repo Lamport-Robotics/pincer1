@@ -9,7 +9,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, createWalletClient, encodeFunctionData, http, parseAbi, parseEther, serializeTransaction, type Address, type Hex } from "viem";
+import { createPublicClient, createWalletClient, encodeFunctionData, getAddress, http, parseAbi, parseEther, serializeTransaction, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { SimController } from "../src/controller/sim.js";
 import { Identity, multibaseSecp256k1, verifyProof } from "../src/identity/index.js";
@@ -129,6 +129,16 @@ describe.skipIf(!ready)("machine identity on anvil", () => {
     expect((await pub.readContract({ address: units, abi: pincer1UnitsAbi, functionName: "units", args: [id] }))[2]).toBe("0.3.0");
     const eps = await pub.readContract({ address: registry, abi: mockAbi, functionName: "serviceEndpointsOf", args: [id] });
     expect(eps.find((e) => e.id === "#firmware")?.serviceEndpoint).toContain("fw-0.3.0");
+  }, 30_000);
+
+  it("hands the DID controller to another address, the robot stays owner", async () => {
+    const other = "0x00000000000000000000000000000000000000a1" as Address;
+    const r = await identity.setController(other);
+    expect(r.ok).toBe(true);
+    expect(await identity.didController()).toBe(getAddress(other));
+    const id = BigInt((await identity.status()).machineId!);
+    expect(await pub.readContract({ address: registry, abi: machineRegistryAbi, functionName: "ownerOf", args: [id] })).toBe(sim.identityAddress);
+    expect((await identity.heartbeat()).ok).toBe(true);
   }, 30_000);
 
   it("the controller refuses identity transactions outside the allow list, with value, or on another chain", async () => {

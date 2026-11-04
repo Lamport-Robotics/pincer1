@@ -130,6 +130,14 @@ contract MockMachineRegistry {
         emit ServiceEndpointsUpdated(tokenId);
     }
 
+    event ControllerUpdated(uint256 indexed tokenId, address indexed previous, address indexed controller);
+
+    function setController(uint256 tokenId, address controller) external {
+        require(msg.sender == _owner[tokenId], "not owner");
+        emit ControllerUpdated(tokenId, controllerOf[tokenId], controller);
+        controllerOf[tokenId] = controller;
+    }
+
     function transferFrom(address from, address to, uint256 tokenId) external {
         require(_owner[tokenId] == from && msg.sender == from, "not owner");
         _owner[tokenId] = to;
