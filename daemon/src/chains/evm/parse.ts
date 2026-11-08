@@ -8,6 +8,7 @@
  */
 import { decodeFunctionData, getAddress, parseTransaction, type Address, type Hex, type TransactionSerializable } from "viem";
 import type { ChainDanger, ChainParsed, ChainTokenMove, ParseContext } from "../types.js";
+import type { EvmDanger } from "../../controller/types.js";
 import { ERC20, ERC20_EXTRA, PERMIT2, PERMIT2_ABI, SEL, UNLIMITED_FLOOR, selectorOf } from "./abi.js";
 
 export type EvmCall =
@@ -90,6 +91,32 @@ function decodeCall(to: Address | null, data: Hex, owner: Address, routers: Set<
   if (routers.has(toL)) return { fn: "router", router: to, selector: sel ?? "0x00000000" };
   void owner;
   return { fn: "unknown", selector: sel };
+}
+
+const U256_MAX = (1n << 256n) - 1n;
+
+/**
+ * What the controller's own decoder will find in a transaction (evmtx_analyze, policy_check_evm), so the claims
+ * can cover it. It reads only exact-length transfer, approve / increaseAllowance, transferFrom and
+ * setApprovalForAll with clean ABI words; any other calldata (a deployment, decreaseAllowance, an NFT or
+ * ERC-1155 transfer, a permit, Permit2, a transfer with bytes appended) is an unknown contract unless the address
+ * is one of its routers. Every approval is `approve`, zero included, unless the amount is exactly 2^256 - 1.
+ */
+export function controllerEvmDangers(to: Address | null, data: Hex, routers: ReadonlySet<string>): EvmDanger[] {
+  if (to == null) return ["unknown_contract"];
+  const b = Buffer.from(data.slice(2), "hex");
+  if (b.length === 0) return [];
+  const word = (i: number) => b.subarray(4 + 32 * i, 36 + 32 * i);
+  const address = (i: number) => word(i).subarray(0, 12).every((x) => x === 0);
+  const bool = (i: number) => word(i).subarray(0, 31).every((x) => x === 0) && word(i)[31]! <= 1;
+  const sel = b.length >= 4 ? ("0x" + b.subarray(0, 4).toString("hex")) : null;
+  if (sel === SEL.transfer && b.length === 68 && address(0)) return [];
+  if ((sel === SEL.approve || sel === SEL.increaseAllowance) && b.length === 68 && address(0)) {
+    return [BigInt("0x" + word(1).toString("hex")) === U256_MAX ? "approve_unlimited" : "approve"];
+  }
+  if (sel === SEL.transferFrom && b.length === 100 && address(0) && address(1)) return [];
+  if (sel === SEL.setApprovalForAll && b.length === 68 && address(0) && bool(1)) return word(1)[31] === 1 ? ["set_approval_for_all"] : [];
+  return routers.has(to.toLowerCase()) ? [] : ["unknown_contract"];
 }
 
 export function parseEvmTx(bytes: Uint8Array, ctx: ParseContext, opts: EvmParseOptions): EvmParsed {
