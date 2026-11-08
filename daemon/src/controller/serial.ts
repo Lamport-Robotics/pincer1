@@ -11,6 +11,7 @@ export class SerialController implements ControllerClient {
   private port: SerialPort;
   private buf = "";
   private waiters = new Map<string, Waiter>();
+  private inflight = new Map<string, Promise<unknown>>();
   private listeners: ((e: ControllerEvent) => void)[] = [];
   private seq = 0;
   private pend: { id: string; need: "touch" | "long_touch" | "pin" } | null = null;
@@ -56,13 +57,23 @@ export class SerialController implements ControllerClient {
   }
 
   private request<T = any>(obj: Record<string, unknown>, key?: string, timeoutMs = 90_000, onPending?: Waiter["onPending"]): Promise<T> {
+    // a keyed request (hello, lock, inheritance_status) is answered without an id: a second caller while one is in
+    // flight shares that answer, rather than replacing the first caller's waiter and leaving it to time out
+    const shared = key ? this.inflight.get(key) : undefined;
+    if (shared) return shared as Promise<T>;
     const id = key ?? `r${++this.seq}`;
     const msg = key ? obj : { ...obj, id };
-    return new Promise<T>((resolve, reject) => {
+    const p = new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => { this.waiters.delete(id); reject(new Error("controller timeout")); }, timeoutMs);
       this.waiters.set(id, { resolve: (m) => { clearTimeout(timer); resolve(m); }, reject: (e) => { clearTimeout(timer); reject(e); }, onPending });
       this.send(msg).catch((e) => { clearTimeout(timer); this.waiters.delete(id); reject(e); });
     });
+    if (key) {
+      this.inflight.set(key, p);
+      const done = () => { if (this.inflight.get(key) === p) this.inflight.delete(key); };
+      p.then(done, done);
+    }
+    return p;
   }
 
   onEvent(cb: (e: ControllerEvent) => void) { this.listeners.push(cb); }
