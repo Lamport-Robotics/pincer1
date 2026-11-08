@@ -57,12 +57,12 @@ key is kept safe by the controller + chip, which require a physical touch and an
    plus owner additions made with the PIN; a list supplied by the main computer is informational only.
 9. **`signMessage` cannot be a disguised transaction.** The controller refuses to sign a "message" that
    parses as a transaction message.
-8. **Only our firmware runs on the controller.** The RP2350 boots only images signed with the Pincer1 key
-   (hash in OTP). Reflashing the controller with hostile firmware does not get it to run.
-9. **Only the controller can talk to the SE050.** Platform SCP03: every APDU is encrypted and MACed with
-   keys stored in the controller's OTP and rotated into the chip at provisioning. A desoldered SE050, or
-   the robot's Pi wired to the chip, gets no channel.
-10. **The PIN is checked by the chip, not by us.** Signing keys carry an SE050 policy that permits signing
+10. **Only our firmware runs on the controller.** The RP2350 boots only images signed with the Pincer1 key
+    (hash in OTP). Reflashing the controller with hostile firmware does not get it to run.
+11. **Only the controller can talk to the SE050.** Platform SCP03: every APDU is encrypted and MACed with
+    keys stored in the controller's OTP and rotated into the chip at provisioning. A desoldered SE050, or
+    the robot's Pi wired to the chip, gets no channel.
+12. **The PIN is checked by the chip, not by us.** Signing keys carry an SE050 policy that permits signing
     only inside a session authenticated with the PIN object; the chip counts attempts (5) and locks the
     object. The firmware mirrors the counter and wipes storage and key objects on the fifth failure.
     After a wipe, the 24 words are the only way back.
@@ -168,5 +168,6 @@ full before the touch.
 
 ## Reporting
 
-Open an issue or write to the address in the repository profile. We prefer fixes to disclosures and will
-credit you.
+A vulnerability goes to support@lamportrobotics.com with "security" in the subject, as
+[SECURITY.md](../SECURITY.md) says, never to a public issue. Findings inside what this page already
+accepts are welcome as issues. We prefer fixes to disclosures and will credit you.
