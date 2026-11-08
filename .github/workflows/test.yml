@@ -57,7 +57,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: cmake -S firmware -B firmware/build-fuzz -DBUILD_HOST_TESTS=ON -DBUILD_FUZZERS=ON -DCMAKE_C_COMPILER=clang
       - run: cmake --build firmware/build-fuzz --parallel --target fuzz_parsers
-      - run: mkdir -p firmware/build-fuzz/corpus && firmware/build-fuzz/fuzz_parsers -max_total_time=180 -max_len=4096 -timeout=10 firmware/build-fuzz/corpus
+      # the vectors seed the corpus: a three-minute run starts inside the parsers, not at their length checks
+      - run: python3 firmware/fuzz/seed_corpus.py vectors firmware/build-fuzz/corpus
+      - run: firmware/build-fuzz/fuzz_parsers -max_total_time=180 -max_len=4096 -timeout=10 firmware/build-fuzz/corpus
 
   daemon:
     runs-on: ubuntu-latest
