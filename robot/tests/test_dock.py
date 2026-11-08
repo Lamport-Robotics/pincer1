@@ -470,3 +470,42 @@ def test_stale_charging_sample_after_undock_is_ignored(tmp_path: Path) -> None:
         assert rig.ctrl.state == "charging"
 
     asyncio.run(body())
+
+
+def test_a_cancelled_approach_stops_and_holds_motion_until_it_has(tmp_path: Path) -> None:
+    """``leave`` mid-approach: the step in progress finishes and the approach stops; until it has,
+    the motion lock stays held, so the next run (15 % asks for the dock) never drives beside it."""
+    import time
+
+    class SlowPlateRobot(PlateRobot):
+        def __init__(self, rig: Rig) -> None:
+            super().__init__(rig)
+            self.steps: list[tuple[float, float]] = []
+
+        def walk(self, direction: str, distance_m: float, speed: float = 0.5) -> str:
+            t0 = time.monotonic()
+            time.sleep(0.05)  # a 5 cm step takes real time on the robot
+            note = super().walk(direction, distance_m, speed)
+            self.steps.append((t0, time.monotonic()))
+            return note
+
+    async def body() -> None:
+        rig = Rig(tmp_path, pct=15.0)
+        rig.robot = rig.ctrl.robot = rig.motion.robot = SlowPlateRobot(rig)
+        rig.ctrl.tick()
+        await rig.wait_state("approaching")
+        await asyncio.sleep(0.02)  # inside a backward step
+        assert await rig.ctrl.leave_dock_for("daemon") is True
+        await asyncio.sleep(0)
+        assert rig.motion.busy  # held until the cancelled step returns
+        for _ in range(20):  # a new run starts on the next tick
+            rig.ctrl.tick()
+            await asyncio.sleep(0.02)
+        steps = sorted(rig.robot.steps)
+        assert len(steps) > 2  # the new run did approach
+        overlaps = [(a, b) for a, b in zip(steps, steps[1:], strict=False) if b[0] < a[1]]
+        assert overlaps == [], f"{len(overlaps)} steps started while another was still walking"
+        rig.ctrl.close()
+        await rig.ctrl.wait()
+
+    asyncio.run(body())

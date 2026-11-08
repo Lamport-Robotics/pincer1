@@ -181,9 +181,18 @@ class MotionController:
 
     async def run_exclusive(self, fn: Callable[..., T], *args: Any) -> T:
         """Run a blocking drive routine in a thread while holding the motion lock
-        (used by the dock approach so attention / sway cannot interleave with it)."""
+        (used by the dock approach so attention / sway cannot interleave with it).
+
+        A thread cannot be cancelled: when the caller is, the lock stays held until the routine
+        returns (it is up to the routine to notice, as the dock approach does with its abort flag),
+        so nothing else starts driving while the old routine is still in a step."""
         async with self._lock:
-            return await asyncio.to_thread(fn, *args)
+            fut = asyncio.ensure_future(asyncio.to_thread(fn, *args))
+            try:
+                return await asyncio.shield(fut)
+            except asyncio.CancelledError:
+                await asyncio.wait({fut})
+                raise
 
     @property
     def busy(self) -> bool:
