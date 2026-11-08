@@ -105,9 +105,9 @@ def imu_tilt(msg) -> tuple[float, tuple[float, float, float]]:  # noqa: ANN001
 
 
 def front_clearance(scan: Scan) -> float | None:
-    """Nearest valid range in a narrow cone around angle 0."""
-    a = scan.angles
-    front = scan.valid_mask() & (abs(a) < math.radians(20))
+    """Nearest valid range in a narrow cone around angle 0, for a scan over -pi..pi or 0..2pi."""
+    off = abs((scan.angles + math.pi) % (2 * math.pi) - math.pi)
+    front = scan.valid_mask() & (off < math.radians(20))
     return float(scan.ranges[front].min()) if front.any() else None
 
 
