@@ -683,7 +683,7 @@ lines; it does not stop the alarm.
                                    ← {"t":"climb","id":"c1","ok":false,"result":"REFUSED: no riser in view."}
 ```
 
-`goto` reasons: `arrived`, `timeout` (90 s default), `no_map`, `unknown_room`, `blocked`/`rejected`
+`goto` reasons: `arrived`, `timeout` (90 s default), `no_map`, `unknown_room`, `blocked`/`rejected`/`canceled`
 (Nav2 result). Rooms live in `~/.pincer1/rooms.json`. When a map exists, `presence` carries
 `"room":"<name>|null"` (where the robot thinks it is), and `room_match` switches from the lidar
 fingerprint to localisation: `1.0` when AMCL/slam has converged (pose covariance below

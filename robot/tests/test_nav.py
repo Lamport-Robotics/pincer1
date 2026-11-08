@@ -181,3 +181,70 @@ def test_find_owner_returns_immediately_when_visible_or_without_map(tmp_path: Pa
     nav.has_map = False
     res, _ = _run_find(n, set())
     assert not res.found and not res.travelled and nav.goals == []
+
+
+def test_ros2_goto_failure_reasons_are_the_documented_ones(monkeypatch, tmp_path: Path) -> None:  # noqa: ANN001
+    """Nav2's TaskResult comes back as arrived / blocked / canceled, never as the enum's name."""
+    import enum
+    import sys
+    import types
+
+    class TaskResult(enum.Enum):  # nav2_simple_commander.robot_navigator.TaskResult
+        UNKNOWN = 0
+        SUCCEEDED = 1
+        CANCELED = 2
+        FAILED = 3
+
+    class Navigator:
+        result = TaskResult.FAILED
+
+        def __init__(self, node_name: str = "") -> None:
+            pass
+
+        def create_subscription(self, *a: object) -> None:
+            pass
+
+        def get_clock(self) -> types.SimpleNamespace:
+            return types.SimpleNamespace(now=lambda: types.SimpleNamespace(to_msg=lambda: 0))
+
+        def goToPose(self, goal: object) -> bool:  # noqa: N802
+            return True
+
+        def isTaskComplete(self) -> bool:  # noqa: N802
+            return True
+
+        def getResult(self) -> TaskResult:  # noqa: N802
+            return self.result
+
+    class PoseStamped:
+        def __init__(self) -> None:
+            ns = types.SimpleNamespace
+            self.header = ns(frame_id="", stamp=None)
+            self.pose = ns(position=ns(x=0.0, y=0.0), orientation=ns(z=0.0, w=1.0))
+
+    rclpy = types.ModuleType("rclpy")
+    rclpy.ok = lambda: True
+    geo = types.ModuleType("geometry_msgs.msg")
+    geo.PoseStamped, geo.PoseWithCovarianceStamped = PoseStamped, object
+    commander = types.ModuleType("nav2_simple_commander.robot_navigator")
+    commander.BasicNavigator, commander.TaskResult = Navigator, TaskResult
+    for name, mod in {
+        "rclpy": rclpy,
+        "geometry_msgs": types.ModuleType("geometry_msgs"),
+        "geometry_msgs.msg": geo,
+        "nav2_simple_commander": types.ModuleType("nav2_simple_commander"),
+        "nav2_simple_commander.robot_navigator": commander,
+    }.items():
+        monkeypatch.setitem(sys.modules, name, mod)
+    from pincer_robot.nav import Ros2Nav
+
+    nav = Ros2Nav(tmp_path)
+    for result, ok, reason in (
+        (TaskResult.SUCCEEDED, True, "arrived"),
+        (TaskResult.FAILED, False, "blocked"),
+        (TaskResult.CANCELED, False, "canceled"),
+        (TaskResult.UNKNOWN, False, "blocked"),
+    ):
+        Navigator.result = result
+        res = nav.goto(1.0, 2.0, 0.0, 5.0)
+        assert (res.ok, res.reason) == (ok, reason)
