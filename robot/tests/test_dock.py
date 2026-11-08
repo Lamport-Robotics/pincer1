@@ -128,13 +128,27 @@ class Rig:
         self.dist = 3.0
         return site
 
-    async def run_until(self, state: str, max_ticks: int = 2000) -> None:
-        for _ in range(max_ticks):
+    async def run_until(self, state: str, timeout_s: float = 10.0) -> None:
+        # the run is a task and its nav / approach / undock steps run in threads: wait on real time,
+        # not on a count of loop turns, or on a busy CI runner the count runs out mid-step
+        loop = asyncio.get_running_loop()
+        end = loop.time() + timeout_s
+        while loop.time() < end:
             self.ctrl.tick()
             if self.ctrl.state == state and not self.ctrl.running:
                 return
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.001)
         raise AssertionError(f"never reached {state}; at {self.ctrl.state}, states {self.states}")
+
+    async def wait_state(self, state: str, timeout_s: float = 10.0) -> None:
+        """Wait, without ticking, until the run in progress gets to ``state``. Every loop turn is
+        looked at (the fake clock passes ``verifying`` in microseconds); the bound is real time."""
+        loop = asyncio.get_running_loop()
+        end = loop.time() + timeout_s
+        while self.ctrl.state != state:
+            if loop.time() >= end:
+                raise AssertionError(f"never reached {state}; at {self.ctrl.state}, {self.states}")
+            await asyncio.sleep(0)
 
     def backward_m(self) -> float:
         return sum(abs(lin) * dur * GAIT_SPEED_MPS for lin, _ang, dur in self.robot.log if lin < 0)
@@ -359,11 +373,7 @@ def test_daemon_leave_does_not_return_and_attention_mid_run_interrupts(tmp_path:
         # Interrupt a run in progress (stuck in the verify wait).
         rig2 = Rig(tmp_path / "b", pct=15.0, powered=False)
         rig2.ctrl.tick()
-        for _ in range(500):
-            if rig2.ctrl.state == "verifying":
-                break
-            await asyncio.sleep(0)
-        assert rig2.ctrl.state == "verifying"
+        await rig2.wait_state("verifying")
         assert await rig2.ctrl.leave_dock_for("attention") is True
         await rig2.ctrl.wait()
         assert rig2.ctrl.state == "idle" and rig2.ctrl.return_pending and not rig2.ctrl.running
@@ -415,10 +425,7 @@ def test_enable_toggle_and_manual_placement(tmp_path: Path) -> None:
         # Disabling mid-run cancels the run.
         rig2 = Rig(tmp_path / "b", pct=15.0, powered=False)
         rig2.ctrl.tick()
-        for _ in range(500):
-            if rig2.ctrl.state == "verifying":
-                break
-            await asyncio.sleep(0)
+        await rig2.wait_state("verifying")
         rig2.ctrl.enabled = False
         await rig2.ctrl.wait()
         assert rig2.ctrl.state == "off" and rig2.events == []
