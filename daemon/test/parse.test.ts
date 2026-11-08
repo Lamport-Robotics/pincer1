@@ -79,6 +79,15 @@ describe("parseMessage", () => {
     expect(resolved.unresolvedLookups).toBe(false);
     expect(resolved.lamportsOut).toBe(200_000_000n);
     expect(resolved.dest).toBe(F.stranger.toBase58());
+    // resolved here, the transfer still reads its recipient from the table: the controller sees it as opaque and
+    // refuses it unless lookup_table is declared (nothing for the owner to be warned about on this side)
+    expect(resolved.touchesLookups).toBe(true);
+    expect(resolved.dangers.some((d) => d.kind === "lookup_table")).toBe(false);
+    expect(claimsFor(resolved).dangerous).toEqual(["lookup_table"]);
+    expect(claimsFor(unresolved).dangerous).toEqual(["lookup_table"]);
+    const plain = parseMessage(F.messageOf(F.v0([F.transfer(F.stranger, 0.2)], [])), { owner: own });
+    expect(plain.touchesLookups).toBe(false);
+    expect(claimsFor(plain).dangerous).toEqual([]);
   });
 
   it("claimsFor mirrors the controller contract", () => {

@@ -42,6 +42,7 @@ export interface ParsedTx {
   signers: string[];
   accounts: string[]; // static keys (+ resolved lookups for v0 when provided)
   unresolvedLookups: boolean; // v0 with lookup tables that were not resolved
+  touchesLookups: boolean; // an instruction's program or accounts come from a lookup table: opaque to the controller
   instructions: ParsedInstruction[];
   programs: string[];
   /** SOL leaving the owner via System instructions, in lamports. */
@@ -128,6 +129,9 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
   };
   const inflow = (mv: TokenMove) => { if (mv.dest && ownsDest(mv.dest, mv.mint)) out.tokenIn.push(mv); };
 
+  // the controller cannot resolve lookup tables (solmsg.c): any instruction that reaches past the static keys is
+  // flagged there, resolved here or not, and must be declared
+  const touchesLookups = msg.compiledInstructions.some((ci) => ci.programIdIndex >= staticKeys.length || ci.accountKeyIndexes.some((i) => i >= staticKeys.length));
   const instructions: ParsedInstruction[] = msg.compiledInstructions.map((ci, index) => ({
     index,
     program: accounts[ci.programIdIndex] ?? "?",
@@ -141,6 +145,7 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
     signers,
     accounts,
     unresolvedLookups,
+    touchesLookups,
     instructions,
     programs: [...new Set(instructions.map((i) => i.program))],
     lamportsOut: 0n,
@@ -373,6 +378,8 @@ export function claimsFor(p: ParsedTx, routers: ReadonlySet<string> = new Set([J
   const dangerous = new Set<string>(p.dangers.map((d) => (d.kind === "nonce" ? "set_authority" : d.kind)).filter((k) => k !== "burn"));
   // a program that is neither core nor an allowlisted router is "unknown_program" on the controller and must be declared
   if (p.programs.some((x) => !CONTROLLER_CORE_PROGRAMS.has(x) && !routers.has(x))) dangerous.add("unknown_program");
+  // resolving the tables lets the daemon explain the transaction; the controller still sees those instructions as opaque
+  if (p.touchesLookups) dangerous.add("lookup_table");
   return {
     lamports_out: p.lamportsOut.toString(),
     token_out: p.tokenOut.map((t) => ({ mint: t.mint ?? "", amount: t.amount.toString(), dest: t.dest ?? "" })),
