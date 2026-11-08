@@ -115,7 +115,8 @@ class State:
         self.path = path
         self.lock = threading.Lock()
         self.d: dict = {"last_seq": {}, "last_heartbeat": 0, "last_alarm_notify": 0, "last_pos": None,
-                        "beacon_state": "unknown", "silent_notified": False, "last_packet": None}
+                        "notified_pos": None, "beacon_state": "unknown", "silent_notified": False,
+                        "last_packet": None}
         try:
             with open(path, encoding="utf-8") as f:
                 self.d.update(json.load(f))
@@ -224,11 +225,16 @@ def handle_event(ev: dict) -> None:
             log(f"heartbeat: {describe(ev).replace(chr(10), ' | ')}")
         elif t == "alarm":
             pos = (ev["lat"], ev["lon"]) if ev.get("lat") is not None else None
-            moved = pos is not None and STATE.d["last_pos"] is not None and distance_m(pos, tuple(STATE.d["last_pos"])) > 200
+            # moved: from where the owner was last told, not from the previous packet, or a walk of 150 m a
+            # packet never counts
+            told = STATE.d.get("notified_pos")
+            moved = pos is not None and told is not None and distance_m(pos, tuple(told)) > 200
             first = STATE.d["last_alarm_notify"] == 0 or now - STATE.d["last_alarm_notify"] > 6 * 3600
             due = now - STATE.d["last_alarm_notify"] >= CFG["alarm_every"]
             if first or moved or due:
                 STATE.d["last_alarm_notify"] = now
+                if pos is not None:
+                    STATE.d["notified_pos"] = list(pos)
                 notify("Pincer1 ALARM" if first else "Pincer1 alarm update", describe(ev), urgent=True, event=ev)
             else:
                 log(f"alarm (not re-notified): {describe(ev).replace(chr(10), ' | ')}")
