@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../../.."
 ROOT=${PINCER_ROOT:-/opt/pincer1}
 sha=$(git rev-parse --short HEAD 2>/dev/null || echo nogit)
 git diff --quiet 2>/dev/null || sha="$sha.$(date +%Y%m%d%H%M%S)"
-ver="0.0.0+local.$sha"
+ver="0.0.0-local.$sha"   # "-", not "+": pincer-update and pincer-rollback refuse a "+"
 sudo mkdir -p "$ROOT/releases"
 sudo install -m 755 deploy/jetson/update/pincer-update.sh /usr/local/sbin/pincer-update
 sudo install -m 755 deploy/jetson/update/pincer-rollback.sh /usr/local/sbin/pincer-rollback
