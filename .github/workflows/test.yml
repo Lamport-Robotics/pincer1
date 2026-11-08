@@ -124,6 +124,31 @@ jobs:
       - run: git diff --exit-code -- sim/pincer1.urdf sim/pincer1.xml
       - run: python sim/walk.py --seconds 3 --no-gif
 
+  identity:
+    # Pincer1Units on a local chain: the contracts' own forge tests, then the daemon's machine identity end to end on
+    # anvil (daemon/test/identity.test.ts skips itself without anvil and the forge artifacts, so the daemon job skips it)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: git submodule update --init --depth 1 identity/contracts/lib/forge-std
+      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+        with:
+          version: v1.8.6
+      - run: forge build && forge test -vv
+        working-directory: identity/contracts
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 (version from packageManager)
+        with:
+          package_json_file: daemon/package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: daemon/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+        working-directory: daemon
+      - run: ANVIL="$(command -v anvil)" pnpm exec vitest run test/identity.test.ts
+        working-directory: daemon
+
   release-tooling:
     runs-on: ubuntu-latest
     steps:
