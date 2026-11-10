@@ -33,7 +33,9 @@ describe("vectors: solana", () => {
       expect(p.feeLamports.toString()).toBe(v.expect.fee_lamports);
       expect(p.usesDurableNonce).toBe(v.expect.durable_nonce);
       expect(p.unresolvedLookups).toBe(false); // the vectors carry their lookup tables
-      expect(set(claimsFor(p).dangerous)).toEqual(set(v.expect.warnings));
+      // `warnings` are the transaction's own; a message with lookup tables is also `accept_with_declaration:
+      // lookup_table` for the controller, which cannot read them
+      expect(set(claimsFor(p).dangerous)).toEqual(set(v.lookup_tables ? [...v.expect.warnings, "lookup_table"] : v.expect.warnings));
     });
   }
 });
