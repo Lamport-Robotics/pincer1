@@ -415,7 +415,9 @@ class DockController:
 
     # -- runs ----------------------------------------------------------------------------------
     def _start(self, coro: Awaitable[None]) -> None:
-        self._abort.clear()
+        # a fresh flag for each run: clearing the old one would let a cancelled run's thread, which
+        # only stops at its next step, carry on backing up beside the new run
+        self._abort = threading.Event()
         self._task = asyncio.get_running_loop().create_task(coro)  # type: ignore[arg-type]
 
     def _cancel_run(self) -> None:
@@ -434,12 +436,13 @@ class DockController:
     def _speed(self) -> float:
         return max(0.1, min(1.0, self.cfg.approach_speed_mps / GAIT_SPEED_MPS))
 
-    def _approach_blocking(self, wall_m: float | None) -> float:
-        """Back up in steps until the wall distance / current / distance budget. Returns m."""
+    def _approach_blocking(self, wall_m: float | None, abort: threading.Event) -> float:
+        """Back up in steps until the wall distance / current / distance budget, or until this run's
+        ``abort`` is set. Returns m."""
         cfg = self.cfg
         travelled = 0.0
         budget = cfg.approach_m + (cfg.overshoot_m if wall_m is not None else 0.0)
-        while not self._abort.is_set():
+        while not abort.is_set():
             b = self._battery()
             if b is not None and b.charging:
                 break
@@ -470,6 +473,7 @@ class DockController:
     async def _run_dock(self) -> None:
         cfg = self.cfg
         site = self.store.site
+        abort = self._abort  # this run's flag
         self.attempts = 0
         self.last_error = None
         try:
@@ -482,8 +486,8 @@ class DockController:
             for attempt in range(1, cfg.max_attempts + 1):
                 self.attempts = attempt
                 self._set_state("approaching")
-                travelled = await self.motion.run_exclusive(self._approach_blocking, wall_m)
-                if self._abort.is_set():
+                travelled = await self.motion.run_exclusive(self._approach_blocking, wall_m, abort)
+                if abort.is_set():
                     return
                 self._set_state("verifying")
                 if await self._wait_charging(cfg.verify_s):

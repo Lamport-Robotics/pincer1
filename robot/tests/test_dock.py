@@ -128,13 +128,27 @@ class Rig:
         self.dist = 3.0
         return site
 
-    async def run_until(self, state: str, max_ticks: int = 2000) -> None:
-        for _ in range(max_ticks):
+    async def run_until(self, state: str, timeout_s: float = 10.0) -> None:
+        # the run is a task and its nav / approach / undock steps run in threads: wait on real time,
+        # not on a count of loop turns, or on a busy CI runner the count runs out mid-step
+        loop = asyncio.get_running_loop()
+        end = loop.time() + timeout_s
+        while loop.time() < end:
             self.ctrl.tick()
             if self.ctrl.state == state and not self.ctrl.running:
                 return
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.001)
         raise AssertionError(f"never reached {state}; at {self.ctrl.state}, states {self.states}")
+
+    async def wait_state(self, state: str, timeout_s: float = 10.0) -> None:
+        """Wait, without ticking, until the run in progress gets to ``state``. Every loop turn is
+        looked at (the fake clock passes ``verifying`` in microseconds); the bound is real time."""
+        loop = asyncio.get_running_loop()
+        end = loop.time() + timeout_s
+        while self.ctrl.state != state:
+            if loop.time() >= end:
+                raise AssertionError(f"never reached {state}; at {self.ctrl.state}, {self.states}")
+            await asyncio.sleep(0)
 
     def backward_m(self) -> float:
         return sum(abs(lin) * dur * GAIT_SPEED_MPS for lin, _ang, dur in self.robot.log if lin < 0)
@@ -359,11 +373,7 @@ def test_daemon_leave_does_not_return_and_attention_mid_run_interrupts(tmp_path:
         # Interrupt a run in progress (stuck in the verify wait).
         rig2 = Rig(tmp_path / "b", pct=15.0, powered=False)
         rig2.ctrl.tick()
-        for _ in range(500):
-            if rig2.ctrl.state == "verifying":
-                break
-            await asyncio.sleep(0)
-        assert rig2.ctrl.state == "verifying"
+        await rig2.wait_state("verifying")
         assert await rig2.ctrl.leave_dock_for("attention") is True
         await rig2.ctrl.wait()
         assert rig2.ctrl.state == "idle" and rig2.ctrl.return_pending and not rig2.ctrl.running
@@ -415,10 +425,7 @@ def test_enable_toggle_and_manual_placement(tmp_path: Path) -> None:
         # Disabling mid-run cancels the run.
         rig2 = Rig(tmp_path / "b", pct=15.0, powered=False)
         rig2.ctrl.tick()
-        for _ in range(500):
-            if rig2.ctrl.state == "verifying":
-                break
-            await asyncio.sleep(0)
+        await rig2.wait_state("verifying")
         rig2.ctrl.enabled = False
         await rig2.ctrl.wait()
         assert rig2.ctrl.state == "off" and rig2.events == []
@@ -461,5 +468,44 @@ def test_stale_charging_sample_after_undock_is_ignored(tmp_path: Path) -> None:
         rig.ctrl._battery = lambda: fresh  # type: ignore[method-assign]
         rig.ctrl.tick()
         assert rig.ctrl.state == "charging"
+
+    asyncio.run(body())
+
+
+def test_a_cancelled_approach_stops_and_holds_motion_until_it_has(tmp_path: Path) -> None:
+    """``leave`` mid-approach: the step in progress finishes and the approach stops; until it has,
+    the motion lock stays held, so the next run (15 % asks for the dock) never drives beside it."""
+    import time
+
+    class SlowPlateRobot(PlateRobot):
+        def __init__(self, rig: Rig) -> None:
+            super().__init__(rig)
+            self.steps: list[tuple[float, float]] = []
+
+        def walk(self, direction: str, distance_m: float, speed: float = 0.5) -> str:
+            t0 = time.monotonic()
+            time.sleep(0.05)  # a 5 cm step takes real time on the robot
+            note = super().walk(direction, distance_m, speed)
+            self.steps.append((t0, time.monotonic()))
+            return note
+
+    async def body() -> None:
+        rig = Rig(tmp_path, pct=15.0)
+        rig.robot = rig.ctrl.robot = rig.motion.robot = SlowPlateRobot(rig)
+        rig.ctrl.tick()
+        await rig.wait_state("approaching")
+        await asyncio.sleep(0.02)  # inside a backward step
+        assert await rig.ctrl.leave_dock_for("daemon") is True
+        await asyncio.sleep(0)
+        assert rig.motion.busy  # held until the cancelled step returns
+        for _ in range(20):  # a new run starts on the next tick
+            rig.ctrl.tick()
+            await asyncio.sleep(0.02)
+        steps = sorted(rig.robot.steps)
+        assert len(steps) > 2  # the new run did approach
+        overlaps = [(a, b) for a, b in zip(steps, steps[1:], strict=False) if b[0] < a[1]]
+        assert overlaps == [], f"{len(overlaps)} steps started while another was still walking"
+        rig.ctrl.close()
+        await rig.ctrl.wait()
 
     asyncio.run(body())
