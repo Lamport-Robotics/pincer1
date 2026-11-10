@@ -59,6 +59,9 @@ interface Pairing { tokens: TokenRec[] }
 const TOKEN_IDLE_MS = 90 * 86_400_000;
 /** Origins are browser-supplied on the wire too; anything that is not scheme://host[:port] is dropped, never spoken. */
 const cleanOrigin = (v: unknown): string | undefined => (typeof v === "string" && /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i.test(v) && v.length <= 253 ? v : undefined);
+/** EVM transactions and messages as the extension sends them since 0.2.0: 0x hex (PROTOCOL §3.1); anything else is
+ * read as base64, as before. */
+const evmBytes = (v: string): Uint8Array => new Uint8Array(/^0x([0-9a-f]{2})*$/i.test(v) ? Buffer.from(v.slice(2), "hex") : Buffer.from(v, "base64"));
 
 class HttpError extends Error {
   readonly status: number;
@@ -178,8 +181,8 @@ export class ApiServer {
           const chain = chainOf(m.chain);
           if (!chain) return send({ t: "denied", id: m.id, reason: "bad_chain", detail: `chain must be solana, evm or bitcoin` });
           const payload = chain === "bitcoin" ? m.psbt : m.tx;
-          if (typeof payload !== "string") return send({ t: "denied", id: m.id, reason: "parse_error", detail: chain === "bitcoin" ? "psbt (base64) required" : "tx (base64) required" });
-          const bytes = new Uint8Array(Buffer.from(payload, "base64"));
+          if (typeof payload !== "string") return send({ t: "denied", id: m.id, reason: "parse_error", detail: chain === "bitcoin" ? "psbt (base64) required" : chain === "evm" ? "tx (0x hex) required" : "tx (base64) required" });
+          const bytes = chain === "evm" ? evmBytes(payload) : new Uint8Array(Buffer.from(payload, "base64"));
           const o = cleanOrigin(m.origin) ?? origin;
           const requestedChainId = chain === "evm" && m.chainId != null ? Number(m.chainId) : undefined;
           // explain first so the popup shows what the robot is reading out
@@ -200,7 +203,7 @@ export class ApiServer {
         if (m.t === "signMessage") {
           const chain = chainOf(m.chain);
           if (chain === "evm") {
-            const r = await this.d.signer.signEvmMessage({ message: typeof m.message === "string" ? new Uint8Array(Buffer.from(m.message, "base64")) : undefined, typedData: m.typedData, origin: cleanOrigin(m.origin) ?? origin, requestedChainId: m.chainId != null ? Number(m.chainId) : undefined });
+            const r = await this.d.signer.signEvmMessage({ message: typeof m.message === "string" ? evmBytes(m.message) : undefined, typedData: m.typedData, origin: cleanOrigin(m.origin) ?? origin, requestedChainId: m.chainId != null ? Number(m.chainId) : undefined });
             if (r.ok) return send({ t: "signed", id: m.id, chain, signature: "0x" + Buffer.from(r.signature).toString("hex") });
             return send({ t: "denied", id: m.id, reason: r.reason, detail: r.detail });
           }

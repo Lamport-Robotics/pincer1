@@ -779,19 +779,20 @@ scam filter (`block` ⇒ denied without asking), (c) confirmed presence, (d) had
 depends on the chain; `explain` carries `chain` back and `lines` for the popup.
 
 ```json
-→ {"t":"signTransaction","id":"e1","chain":"evm","chainId":8453,"tx":"<base64 unsigned RLP, legacy or EIP-1559>","origin":"https://app.example"}
+→ {"t":"signTransaction","id":"e1","chain":"evm","chainId":8453,"tx":"0x<unsigned RLP, legacy or EIP-1559>","origin":"https://app.example"}
 ← {"t":"explain","id":"e1","chain":"evm","summary":"On Base: Sends 0.25 ETH to 0x1234…1234, a wallet with 12+ transactions.","lines":[…],"risk":"low","reasons":[…]}
 ← {"t":"signed","id":"e1","chain":"evm","tx":"0x<signed RLP hex>"}  |  {"t":"denied","id":"e1","reason":"blocked"|"parse_error"|"no_key"|…,"detail":"…"}
 
 → {"t":"signTransaction","id":"b1","chain":"bitcoin","psbt":"<base64 BIP-174 PSBT>"}
 ← {"t":"signed","id":"b1","chain":"bitcoin","tx":"<final raw tx hex>","txid":"…"}      the daemon finalised; the dapp (or POST /broadcast) sends it
 
-→ {"t":"signMessage","id":"m2","chain":"evm","message":"<base64 EIP-191 bytes>"}
+→ {"t":"signMessage","id":"m2","chain":"evm","message":"0x<message bytes, EIP-191 prefix added by the signer>"}
 → {"t":"signMessage","id":"m3","chain":"evm","chainId":1,"typedData":{…EIP-712 JSON…}}
 ← {"t":"signed","id":"m3","chain":"evm","signature":"0x<65 bytes r‖s‖v, v = 27/28>"}
 ```
 
-`chainId` on an EVM request is what the dapp claims to be connected to; a transaction (or typed-data domain)
+EVM `tx` and `message` are 0x hex, as the extension sends them (§3.1); the daemon still reads base64 from older
+clients. `chainId` on an EVM request is what the dapp claims to be connected to; a transaction (or typed-data domain)
 for another chain is blocked. Unknown `chain` → `denied:bad_chain`. A Bitcoin request without `psbt`, or an
 EVM request whose bytes are already signed, → `denied:parse_error`. `no_key` means the controller reported no
 address for that chain (`hello.addresses`). Bitcoin message signing (BIP-322) is not offered yet
