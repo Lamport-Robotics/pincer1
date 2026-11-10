@@ -407,8 +407,11 @@ class Ros2Nav:
                 return NavResult(False, "timeout", time.time() - t0)
             time.sleep(0.2)
         result = self._nav.getResult()
-        ok = result == self._TaskResult.SUCCEEDED
-        return NavResult(ok, "arrived" if ok else str(result).lower(), time.time() - t0)
+        if result == self._TaskResult.SUCCEEDED:
+            return NavResult(True, "arrived", time.time() - t0)
+        # a reason PROTOCOL.md lists, not the enum's name ("taskresult.failed")
+        reason = "canceled" if result == self._TaskResult.CANCELED else "blocked"
+        return NavResult(False, reason, time.time() - t0)
 
     def cancel(self) -> None:
         try:

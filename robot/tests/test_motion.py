@@ -60,3 +60,22 @@ def test_climb_is_refused_by_a_body_without_legs() -> None:
     assert robot.climb(0.12).startswith("REFUSED")
     ctl = MotionController(robot)
     assert asyncio.run(ctl.climb(0.12, 0.28, 1)).startswith("REFUSED")
+
+
+def test_front_clearance_for_both_scan_conventions() -> None:
+    """An obstacle 10 degrees right of straight ahead is seen whether the lidar publishes its
+    beams over -pi..pi or over 0..2pi (where it sits near 2pi)."""
+    import numpy as np
+
+    from pincer_robot.presence.lidar import Scan
+    from pincer_robot.ros_backend import front_clearance
+
+    n = 360
+    inc = 2 * math.pi / n
+    for angle_min in (-math.pi, 0.0):
+        angles = angle_min + inc * np.arange(n)
+        ranges = np.full(n, 3.0)
+        off = (angles - math.radians(-10) + math.pi) % (2 * math.pi) - math.pi
+        ranges[np.abs(off) < inc / 2] = 0.2
+        scan = Scan(angle_min=angle_min, angle_increment=inc, ranges=ranges, ts=0.0)
+        assert front_clearance(scan) == 0.2

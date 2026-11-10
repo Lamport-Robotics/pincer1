@@ -640,3 +640,27 @@ def test_service_busy_tracks_wake_and_speech() -> None:
                 assert svc.busy is False
 
     run(body)
+
+
+def test_inflight_cap_holds_for_a_burst() -> None:
+    """MAX_INFLIGHT counts a request when it is spawned: one frame of many lines, or frames back to
+    back, is capped and the rest answered busy."""
+
+    async def body() -> None:
+        h = FakeHandlers()
+        h.say_delay = 0.5
+        async for svc, url in _server(h):
+            async with connect(url) as ws:
+                lines = (json.dumps({"t": "say", "id": f"a{i}", "text": "x"}) for i in range(30))
+                frame = "\n".join(lines)
+                await ws.send(frame)
+                for i in range(10):
+                    await ws.send(json.dumps({"t": "say", "id": f"b{i}", "text": "x"}))
+                busy = 0
+                while busy < 40 - svc.MAX_INFLIGHT:
+                    m = await _recv_type(ws, "error")
+                    assert m["error"] == "busy"
+                    busy += 1
+                assert sum(1 for t in svc._tasks if not t.done()) <= svc.MAX_INFLIGHT
+
+    run(body)

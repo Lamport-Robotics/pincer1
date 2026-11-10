@@ -147,6 +147,7 @@ class RobotApp:
         self._verifier: PassphraseVerifier | None = None
         self.head: Any = None  # body.GazeHead on the v1 body: the camera arm follows the face
         self.panel: Any = None  # body.pulse.RosbridgePanel on the chassis: oled, buzzer, buttons
+        self._panel_reset: asyncio.TimerHandle | None = None  # the pending return to idle
         self.robot: RobotInterface = self._make_robot()
         self.motion = MotionController(self.robot)
         self.dock = DockController(
@@ -682,9 +683,13 @@ class RobotApp:
         self.panel.show(title, body)
         if level in ("medium", "high", "block"):
             self.panel.beep(repeat=2 if level != "block" else 4)
+        # a newer readout drops the older one's timer, whose ttl would blank what is shown now
+        if self._panel_reset is not None:
+            self._panel_reset.cancel()
+            self._panel_reset = None
         if ttl_secs > 0:
             loop = asyncio.get_running_loop()
-            loop.call_later(
+            self._panel_reset = loop.call_later(
                 ttl_secs, lambda: self.panel.show("PINCER1", "watching") if self.panel else None
             )
 

@@ -314,6 +314,7 @@ class RobotService:
                         mid = obj.get("id") if isinstance(obj, dict) else None
                         await self._send(ws, {"t": "error", "id": mid, "error": "busy"})
                         continue
+                    self._inflight += 1  # on spawn, or a burst is all spawned before any counts
                     self._spawn(self._tracked(self._dispatch(ws, obj)))
         except ConnectionClosed:
             pass
@@ -326,12 +327,8 @@ class RobotService:
     _inflight = 0
 
     async def _tracked(self, coro):  # noqa: ANN001, ANN201
-
-        self._inflight += 1
-
         try:
             return await coro
-
         finally:
             self._inflight -= 1
 

@@ -113,3 +113,17 @@ def test_replayed_lines_are_dropped_across_restarts(relay, tmp_path) -> None:  #
     fresh = relay.State(str(tmp_path / "state.json"))
     assert fresh.d["last_seq"]["1011121314151617"] == 6
     assert os.path.exists(tmp_path / "state.json")
+
+
+def test_alarm_re_notified_200_m_from_the_last_notice(relay, monkeypatch) -> None:  # noqa: ANN001
+    """RELAY_ALARM_EVERY_S: sooner if it moved > 200 m. Packets 2 min and ~167 m apart add up."""
+    sent: list[str] = []
+    monkeypatch.setattr(relay, "notify", lambda title, *a, **kw: sent.append(title))
+    now = [1_000_000.0]
+    monkeypatch.setattr(relay.time, "time", lambda: now[0])
+    for k in range(4):  # 0, 2, 4, 6 min
+        ev = {"t": "alarm", "id": "aa", "seq": k + 1, "state": "alarm", "lat": 52.0 + k * 0.0015}
+        relay.handle_event({**ev, "lon": 13.0})
+        now[0] += 120
+    # 0 min: the first notice; 4 min: 334 m from it; 6 min: 167 m from that one, so nothing more
+    assert sent == ["Pincer1 ALARM", "Pincer1 alarm update"]
