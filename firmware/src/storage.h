@@ -3,10 +3,10 @@
  * the sectors so a power loss during a write never destroys the previous good record. Newest valid
  * CRC + highest seq wins.
  *
- *   main region        (last 8 KB)      1280-byte record v6: consent state (3 chains), pubkeys + addresses,
+ *   main region        (last 8 KB)      1536-byte record v8: consent state (3 chains), pubkeys + addresses,
  *                                       BTC account xpub, soft-signer blobs, rollover uptime, owner routers,
- *                                       duress rhythm (flag; soft-signer salted hash)
- *   inheritance region (8 KB before it) 1280-byte record v1: powered-uptime counter + inheritance
+ *                                       duress rhythm (flag; soft-signer salted hash), last accepted host time
+ *   inheritance region (8 KB before it) 1280-byte record v2: powered-uptime counter + inheritance
  *                                       arrangement + the signed transaction. Written hourly and on
  *                                       inheritance changes; NEVER written by the PIN wipe. */
 #ifndef PINCER_STORAGE_H

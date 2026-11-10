@@ -106,13 +106,14 @@ the ISP's low-light handling.
 user is in that group). The consent controller's `/dev/pincer-consent` is *not* reachable
 from this service on purpose; only `pincerd` talks to it.
 
-**Install the service** (idempotent; creates user `pincer`, `/opt/pincer1/robot`, venv, unit):
+**Install the service** (idempotent; creates user `pincer`, the venv `/opt/pincer1/robot-venv`, this checkout
+as a release under `/opt/pincer1/releases`, the unit):
 
 ```bash
 cd ~/pincer1
 deploy/jetson/robot/install.sh
 sudo -e /etc/pincer1/robot.env                       # keys, PINCER_BRAIN, topics
-sudo -u pincer -H /opt/pincer1/robot/.venv/bin/pincer-enroll   # face, voice, passphrase, duress
+sudo -u pincer -H /opt/pincer1/robot-venv/bin/pincer-enroll   # face, voice, passphrase, duress
 sudo systemctl restart pincer-robot && journalctl -u pincer-robot -f
 ```
 
@@ -135,7 +136,7 @@ What the script does with the Python packages, because it matters on this board:
 Check the backend it picked:
 
 ```bash
-sudo -u pincer -H /opt/pincer1/robot/.venv/bin/python -c \
+sudo -u pincer -H /opt/pincer1/robot-venv/bin/python -c \
   "from pincer_robot.config import Settings; print(Settings().compute_plan().describe())"
 # device=cuda face=buffalo_l ort=CUDAExecutionProvider/CPUExecutionProvider whisper=small@cuda/float16 speaker=torch:cuda
 ```
@@ -279,9 +280,11 @@ systemd), all `PINCER_*` except the ElevenLabs and Anthropic keys. See
 | `PINCER_OWNER_GRACE_S`, `PINCER_SESSION_TIMEOUT_S`, `PINCER_VOICE_TTL_S` | `5`, `300`, `120` | fusion timeouts |
 | `PINCER_TTS_BACKEND` | `auto` | `elevenlabs` / `espeak` / `print` |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | unset | required for ElevenLabs TTS |
-| `PINCER_BRAIN` | `none` | `anthropic` / `local` / `none` for the `chat` request |
+| `PINCER_BRAIN` | `none` | `lamport` (Lamport-8B on the robot, offline) / `claude` / `openai` / `deepseek` / `none` for the `chat` request; `local` and `anthropic` are aliases |
 | `PINCER_BRAIN_MODEL`, `ANTHROPIC_API_KEY` | `claude-sonnet-5-5`, unset | Claude model and key |
-| `PINCER_LOCAL_URL`, `PINCER_LOCAL_MODEL` | `http://127.0.0.1:8080/v1`, `default` | OpenAI-compatible local server |
+| `PINCER_LOCAL_URL`, `PINCER_LOCAL_MODEL` | `http://127.0.0.1:8080/v1`, `lamport-8b` | OpenAI-compatible local server (`lamport`) |
+| `PINCER_OPENAI_MODEL`, `OPENAI_API_KEY` | `gpt-4o`, unset | `openai` |
+| `PINCER_DEEPSEEK_MODEL`, `DEEPSEEK_API_KEY` | `deepseek-chat`, unset | `deepseek` |
 | `PINCER_BRAIN_MAX_TOKENS`, `PINCER_BRAIN_TIMEOUT_S` | `300`, `30` | |
 | `PINCER_ROOM_LOCK`, `PINCER_TWO_PERSON`, `PINCER_AIRGAP`, `PINCER_WAKE` | `0`, `0`, `off`, `0` | boot defaults of the owner-optional features; the daemon's `settings` message changes them at runtime |
 | `PINCER_ROOM_PATH` | `~/.pincer1/room.json` | room fingerprint (`enroll_room`) |

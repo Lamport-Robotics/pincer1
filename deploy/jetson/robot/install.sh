@@ -4,7 +4,8 @@
 #
 # What it does
 #   1. apt deps: venv, portaudio (sounddevice), espeak-ng (offline TTS), libs for OpenCV/insightface.
-#   2. system user `pincer` (shared with pincerd), /opt/pincer1, /etc/pincer1, /var/lib/pincer1.
+#   2. system user `pincer` (the daemon runs as its own user, `pincerd`), /opt/pincer1, /etc/pincer1,
+#      /var/lib/pincer1.
 #   3. this checkout as a local release under /opt/pincer1/releases, /opt/pincer1/current → it
 #      (deploy/jetson/update; signed tarballs take the same path later).
 #   4. shared venv /opt/pincer1/robot-venv with --system-site-packages so ROS2 Humble's rclpy and
@@ -37,7 +38,7 @@ sudo apt-get install -y --no-install-recommends \
   libgl1 libglib2.0-0 libgomp1 \
   v4l-utils
 
-# 2. user + dirs (same `pincer` user as deploy/jetson/daemon/install.sh; harmless if it exists)
+# 2. user + dirs (`pincer`; pincerd has its own user, see deploy/jetson/daemon/install.sh; harmless if it exists)
 id -u pincer >/dev/null 2>&1 || sudo useradd --system --create-home --home-dir /var/lib/pincer1 pincer
 for g in video audio dialout render; do
   getent group "$g" >/dev/null && sudo usermod -aG "$g" pincer || true
