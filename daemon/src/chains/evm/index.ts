@@ -8,11 +8,14 @@ import type { RiskVerdict } from "../../risk/filter.js";
 import type { EvmClaims, EvmDanger } from "../../controller/types.js";
 import type { AssessCtx, ChainAdapter, ChainIntel, ExplainCtx, ParseContext } from "../types.js";
 import { EvmIntel, type EvmIntelOptions } from "./intel.js";
-import { parseEvmTx, type EvmParsed } from "./parse.js";
+import { controllerEvmDangers, parseEvmTx, type EvmParsed } from "./parse.js";
 import { explainEvm, fmtNativeEvm } from "./explain.js";
 import { assessEvm } from "./risk.js";
 import type { EvmRpc } from "./rpc.js";
 import { EVM_ROUTERS } from "../../swap/routers.js";
+
+/** The routers built into the controller; one the owner added with the PIN is not known here. */
+const CONTROLLER_ROUTERS: ReadonlySet<string> = new Set(EVM_ROUTERS.map((r) => r.toLowerCase()));
 
 export interface EvmAdapterOptions {
   rpcs: Map<number, EvmRpc>;
@@ -70,6 +73,9 @@ export class EvmAdapter implements ChainAdapter<EvmParsed> {
     // daemon learned at runtime (THORChain's rotating router) is an unknown contract to the controller, so
     // declare it as such; the owner sees "unknown contract" on the trusted display and decides.
     if (p.call.fn === "router") { const router = p.call.router.toLowerCase(); if (!EVM_ROUTERS.some((r) => r.toLowerCase() === router)) dangerous.add("unknown_contract"); }
+    // and whatever the controller's narrower decoder will flag itself (an approval of 0, an NFT transfer, a permit):
+    // it refuses anything it finds that the claims leave out
+    for (const d of controllerEvmDangers(p.to, p.data, CONTROLLER_ROUTERS)) dangerous.add(d);
     return {
       chain_id: p.chainId,
       to: p.to ?? "",

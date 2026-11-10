@@ -14,7 +14,7 @@ import { getAddress, hashMessage, keccak256, type Hex } from "viem";
 import { publicKeyToAddress } from "viem/accounts";
 import * as bitcoin from "bitcoinjs-lib";
 import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage } from "../tx/parse.js";
-import { looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
+import { controllerEvmDangers, looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
 import { parseTypedData, typedDataDigest } from "../chains/evm/message.js";
 import { netOf, parsePsbt, type BtcNetwork } from "../chains/bitcoin/psbt.js";
 import type { Addresses, Allowance, AnyClaims, BtcClaims, Claims, ControllerClient, ControllerEvent, DenyReason, EvmClaims, Hello, IdentityConfig, IdentityStatus, InheritanceStatus, MsgClaims, PendingHook, Policy, PolicyChain, SignKind, UpdateBegin, UpdateReason, UpdateResult } from "./types.js";
@@ -369,8 +369,9 @@ export class SimController implements ControllerClient {
       // the ERC-20 recipient must be the one described
       if (t.dest && (c.to ?? "").toLowerCase() !== t.dest.toLowerCase()) return { ok: false, reason: "claims_mismatch" };
     }
-    // (5) dangers declared
+    // (5) dangers declared: the daemon's reading, and what the controller's own narrower decoder finds
     for (const d of parsed.dangers) if (!(claims.dangerous ?? []).includes(d.kind as EvmClaims["dangerous"][number])) return { ok: false, reason: "policy" };
+    for (const d of controllerEvmDangers(parsed.to, parsed.data, this.routers)) if (!(claims.dangerous ?? []).includes(d)) return { ok: false, reason: "policy" };
     // (6) daily limit in wei
     if (this.spentFor("evm") + parsed.value > this.limitFor("evm")) return { ok: false, reason: "over_daily_limit" };
 

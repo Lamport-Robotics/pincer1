@@ -1,7 +1,8 @@
 /** EVM adapter: parse, explain, scam filter, EIP-712, assembly, and the full pipeline through the sim controller. */
 import { describe, it, expect } from "vitest";
-import { getAddress, hashTypedData, keccak256, maxUint256, parseTransaction, recoverAddress, recoverTypedDataAddress, recoverMessageAddress, type Hex } from "viem";
-import { parseEvmTx, looksLikeEvmTx } from "../src/chains/evm/parse.js";
+import { encodeFunctionData, getAddress, hashTypedData, keccak256, maxUint256, parseTransaction, recoverAddress, recoverTypedDataAddress, recoverMessageAddress, type Hex } from "viem";
+import { controllerEvmDangers, parseEvmTx, looksLikeEvmTx } from "../src/chains/evm/parse.js";
+import { ERC20_EXTRA } from "../src/chains/evm/abi.js";
 import { explainEvm } from "../src/chains/evm/explain.js";
 import { assessEvm } from "../src/chains/evm/risk.js";
 import { EvmIntel } from "../src/chains/evm/intel.js";
@@ -43,6 +44,37 @@ describe("EVM parse", () => {
     expect(r.call.fn).toBe("router"); expect(r.dangers).toEqual([]);
     const u = parse(E.tx1559({ to: E.CONTRACT, data: "0xdeadbeef" as Hex, gas: 200_000n }));
     expect(u.dangers[0].kind).toBe("unknown_contract");
+  });
+});
+
+describe("EVM claims cover what the controller decodes", () => {
+  // the controller's decoder (evmtx.c) is narrower than the daemon's: whatever it flags has to be declared
+  const h = E.evmHarness();
+  const declared = (to: `0x${string}`, data: Hex) => [...h.evm.claims(parse(E.tx1559({ to, data, gas: 120_000n }))).dangerous].sort();
+  const extra = (fn: string, args: readonly unknown[]) => encodeFunctionData({ abi: ERC20_EXTRA, functionName: fn as any, args: args as any });
+  it("an approval of zero (a revoke) and one below 2^256 - 1 are approve to the controller", () => {
+    expect(declared(E.USDC, E.erc20Approve(E.EOA_SPENDER, 0n))).toEqual(["approve"]);
+    expect(declared(E.USDC, E.erc20Approve(E.EOA_SPENDER, 1n << 200n))).toEqual(["approve", "approve_unlimited"]);
+    expect(declared(E.USDC, E.approveUnlimited(E.EOA_SPENDER))).toEqual(["approve_unlimited"]);
+    expect(declared(E.USDC, E.erc20Approve(E.EOA_SPENDER, 5n))).toEqual(["approve"]);
+  });
+  it("calldata the controller does not decode is an unknown contract", () => {
+    expect(declared(E.USDC, extra("decreaseAllowance", [E.EOA_SPENDER, 5n]))).toContain("unknown_contract");
+    expect(declared(E.CONTRACT, extra("safeTransferFrom", [own, E.STRANGER, 7n]))).toContain("unknown_contract");
+    expect(declared(E.USDC, (E.erc20Transfer(E.STRANGER, 1n) + "deadbeef") as Hex)).toContain("unknown_contract");
+  });
+  it("what the controller reads cleanly adds nothing", () => {
+    expect(declared(E.USDC, E.erc20Transfer(E.STRANGER, 1n))).toEqual([]);
+    expect(declared(E.CONTRACT, extra("setApprovalForAll", [E.EOA_SPENDER, false]))).toEqual([]);
+    expect(declared(E.ROUTER, "0x12345678" as Hex)).toEqual([]); // a built-in router
+  });
+  it("controllerEvmDangers mirrors evmtx_analyze on the edges", () => {
+    const none = new Set<string>();
+    expect(controllerEvmDangers(null, "0x6080", none)).toEqual(["unknown_contract"]);
+    expect(controllerEvmDangers(E.STRANGER, "0x", none)).toEqual([]);
+    expect(controllerEvmDangers(E.USDC, "0xa9059c", none)).toEqual(["unknown_contract"]);
+    const dirty = (E.erc20Transfer(E.STRANGER, 1n).slice(0, 10) + "ff" + E.erc20Transfer(E.STRANGER, 1n).slice(12)) as Hex;
+    expect(controllerEvmDangers(E.USDC, dirty, none)).toEqual(["unknown_contract"]); // address word with dirty high bytes
   });
 });
 
