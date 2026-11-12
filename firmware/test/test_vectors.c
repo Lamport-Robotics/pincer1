@@ -83,6 +83,17 @@ static int decode_bytes(const cJSON *v, uint8_t *out, size_t cap)
 }
 static uint64_t u64_of(const char *dec) { return dec ? strtoull(dec, NULL, 10) : 0; }
 
+/* ---- solana messages (signMessage): which ones the controller must never sign ---- */
+static void solana_msg_vector(const char *name, const cJSON *v)
+{
+    static uint8_t bytes[1024];
+    (void)name;
+    int n = decode_bytes(v, bytes, sizeof bytes);
+    CHECK(n > 0);
+    CHECK(!solmsg_looks_like_message(bytes, (size_t)n)); /* none of them is a transaction in disguise */
+    CHECK_EQ(solmsg_is_ring_key_derivation(bytes, (size_t)n), refused(v));
+}
+
 /* ---- solana ---- */
 static void solana_vector(const char *name, const cJSON *v)
 {
@@ -290,6 +301,8 @@ static void typed_vector(const char *name, const cJSON *v)
 
 int main(void)
 {
+    printf("- solana_msg\n");
+    CHECK(walk("solana_msg", solana_msg_vector) >= 4);
     printf("- solana\n");
     CHECK(walk("solana", solana_vector) >= 8);
     printf("- evm\n");

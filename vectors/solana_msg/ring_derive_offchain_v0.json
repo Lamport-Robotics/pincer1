@@ -1,0 +1,25 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "ring_derive_offchain_v0",
+ "notes": "the message a Privacy Rings wallet signs to derive its viewing and nullifier keys: \"TSPP/derive/v1\" in a Solana off-chain message v0",
+ "source": {
+  "constructed": "constructed, not fetched: Helius Private Wallet integration docs (https://www.helius.dev/docs/privacy/integration/wallet.md), opened 2026-11-12"
+ },
+ "bytes": "/3NvbGFuYSBvZmZjaGFpbgAdMqiFM68S015axvzoF6TLgQvMQRU4axSnjosu8J2GTAAB9mdvfOHLx5/LKGwCdD9VFHe2qEDoyuuYU3+tokUM5Q8OAFRTUFAvZGVyaXZlL3Yx",
+ "owner": "Harmonic8SoAfZixJqUxxdSeyWzr6q7XFjuiXS5Z2zPg",
+ "expect": {
+  "controller": "refuse: ring_key_derivation",
+  "ring_key_derivation": true
+ },
+ "layout": [
+  "ff 'solana offchain' (16)",
+  "version 00",
+  "application domain = sha256('TSPP/derive/v1') (32)",
+  "format 00",
+  "signer count 01",
+  "signer pubkey (32)",
+  "payload length 0e 00 (u16 LE)",
+  "'TSPP/derive/v1' (14)"
+ ]
+}

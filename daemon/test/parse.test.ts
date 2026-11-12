@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ownerAtaSet, parseMessage, looksLikeMessage, claimsFor, controllerLimits } from "../src/tx/parse.js";
+import { ownerAtaSet, parseMessage, looksLikeMessage, isRingKeyDerivation, claimsFor, controllerLimits } from "../src/tx/parse.js";
 import { explain } from "../src/tx/explain.js";
 import * as F from "./fixtures.js";
 import { createTransferCheckedInstruction } from "@solana/spl-token";
@@ -100,6 +100,20 @@ describe("parseMessage", () => {
     // a program the controller does not know is declared so the controller's own rule can bite
     expect(claimsFor(parseMessage(F.messageOf(F.legacy([F.callUnknown()])), { owner: own })).dangerous).toEqual(["unknown_program"]);
     expect(claimsFor(parseMessage(F.messageOf(F.legacy([F.jupiterLike()])), { owner: own })).dangerous).toEqual([]);
+  });
+
+  it("isRingKeyDerivation finds the derivation message in any wrapping, and nothing else", () => {
+    const t = (s: string) => new TextEncoder().encode(s);
+    expect(isRingKeyDerivation(t("TSPP/derive/v1"))).toBe(true);
+    expect(isRingKeyDerivation(t("TSPP/derive/v2"))).toBe(true);
+    expect(isRingKeyDerivation(t("Sign in to example.xyz\nnonce: 81\nTSPP/derive/v1"))).toBe(true);
+    expect(isRingKeyDerivation(new Uint8Array([0, 0, ...t("TSPP/derive/v1"), 0]))).toBe(true);
+    // the canonical envelope's application domain, with another payload behind it
+    expect(isRingKeyDerivation(new Uint8Array([0xff, ...t("solana offchain"), 0, ...Buffer.from("1d32a88533af12d35e5ac6fce817a4cb810bcc4115386b14a78e8b2ef09d864c", "hex"), 0, 1]))).toBe(true);
+    expect(isRingKeyDerivation(t("Sign in to pump.fun\nnonce: 1234"))).toBe(false);
+    expect(isRingKeyDerivation(t("TSPP/derive"))).toBe(false);
+    expect(isRingKeyDerivation(t("tspp/derive/v1"))).toBe(false);
+    expect(isRingKeyDerivation(new Uint8Array())).toBe(false);
   });
 
   it("looksLikeMessage distinguishes messages from arbitrary bytes", () => {

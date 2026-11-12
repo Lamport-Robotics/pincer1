@@ -57,6 +57,12 @@ key is kept safe by the controller + chip, which require a physical touch and an
    plus owner additions made with the PIN; a list supplied by the main computer is informational only.
 9. **`signMessage` cannot be a disguised transaction.** The controller refuses to sign a "message" that
    parses as a transaction message.
+   **Nor can it be the Privacy Rings key derivation.** A Privacy Rings wallet derives its viewing and
+   nullifier keys from one deterministic signature over `TSPP/derive/v1` in an off-chain envelope. Whoever
+   gets that signature has those keys for good: the private balance and history, though not the funds. The
+   controller refuses any message that contains `TSPP/derive/` or that envelope's application domain, so no
+   touch on an innocent-looking request can give it away. The daemon blocks the same bytes before asking
+   and says which site asked.
 10. **Only our firmware runs on the controller.** The RP2350 boots only images signed with the Pincer1 key
     (hash in OTP). Reflashing the controller with hostile firmware does not get it to run.
 11. **Only the controller can talk to the SE050.** Platform SCP03: every APDU is encrypted and MACed with

@@ -80,6 +80,27 @@ export interface ParseOptions {
   lookupTables?: Record<string, string[]>;
 }
 
+const RING_DERIVE_TAG = new TextEncoder().encode("TSPP/derive/");
+/** SHA-256("TSPP/derive/v1"): the application domain of the off-chain envelope the keys are derived from. */
+const RING_DERIVE_DOMAIN_V1 = Uint8Array.from(Buffer.from("1d32a88533af12d35e5ac6fce817a4cb810bcc4115386b14a78e8b2ef09d864c", "hex"));
+function contains(bytes: Uint8Array, needle: Uint8Array): boolean {
+  const n = needle.length;
+  outer: for (let i = 0; i + n <= bytes.length; i++) {
+    for (let j = 0; j < n; j++) if (bytes[i + j] !== needle[j]) continue outer;
+    return true;
+  }
+  return false;
+}
+/**
+ * True when the bytes are, or contain, a Privacy Rings key-derivation message: the text `TSPP/derive/` of any
+ * version, raw or inside any off-chain envelope, or the application domain the canonical envelope carries.
+ * The signature over it is deterministic and every privacy key of the
+ * wallet is derived from it, so `signMessage` must never produce it. The controller refuses the same bytes.
+ */
+export function isRingKeyDerivation(bytes: Uint8Array): boolean {
+  return contains(bytes, RING_DERIVE_TAG) || contains(bytes, RING_DERIVE_DOMAIN_V1);
+}
+
 /** True when the bytes deserialize as a Solana message (used to refuse disguised `signMessage` payloads). */
 export function looksLikeMessage(bytes: Uint8Array): boolean {
   try {

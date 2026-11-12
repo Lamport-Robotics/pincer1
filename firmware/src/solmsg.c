@@ -135,6 +135,22 @@ bool solmsg_looks_like_message(const uint8_t *bytes, size_t len)
     return solmsg_parse(bytes, len, &m) == SOLMSG_OK;
 }
 
+static bool contains(const uint8_t *bytes, size_t len, const uint8_t *needle, size_t n)
+{
+    if (!bytes || len < n) return false;
+    for (size_t i = 0; i + n <= len; i++)
+        if (bytes[i] == needle[0] && memcmp(bytes + i, needle, n) == 0) return true;
+    return false;
+}
+
+bool solmsg_is_ring_key_derivation(const uint8_t *bytes, size_t len)
+{
+    static const char tag[] = "TSPP/derive/";
+    /* SHA-256("TSPP/derive/v1"): the application domain of the off-chain envelope the keys are derived from */
+    static const uint8_t domain_v1[32] = { 0x1d, 0x32, 0xa8, 0x85, 0x33, 0xaf, 0x12, 0xd3, 0x5e, 0x5a, 0xc6, 0xfc, 0xe8, 0x17, 0xa4, 0xcb, 0x81, 0x0b, 0xcc, 0x41, 0x15, 0x38, 0x6b, 0x14, 0xa7, 0x8e, 0x8b, 0x2e, 0xf0, 0x9d, 0x86, 0x4c };
+    return contains(bytes, len, (const uint8_t *)tag, sizeof tag - 1) || contains(bytes, len, domain_v1, sizeof domain_v1);
+}
+
 static const uint8_t *key_at(const solmsg_t *m, uint8_t idx)
 {
     return (idx < m->n_static_keys) ? m->static_keys + 32 * (size_t)idx : NULL;

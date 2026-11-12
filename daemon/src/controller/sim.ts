@@ -13,7 +13,7 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { getAddress, hashMessage, keccak256, type Hex } from "viem";
 import { publicKeyToAddress } from "viem/accounts";
 import * as bitcoin from "bitcoinjs-lib";
-import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage } from "../tx/parse.js";
+import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage, isRingKeyDerivation } from "../tx/parse.js";
 import { controllerEvmDangers, looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
 import { parseTypedData, typedDataDigest } from "../chains/evm/message.js";
 import { netOf, parsePsbt, type BtcNetwork } from "../chains/bitcoin/psbt.js";
@@ -293,6 +293,7 @@ export class SimController implements ControllerClient {
 
     if (kind === "msg") {
       if (looksLikeMessage(bytes)) return { ok: false, reason: "policy" };
+      if (isRingKeyDerivation(bytes)) return { ok: false, reason: "policy" }; // firmware: solmsg_is_ring_key_derivation
     } else {
       let parsed;
       try { parsed = parseMessage(bytes, { owner }); } catch { return { ok: false, reason: "policy" }; }

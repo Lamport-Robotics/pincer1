@@ -517,9 +517,33 @@ static void test_malformed(void)
     CHECK(solmsg_looks_like_message(m.buf, m.len));
 }
 
+/* signMessage must never sign the message the Privacy Rings keys are derived from, however it is wrapped */
+static void test_ring_key_derivation(void)
+{
+#define RING(s) solmsg_is_ring_key_derivation((const uint8_t *)(s), sizeof(s) - 1)
+    CHECK(RING("TSPP/derive/v1"));
+    CHECK(RING("TSPP/derive/v2"));                                  /* a later version of the same derivation */
+    CHECK(RING("TSPP/derive/"));
+    CHECK(RING("Sign in to example.xyz\nnonce: 81\nTSPP/derive/v1")); /* buried in an innocent-looking text */
+    CHECK(RING("\xffsolana offchain\x00\x00\x0e\x00TSPP/derive/v1"));  /* inside an off-chain envelope */
+    CHECK(RING("\x00\x00TSPP/derive/v1\x00\x00"));                   /* binary on both sides */
+    CHECK(RING("TSPP/deriveTSPP/derive/v1"));                       /* a false start right before it */
+    /* the canonical envelope's application domain, SHA-256("TSPP/derive/v1"), with some other payload behind it */
+    CHECK(RING("\xffsolana offchain\x00" "\x1d\x32\xa8\x85\x33\xaf\x12\xd3\x5e\x5a\xc6\xfc\xe8\x17\xa4\xcb\x81\x0b\xcc\x41\x15\x38\x6b\x14\xa7\x8e\x8b\x2e\xf0\x9d\x86\x4c" "\x00\x01" "pubkeypubkeypubkeypubkeypubkey32" "\x02\x00" "hi"));
+    CHECK(!RING("Sign in to pump.fun\nnonce: 1234"));
+    CHECK(!RING("TSPP/derive"));                                    /* one byte short of the tag */
+    CHECK(!RING("tspp/derive/v1"));                                 /* other bytes give another signature: not the key message */
+    CHECK(!RING("TSPP/deriv/e/v1"));
+    CHECK(!RING(""));
+    CHECK(!solmsg_is_ring_key_derivation(NULL, 0));
+    CHECK(!solmsg_is_ring_key_derivation((const uint8_t *)"TSPP/derive/v1", 11)); /* the length is honoured */
+#undef RING
+}
+
 int main(void)
 {
     init_keys();
+    RUN(test_ring_key_derivation);
     RUN(test_legacy_transfer_half_sol);
     RUN(test_two_transfers);
     RUN(test_nonce_and_unknown_system_ixs);

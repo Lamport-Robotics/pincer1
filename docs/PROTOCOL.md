@@ -168,7 +168,10 @@ reply, event or `hello` field ever says whether one exists.
 
 `kind` is `tx` (a serialized Solana *message*, legacy or v0; the controller parses it) or `msg`
 (an arbitrary byte string for `signMessage`; the controller refuses anything that parses as a transaction
-message, so a message can never be a disguised transaction).
+message, so a message can never be a disguised transaction). It also refuses, with `denied:policy`, any
+message that contains `TSPP/derive/` or the bytes of SHA-256(`TSPP/derive/v1`): that is the Privacy Rings
+key-derivation message, raw or in its off-chain envelope, and its signature is the wallet's privacy keys
+(`vectors/solana_msg/`).
 
 Controller-side checks before touch is even requested:
 

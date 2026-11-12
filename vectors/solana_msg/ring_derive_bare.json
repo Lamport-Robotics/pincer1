@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "ring_derive_bare",
+ "notes": "the bare payload, as some browser-wallet integrations pass it to signMessage",
+ "source": {
+  "constructed": "constructed, not fetched: Helius Private Wallet integration docs (https://www.helius.dev/docs/privacy/integration/wallet.md), opened 2026-11-12"
+ },
+ "bytes": "VFNQUC9kZXJpdmUvdjE=",
+ "owner": "Harmonic8SoAfZixJqUxxdSeyWzr6q7XFjuiXS5Z2zPg",
+ "expect": {
+  "controller": "refuse: ring_key_derivation",
+  "ring_key_derivation": true
+ }
+}

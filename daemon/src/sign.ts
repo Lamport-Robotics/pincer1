@@ -9,7 +9,7 @@
  * gates, in the same order for Solana, EVM and Bitcoin.
  */
 import { Connection } from "@solana/web3.js";
-import { type ParsedTx } from "./tx/parse.js";
+import { type ParsedTx, isRingKeyDerivation } from "./tx/parse.js";
 import { type Explanation } from "./tx/explain.js";
 import { type RiskVerdict } from "./risk/filter.js";
 import { Intel } from "./risk/intel.js";
@@ -245,6 +245,15 @@ export class Signer {
   }
 
   async signMessage(message: Uint8Array, origin?: string): Promise<{ ok: true; signature: Uint8Array } | { ok: false; reason: string }> {
+    // Scam filter: the message every Privacy Rings key of this wallet is derived from. Its signature is the keys,
+    // for good, so no site gets it through signMessage, and the owner is told who asked. Blocked before the owner
+    // is asked for anything; the controller refuses the same bytes on its own.
+    if (isRingKeyDerivation(message)) {
+      const who = origin ? siteHost(origin) : "Someone";
+      log.warn("blocked", { chain: "solana", origin, why: "ring key derivation through signMessage" });
+      await this.robot.say(`I'm not signing this. ${who} asked for the signature that unlocks your private balance keys. A message request must never get that.`);
+      return { ok: false, reason: "blocked" };
+    }
     if (!this.robot.ownerPresent()) { await this.robot.say("Someone wants me to sign a message, but I can't see you."); return { ok: false, reason: "owner_not_present" }; }
     const text = quoteUntrusted(new TextDecoder().decode(message));
     await this.robot.say(`${origin ? siteHost(origin) + " asks me to sign a message." : "Someone asks me to sign a message."} The site says: "${text}". Touch me to sign.`);

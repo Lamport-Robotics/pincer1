@@ -167,6 +167,25 @@ describe("signing pipeline", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("signMessage never signs the Privacy Rings key-derivation message, and says who asked", async () => {
+    const { sim, robot, signer } = harness();
+    const none = { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] };
+    const bare = new TextEncoder().encode("TSPP/derive/v1");
+    const enveloped = new Uint8Array([0xff, ...new TextEncoder().encode("solana offchain"), 0, 0, 14, 0, ...bare]);
+    // the controller refuses on its own, whatever the daemon does
+    expect(await sim.sign("msg", bare, none)).toEqual({ ok: false, reason: "policy" });
+    expect(await sim.sign("msg", enveloped, none)).toEqual({ ok: false, reason: "policy" });
+    // the daemon blocks it before asking for a touch and names the site
+    const r = await signer.signMessage(enveloped, "https://drainer.example");
+    expect(r).toEqual({ ok: false, reason: "blocked" });
+    expect(robot.spoken).toHaveLength(1);
+    expect(robot.spoken[0]).toMatch(/^I'm not signing this\. drainer\.example asked for the signature that unlocks your private balance keys/);
+    expect(robot.spoken[0]).not.toMatch(/Touch me/);
+    // an ordinary message is still asked about and signed
+    const ok = await signer.signMessage(new TextEncoder().encode("Sign in to pump.fun"), "https://pump.fun");
+    expect(ok.ok).toBe(true);
+  });
+
   it("an allowance lets agent trades through without a touch, within its limits", async () => {
     const { sim } = harness({ autoTouch: false });
     // grant: long touch simulated by calling touch(true) after the request is pending

@@ -1133,6 +1133,8 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     case PROTO_KIND_MSG:
         /* signMessage: never sign bytes that would also be a valid transaction of any chain. */
         if (looks_like_any_tx(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
+        /* nor the message every Privacy Rings key of this wallet is derived from */
+        if (solmsg_is_ring_key_derivation(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
         res = consent_begin_sign(&g_consent, r->id, 0, NULL, 0, false, r->sign.ttl_ms, now, &act, &why);
         break;
     case PROTO_KIND_TX: {

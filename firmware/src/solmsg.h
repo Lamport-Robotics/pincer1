@@ -109,6 +109,13 @@ int solmsg_parse(const uint8_t *bytes, size_t len, solmsg_t *out);
 void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t *s);
 /* True when the bytes are a well-formed legacy/v0 message (used to refuse disguised signMessage payloads). */
 bool solmsg_looks_like_message(const uint8_t *bytes, size_t len);
+
+/* True when the bytes are, or contain, a Privacy Rings key-derivation message: the text "TSPP/derive/" of any
+ * version, raw or inside any off-chain envelope, or the application domain the canonical envelope carries
+ * (SHA-256 of "TSPP/derive/v1"). The signature over that message is deterministic and every privacy
+ * key of the wallet is derived from it, so signMessage must never produce it: one touch on an innocent-looking
+ * request would hand over the viewing and nullifier keys for good. */
+bool solmsg_is_ring_key_derivation(const uint8_t *bytes, size_t len);
 /* Durable-nonce transaction: the FIRST instruction is System `AdvanceNonceAccount` (tag 4) on static
  * accounts. Fills `nonce_account` (its first account) when non-NULL. */
 bool solmsg_starts_with_advance_nonce(const solmsg_t *m, uint8_t nonce_account[32]);
