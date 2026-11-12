@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "compact_json",
+ "notes": "compact JSON, as some exchanges sign orders and withdrawals",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "eyJ0eXBlIjoiYmluZF9hZ2VudF93YWxsZXQiLCJhZ2VudF93YWxsZXQiOiJ4IiwiZXhwaXJ5X3dpbmRvdyI6NTAwMCwidGltZXN0YW1wIjoxNzk0MDAwMDAwMDAwfQ==",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: no_space",
+  "ring_key_derivation": false
+ }
+}

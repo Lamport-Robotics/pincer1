@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "offchain_v0_format_0_newline",
+ "notes": "format 0 has no line breaks",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "/3NvbGFuYSBvZmZjaGFpbgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iwfAFNpZ24gaW4gdG8gZXhhbXBsZS5vcmcKbm9uY2U6IDE=",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: envelope",
+  "ring_key_derivation": false
+ }
+}

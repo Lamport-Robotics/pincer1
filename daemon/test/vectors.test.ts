@@ -5,7 +5,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAddress } from "viem";
-import { parseMessage, claimsFor, looksLikeMessage, isRingKeyDerivation } from "../src/tx/parse.js";
+import { PublicKey } from "@solana/web3.js";
+import { parseMessage, claimsFor, looksLikeMessage, isRingKeyDerivation, checkSignMessage, ED25519_MSG_MAX } from "../src/tx/parse.js";
 import { SimController } from "../src/controller/sim.js";
 import { parseEvmTx } from "../src/chains/evm/parse.js";
 import { EvmAdapter } from "../src/chains/evm/index.js";
@@ -46,7 +47,11 @@ describe("vectors: solana messages", () => {
     it(v.name, async () => {
       const refuse = v.expect.controller.startsWith("refuse");
       expect(looksLikeMessage(bytesOf(v))).toBe(false);
-      expect(isRingKeyDerivation(bytesOf(v))).toBe(refuse);
+      expect(isRingKeyDerivation(bytesOf(v))).toBe(v.expect.ring_key_derivation);
+      // the rule itself, with the vector's owner as the signing key: the same verdict as firmware/test/test_vectors.c
+      const check = bytesOf(v).length <= ED25519_MSG_MAX ? checkSignMessage(bytesOf(v), new PublicKey(v.owner).toBytes()) : { ok: false as const };
+      expect(check.ok).toBe(!refuse);
+      if (check.ok && v.expect.shown !== undefined) expect(Buffer.from(check.text).toString("latin1")).toBe(v.expect.shown);
       // the sim controller answers the way the firmware does
       const sim = new SimController({ seed: new Uint8Array(32).fill(7), autoTouch: true });
       const r = await sim.sign("msg", bytesOf(v), { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] });

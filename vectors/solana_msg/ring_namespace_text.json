@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "ring_namespace_text",
+ "notes": "anything in the Privacy Rings key namespace",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "VFNQUC9kZWNyeXB0L3YxIHJlcXVlc3QgZm9yIGV4YW1wbGUub3Jn",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: ring_namespace",
+  "ring_key_derivation": false
+ }
+}

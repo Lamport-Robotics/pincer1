@@ -444,6 +444,16 @@ static const uint8_t *owner_pubkey(void)
     return memcmp(k, zero, 32) == 0 ? NULL : k;
 }
 
+/* The key of the slot that is NOT active (NULL when that slot holds none). */
+static const uint8_t *other_slot_pubkey(void)
+{
+    static const uint8_t zero[32] = {0};
+    const uint8_t *k = g_data.pubkey[consent_active_slot(&g_consent) == CONSENT_SLOT_REAL ? CONSENT_SLOT_DECOY : CONSENT_SLOT_REAL];
+    return memcmp(k, zero, 32) == 0 ? NULL : k;
+}
+
+_Static_assert(CONSENT_INH_MSG_MAX == SIGNER_ED25519_MSG_MAX, "one bound for every Ed25519 signing path");
+
 /* Active slot's EVM address / Bitcoin key hash (NULL until init derived them). */
 static const uint8_t *owner_evm_addr(void)
 {
@@ -1121,6 +1131,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     bool have_parsed = false;
     uint8_t digest[32];
     tui_sign_t ui;
+    solmsg_signmsg_t sm;
 
     if (!g_consent.p.initialized || !owner) { send_denied(r->id, "not_initialized"); return; }
     if (!g_signer_ok) { send_denied(r->id, "policy"); return; }
@@ -1128,18 +1139,27 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
      * one must not get to overwrite what the coming touch would sign. */
     if (g_consent.pending.op != CONSENT_OP_NONE) { send_denied(r->id, "busy"); return; }
     memset(&ui, 0, sizeof ui);
+    memset(&sm, 0, sizeof sm);
 
     switch (r->sign.kind) {
     case PROTO_KIND_MSG:
+        /* the chip signs in one command: what it cannot take is refused before the owner is asked, not after */
+        if (r->sign.len == 0 || r->sign.len > SIGNER_ED25519_MSG_MAX) { send_denied(r->id, "policy"); return; }
         /* signMessage: never sign bytes that would also be a valid transaction of any chain. */
         if (looks_like_any_tx(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
         /* nor the message every Privacy Rings key of this wallet is derived from */
         if (solmsg_is_ring_key_derivation(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
+        /* and only what the display can show whole: plain text, or an off-chain message for this key. This is
+         * also what refuses a version 1 transaction message, which solmsg_parse does not read (solmsg.h). */
+        if (!solmsg_signmsg_check(r->sign.bytes, r->sign.len, owner, other_slot_pubkey(), &sm)) { send_denied(r->id, "policy"); return; }
         res = consent_begin_sign(&g_consent, r->id, 0, NULL, 0, false, r->sign.ttl_ms, now, &act, &why);
         break;
     case PROTO_KIND_TX: {
         policy_verdict_t v;
+        if (r->sign.len > SIGNER_ED25519_MSG_MAX) { send_denied(r->id, "policy"); return; } /* before the touch */
         if (solmsg_parse(r->sign.bytes, r->sign.len, msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
+        /* Privacy Rings calls are not parsed yet, and "unknown program" is no screen for them */
+        if (solmsg_touches_privacy_rings(msg)) { send_denied(r->id, "policy"); return; }
         solmsg_analyze(msg, owner, parsed);
         have_parsed = true;
         v = policy_check(parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */
@@ -1185,6 +1205,8 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
             memcpy(digest, r->sign.typed.digest, 32);
         } else {
             if (looks_like_any_tx(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
+            /* text shown whole, never a raw hash: a personal_sign over 32 bytes is an order or a multisig approval */
+            if (!solmsg_bare_text_ok(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
             evmtx_personal_digest(r->sign.bytes, r->sign.len, digest);
         }
         /* a permit hands a spender rights over tokens with no transaction to show: it takes the long touch */
@@ -1195,6 +1217,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         const uint8_t *pkh = owner_btc_pkh();
         if (!pkh) { send_denied(r->id, "not_initialized"); return; }
         if (looks_like_any_tx(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
+        if (!solmsg_bare_text_ok(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
         btcpsbt_bip322_digest(r->sign.bytes, r->sign.len, pkh, digest);
         res = consent_begin_sign_chain(&g_consent, r->id, CONSENT_CHAIN_BTC, 0, NULL, r->sign.ttl_ms, now, &why);
         break;
@@ -1224,7 +1247,13 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
     /* The trusted screen, from OUR parse (never from claims / summary text), BEFORE the request can be approved. */
     switch (r->sign.kind) {
     case PROTO_KIND_TX: ui.kind = TUI_SIGN_SOL_TX; ui.sol = parsed; ui.sol_dangerous = eff_danger; break;
-    case PROTO_KIND_MSG: ui.kind = TUI_SIGN_SOL_MSG; ui.msg = g_pending_sign.bytes; ui.msg_len = g_pending_sign.len; break;
+    case PROTO_KIND_MSG:
+        /* `sm` points into the request; the screen reads the same offsets in the bytes that will be signed */
+        ui.kind = TUI_SIGN_SOL_MSG;
+        ui.msg = g_pending_sign.bytes + (sm.text - r->sign.bytes); ui.msg_len = sm.text_len;
+        ui.msg_env = sm.shape == SOLMSG_SIGNMSG_OFFCHAIN_V0 ? 1 : sm.shape == SOLMSG_SIGNMSG_OFFCHAIN_V1 ? 2 : 0;
+        ui.msg_app = sm.app_domain ? g_pending_sign.bytes + (sm.app_domain - r->sign.bytes) : NULL;
+        break;
     case PROTO_KIND_EVM_TX: ui.kind = TUI_SIGN_EVM_TX; ui.evm = evm; ui.evm_dangerous = eff_danger; break;
     case PROTO_KIND_BTC_PSBT: ui.kind = TUI_SIGN_BTC_PSBT; ui.btc = &g_pending_sign.btc; ui.btc_dangerous = eff_danger; break;
     case PROTO_KIND_EVM_MSG:
@@ -1273,6 +1302,7 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
     if (!g_signer_ok) { send_denied(r->id, "policy"); return; }
     if (r->sign.len > CONSENT_INH_MSG_MAX) { send_denied(r->id, "policy"); return; }
     if (solmsg_parse(r->sign.bytes, r->sign.len, msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
+    if (solmsg_touches_privacy_rings(msg)) { send_denied(r->id, "policy"); return; }
     if (msg->num_required_signatures > CONSENT_INH_MAX_SIGNERS) { send_denied(r->id, "policy"); return; }
     solmsg_analyze(msg, owner, parsed);
     v = policy_check(parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */

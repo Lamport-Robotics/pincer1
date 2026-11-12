@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "offchain_v0_two_signers",
+ "notes": "more than one signer",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "/3NvbGFuYSBvZmZjaGFpbgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iz9FyQ4WqDHW2T7eM1gL6HZkf3r92sTxY7XAurINen2GBYAU2lnbiBpbiB0byBleGFtcGxlLm9yZw==",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: envelope",
+  "ring_key_derivation": false
+ }
+}

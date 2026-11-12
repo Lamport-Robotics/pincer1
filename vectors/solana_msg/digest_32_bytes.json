@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "digest_32_bytes",
+ "notes": "a raw 32-byte digest: on the Privacy Rings in-proof rails this signature alone authorises a spend",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "b+Ob/p/4qQPtP7wFbDOx/Yw11ygeklAZZNUFQbhuLQE=",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: raw_bytes",
+  "ring_key_derivation": false
+ }
+}

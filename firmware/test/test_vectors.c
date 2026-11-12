@@ -12,7 +12,9 @@
 #include "eip712.h"
 #include "evmtx.h"
 #include "harness.h"
+#include "signer.h"
 #include "solmsg.h"
+#include "trusted_ui.h"
 #include "u256.h"
 #include "util.h"
 
@@ -87,11 +89,34 @@ static uint64_t u64_of(const char *dec) { return dec ? strtoull(dec, NULL, 10) :
 static void solana_msg_vector(const char *name, const cJSON *v)
 {
     static uint8_t bytes[1024];
-    (void)name;
+    uint8_t owner[32];
+    solmsg_signmsg_t sm;
+    const cJSON *e = expect_of(v);
+    const char *shown = str(e, "shown");
+    bool signs;
     int n = decode_bytes(v, bytes, sizeof bytes);
     CHECK(n > 0);
-    CHECK(!solmsg_looks_like_message(bytes, (size_t)n)); /* none of them is a transaction in disguise */
-    CHECK_EQ(solmsg_is_ring_key_derivation(bytes, (size_t)n), refused(v));
+    CHECK(pubkey_from_b58(str(v, "owner"), owner));
+    /* none of them is read as a transaction by the legacy/v0 parser: the version 1 one must be caught otherwise */
+    CHECK(!solmsg_looks_like_message(bytes, (size_t)n));
+    CHECK_EQ(solmsg_is_ring_key_derivation(bytes, (size_t)n), cJSON_IsTrue(cJSON_GetObjectItem(e, "ring_key_derivation")));
+    /* what handle_sign does for kind msg: the size bound, then the shape */
+    signs = (size_t)n <= SIGNER_ED25519_MSG_MAX && solmsg_signmsg_check(bytes, (size_t)n, owner, NULL, &sm);
+    if (signs == refused(v)) printf("  vector %s: signs=%d\n", name, (int)signs);
+    CHECK_EQ(signs, !refused(v));
+    if (signs && shown) {
+        /* the screen shows exactly this text, and all of it */
+        tui_sign_t r;
+        static tui_doc_t d;
+        CHECK_EQ((int)sm.text_len, (int)strlen(shown));
+        CHECK(memcmp(sm.text, shown, sm.text_len) == 0);
+        memset(&r, 0, sizeof r);
+        r.kind = TUI_SIGN_SOL_MSG; r.msg = sm.text; r.msg_len = sm.text_len;
+        r.msg_env = sm.shape == SOLMSG_SIGNMSG_OFFCHAIN_V0 ? 1 : sm.shape == SOLMSG_SIGNMSG_OFFCHAIN_V1 ? 2 : 0;
+        r.msg_app = sm.app_domain;
+        tui_build_sign(&r, &d);
+        CHECK(!d.truncated);
+    }
 }
 
 /* ---- solana ---- */
@@ -302,7 +327,7 @@ static void typed_vector(const char *name, const cJSON *v)
 int main(void)
 {
     printf("- solana_msg\n");
-    CHECK(walk("solana_msg", solana_msg_vector) >= 4);
+    CHECK(walk("solana_msg", solana_msg_vector) >= 35);
     printf("- solana\n");
     CHECK(walk("solana", solana_vector) >= 8);
     printf("- evm\n");

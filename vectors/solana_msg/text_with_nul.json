@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "text_with_nul",
+ "notes": "NUL is not in the character set",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "U2lnbiBpbiB0byBleGFtcGxlLm9yZwAgbm9uY2UgMQ==",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: not_text",
+  "ring_key_derivation": false
+ }
+}

@@ -151,9 +151,124 @@ bool solmsg_is_ring_key_derivation(const uint8_t *bytes, size_t len)
     return contains(bytes, len, (const uint8_t *)tag, sizeof tag - 1) || contains(bytes, len, domain_v1, sizeof domain_v1);
 }
 
+/* ---- signMessage ---- */
+static const uint8_t OFFCHAIN_DOMAIN[16] = { 0xff, 's', 'o', 'l', 'a', 'n', 'a', ' ', 'o', 'f', 'f', 'c', 'h', 'a', 'i', 'n' };
+
+static bool is_text(const uint8_t *b, size_t len, bool allow_newline)
+{
+    for (size_t i = 0; i < len; i++) {
+        if (b[i] == '\n') { if (!allow_newline) return false; continue; }
+        if (b[i] < 0x20 || b[i] > 0x7e) return false;
+    }
+    return true;
+}
+
+static bool has_space(const uint8_t *b, size_t len)
+{
+    for (size_t i = 0; i < len; i++) if (b[i] == ' ') return true;
+    return false;
+}
+
+bool solmsg_bare_text_ok(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len == 0 || len == 32) return false;
+    if (!is_text(bytes, len, true)) return false;
+    return len < 32 || has_space(bytes, len);
+}
+
+/* "<domain> wants you to sign in with your Solana account:\n<address>...": the address must be the signer's. */
+static bool sign_in_names_other_account(const uint8_t *t, size_t len, const uint8_t own_key[32])
+{
+    static const char tail[] = " wants you to sign in with your Solana account:";
+    const size_t tl = sizeof tail - 1;
+    char addr[48];
+    size_t eol = 0, al, e2;
+    int n;
+    while (eol < len && t[eol] != '\n') eol++;
+    if (eol < tl || memcmp(t + eol - tl, tail, tl) != 0) return false; /* not a sign-in text */
+    if (eol == len) return true;                                       /* claims a sign-in, names nobody */
+    n = pubkey_to_b58(own_key, addr, sizeof addr);
+    if (n <= 0) return true;
+    al = (size_t)n;
+    e2 = eol + 1;
+    while (e2 < len && t[e2] != '\n') e2++;
+    return e2 - (eol + 1) != al || memcmp(t + eol + 1, addr, al) != 0;
+}
+
+bool solmsg_signmsg_check(const uint8_t *bytes, size_t len, const uint8_t own_key[32], const uint8_t *other_key,
+                          solmsg_signmsg_t *out)
+{
+    static const char ns_tspp[] = "TSPP/", ns_zolana[] = "zolana/";
+    const uint8_t *signer = NULL; /* the one place a wallet key may appear */
+    solmsg_signmsg_t r;
+    memset(&r, 0, sizeof r);
+    if (out) memset(out, 0, sizeof *out);
+    if (!bytes || !own_key || len == 0) return false;
+    if (solmsg_is_ring_key_derivation(bytes, len)) return false;
+    if (contains(bytes, len, (const uint8_t *)ns_tspp, sizeof ns_tspp - 1)) return false;
+    if (contains(bytes, len, (const uint8_t *)ns_zolana, sizeof ns_zolana - 1)) return false;
+
+    if (len >= sizeof OFFCHAIN_DOMAIN && memcmp(bytes, OFFCHAIN_DOMAIN, sizeof OFFCHAIN_DOMAIN) == 0) {
+        if (len < 18) return false;
+        if (bytes[16] == 0) {
+            /* domain(16) version(1) application domain(32) format(1) signer count(1) signer(32) length(2) body */
+            static const uint8_t zero[32] = {0};
+            size_t body_len;
+            if (len <= 85 || len > SOLMSG_MAX_BYTES) return false;
+            if (bytes[49] > 1 || bytes[50] != 1) return false;
+            signer = bytes + 51;
+            body_len = (size_t)bytes[83] | ((size_t)bytes[84] << 8);
+            if (body_len == 0 || body_len != len - 85) return false;
+            r.shape = SOLMSG_SIGNMSG_OFFCHAIN_V0;
+            r.text = bytes + 85;
+            r.text_len = body_len;
+            if (memcmp(bytes + 17, zero, 32) != 0) r.app_domain = bytes + 17;
+            if (!is_text(r.text, r.text_len, bytes[49] == 1)) return false; /* format 0 has no line breaks */
+        } else if (bytes[16] == 1) {
+            /* domain(16) version(1) signer count(1) signer(32) content */
+            if (len <= 50 || bytes[17] != 1) return false;
+            signer = bytes + 18;
+            r.shape = SOLMSG_SIGNMSG_OFFCHAIN_V1;
+            r.text = bytes + 50;
+            r.text_len = len - 50;
+            if (!is_text(r.text, r.text_len, true)) return false;
+        } else {
+            return false; /* another header version, or the old 20-byte header */
+        }
+        if (memcmp(signer, own_key, 32) != 0) return false;
+    } else {
+        if (bytes[0] >= 0x80) return false; /* every versioned transaction message starts here */
+        if (!solmsg_bare_text_ok(bytes, len)) return false;
+        r.shape = SOLMSG_SIGNMSG_TEXT;
+        r.text = bytes;
+        r.text_len = len;
+    }
+    /* a wallet key anywhere else means the bytes are shaped like something a program would read */
+    for (size_t i = 0; i + 32 <= len; i++) {
+        if (signer && bytes + i == signer) continue;
+        if (memcmp(bytes + i, own_key, 32) == 0) return false;
+        if (other_key && memcmp(bytes + i, other_key, 32) == 0) return false;
+    }
+    if (sign_in_names_other_account(r.text, r.text_len, own_key)) return false;
+    if (out) *out = r;
+    return true;
+}
+
 static const uint8_t *key_at(const solmsg_t *m, uint8_t idx)
 {
     return (idx < m->n_static_keys) ? m->static_keys + 32 * (size_t)idx : NULL;
+}
+
+bool solmsg_touches_privacy_rings(const solmsg_t *m)
+{
+    /* ring1GaLCuJnkUMVkX2JeZLTTX17wKsV4fZmPVzXANW (pool) and regy3WAeRXMYuMYxr5iK3Bf9Arr3PcxGxyzAddbiqDQ (registry) */
+    static const uint8_t pool[32] = { 0x0c, 0xbc, 0xb5, 0x78, 0xae, 0x61, 0x25, 0x81, 0x32, 0xee, 0xaf, 0x6a, 0xc1, 0x21, 0xc0, 0xa4, 0x2b, 0x88, 0xa2, 0xe8, 0x4f, 0xb1, 0x1e, 0x7e, 0x2d, 0x5b, 0xa0, 0xaf, 0xd1, 0x27, 0x31, 0x63 };
+    static const uint8_t registry[32] = { 0x0c, 0xb8, 0x13, 0x27, 0x22, 0xa9, 0xc5, 0x50, 0xad, 0xe6, 0xd5, 0xeb, 0xee, 0x48, 0xa5, 0x69, 0x93, 0x08, 0xf1, 0x8a, 0x25, 0x56, 0xc5, 0xdc, 0xae, 0x44, 0x77, 0x61, 0x0e, 0xbd, 0x5d, 0x17 };
+    for (uint16_t i = 0; i < m->n_static_keys; i++) {
+        const uint8_t *k = m->static_keys + 32 * (size_t)i;
+        if (memcmp(k, pool, 32) == 0 || memcmp(k, registry, 32) == 0) return true;
+    }
+    return false;
 }
 
 bool solmsg_starts_with_advance_nonce(const solmsg_t *m, uint8_t nonce_account[32])

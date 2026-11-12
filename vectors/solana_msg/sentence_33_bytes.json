@@ -1,0 +1,16 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "sentence_33_bytes",
+ "notes": "33 bytes of text with spaces",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "U2lnbiBpbiB0byBleGFtcGxlLm9yZyBub25jZSA0MjQy",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "sign after touch",
+  "ring_key_derivation": false,
+  "shown": "Sign in to example.org nonce 4242"
+ }
+}

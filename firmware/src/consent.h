@@ -40,7 +40,7 @@
 #define CONSENT_PIN_CODE_LEN 8
 #define CONSENT_PIN_MAX_FAILURES 5
 #define CONSENT_INH_MAX_WARN 4
-#define CONSENT_INH_MSG_MAX 860u          /* one SE05x APDU (SE05X_MAX_BUF_SIZE_CMD 892 - SCP03 overhead) */
+#define CONSENT_INH_MSG_MAX 860u          /* == SIGNER_ED25519_MSG_MAX (signer.h): one SE05x command; main.c asserts they agree */
 #define CONSENT_INH_MAX_SIGNERS 8         /* num_required_signatures cap for the stored transaction */
 #define CONSENT_POWERED_CHECKPOINT_S 3600u /* the uptime counter is persisted at least this often */
 #define CONSENT_SECONDS_PER_DAY 86400ull

@@ -93,8 +93,10 @@ typedef struct {
     uint32_t evm_dangerous;
     const btcpsbt_t *btc;        /* BTC_PSBT */
     uint32_t btc_dangerous;
-    const uint8_t *msg;          /* *_MSG: the bytes */
+    const uint8_t *msg;          /* *_MSG: the text, every byte 0x20..0x7e or '\n' (the caller checked) */
     size_t msg_len;
+    uint8_t msg_env;             /* SOL_MSG: 0 bare text, 1 off-chain message v0, 2 off-chain message v1 */
+    const uint8_t *msg_app;      /* SOL_MSG, off-chain v0: the 32-byte application domain, or NULL */
     const uint8_t *digest;       /* EVM_TYPED: the 32-byte digest the controller computed */
     const eip712_desc_t *typed;  /* EVM_TYPED: the struct, domain and fields the digest covers */
     uint16_t inh_days;           /* INHERITANCE: inactivity days */
