@@ -99,6 +99,13 @@ still cannot sign, because it cannot touch the pad or talk to the SE050 without 
 - Scam filter: drainer patterns, address poisoning against the address book, wallet-emptying sends,
   brand-new destinations, unknown and brand-new programs, durable-nonce tricks, untrusted origins.
 - Spoken explanation of every request, with counterparty age and history, before the touch.
+- The owner's own history (Warden): the daemon remembers which addresses the owner has paid, and learns one
+  only from a Solana send the owner touched for; received transfers and the overnight agent's trades teach
+  it nothing. A destination that shares its first and last four characters with an address paid before is
+  blocked as address poisoning, unless the owner has it in the address book. A send of more than three times
+  the largest one before is called out. The history is one file on the main computer,
+  `DATA_DIR/warden-memory.json` (0600), with a separate history per signing address, so the decoy wallet
+  never speaks the real wallet's.
 - Automatic lock when the owner leaves or the robot is moved.
 - Duress word/expression → decoy wallet; one alert to the phone if alerts are configured. The robot keeps
   reporting duress for `PINCER_DURESS_HOLD_S` (15 min) and then listens again; the controller leaves the
@@ -152,6 +159,9 @@ full before the touch.
 - The controller cannot resolve v0 address lookup tables on-device, so transactions that depend on them
   must declare `lookup_table` in claims and are treated as opaque; the daemon marks them `medium` risk and
   resolves the tables through the RPC for the spoken explanation.
+- The secure element signs a Solana message of at most 860 bytes in one command (provisional until measured
+  on a chip; `SIGNER_ED25519_MSG_MAX`). A longer one is refused before the touch, and that includes a share
+  of multi-hop swap routes. The daemon says why, and the overnight agent drops such a route without a word.
 - The seed phrase passes through the controller's RAM once during setup (to show it to the owner). The
   SE050 key itself is non-exportable afterwards.
 - **OTP provisioning is one-way.** Secure boot enable, the boot-key hash, the SCP03 keys and (if chosen)
@@ -175,6 +185,10 @@ full before the touch.
   provisioned (an unprovisioned Pico 2 runs unsigned images). `hello` reports `dev_keys:true` when the
   SCP03 keys came from the build rather than OTP; the daemon must refuse production mode on it.
 - The decoy wallet is only convincing if it holds a believable balance. That is the owner's job.
+- Warden's history file names every address the owner has signed with, with what each one paid. Someone who
+  reads the main computer's disk sees which wallet has the long history. The chain shows the same to anyone
+  who knows both addresses, and the daemon's log already holds them, so this adds a convenience, not a
+  secret; it is still one more reason the disk of a robot taken under duress is not private.
 
 ## Reporting
 

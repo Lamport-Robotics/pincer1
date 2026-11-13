@@ -248,6 +248,27 @@ describe("signing pipeline", () => {
     }
   });
 
+  it("says why, before any touch, when the controller would refuse on its own: too long for the chip, or Privacy Rings", async () => {
+    // a transfer with a long memo: a well-formed, harmless transaction of more than 860 bytes
+    const { sim, robot, signer } = harness({ autoTouch: false });
+    const events: string[] = []; sim.onEvent((e) => events.push(e.ev));
+    const memo = new TransactionInstruction({ programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"), keys: [], data: Buffer.from("x".repeat(800)) });
+    const long = F.legacy([F.transfer(F.friend, 0.1), memo]);
+    expect(F.messageOf(long).length).toBeGreaterThan(860);
+    const r = await signer.sign({ txBytes: long, origin: "https://pump.fun", source: "extension" });
+    expect(r).toMatchObject({ ok: false, reason: "blocked" });
+    expect(robot.spoken).toHaveLength(1);
+    expect(robot.spoken[0]).toMatch(/^I'm not signing this\. this transaction is \d+ bytes and my secure chip signs 860 at most\./);
+    expect(events).toEqual([]); // the controller was never asked
+
+    const rings = harness({ autoTouch: false });
+    const tx = new Transaction({ feePayer: F.owner.publicKey, recentBlockhash: F.BLOCKHASH })
+      .add(new TransactionInstruction({ programId: new PublicKey(PRIVACY_RINGS_PROGRAMS[0]!), keys: [{ pubkey: F.owner.publicKey, isSigner: true, isWritable: true }], data: Buffer.from([15]) }));
+    const r2 = await rings.signer.sign({ txBytes: new Uint8Array(tx.serialize({ requireAllSignatures: false, verifySignatures: false })), origin: "https://pump.fun", source: "extension" });
+    expect(r2).toMatchObject({ ok: false, reason: "blocked" });
+    expect(rings.robot.spoken).toEqual(["I'm not signing this. it calls Privacy Rings, and I can't show on my screen what that would do yet."]);
+  });
+
   it("signMessage never signs the Privacy Rings key-derivation message, and says who asked", async () => {
     const { sim, robot, signer } = harness();
     const none = { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] };

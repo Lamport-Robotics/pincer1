@@ -1150,7 +1150,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         /* nor the message every Privacy Rings key of this wallet is derived from */
         if (solmsg_is_ring_key_derivation(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
         /* and only what the display can show whole: plain text, or an off-chain message for this key. This is
-         * also what refuses a version 1 transaction message, which solmsg_parse does not read (solmsg.h). */
+         * also what refuses a transaction message of a version solmsg_parse does not read yet (solmsg.h). */
         if (!solmsg_signmsg_check(r->sign.bytes, r->sign.len, owner, other_slot_pubkey(), &sm)) { send_denied(r->id, "policy"); return; }
         res = consent_begin_sign(&g_consent, r->id, 0, NULL, 0, false, r->sign.ttl_ms, now, &act, &why);
         break;

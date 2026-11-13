@@ -1,4 +1,4 @@
-/* Pincer1 - Solana serialized *message* parser (legacy + v0). PURE LOGIC, no hardware includes.
+/* Pincer1 - Solana serialized *message* parser (legacy, v0 and version 1). PURE LOGIC, no hardware includes.
  *
  * The controller cannot resolve address-lookup tables, so for v0 messages every instruction that
  * references a looked-up account (index >= number of static keys) is treated as `unknown` and is
@@ -132,7 +132,7 @@ bool solmsg_is_ring_key_derivation(const uint8_t *bytes, size_t len);
  *   - a Solana off-chain message, header version 0 (application domain, format 0 or 1, length prefix) or
  *     version 1, with exactly one signer that is the active key and a body that is such text.
  * It refuses every payload whose first byte is 0x80 or above and is not an off-chain message (every versioned
- * transaction message, including version 1 which the parser above does not read), anything that names the
+ * transaction message, including any version the parser above does not read yet), anything that names the
  * Privacy Rings key namespaces, and anything that carries one of the wallet's own public keys outside the
  * envelope's signer field. solmsg_looks_like_message() stays a separate, earlier check. */
 typedef enum {

@@ -6,7 +6,9 @@
 import { describe, it, expect } from "vitest";
 import { ComputeBudgetProgram, PublicKey, SystemProgram, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { OwnerMemory, checkTransaction, checkMessage, recordConfirmed, looksAlike } from "../src/warden/index.js";
-import { readFileSync } from "node:fs";
+import { openMemoryFile } from "../src/warden/store.js";
+import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PRIVACY_RINGS_PROGRAMS, parseAnyMessage, parseMessage, decodeV1Message, touchesPrivacyRings, looksLikeMessage } from "../src/tx/parse.js";
@@ -264,5 +266,56 @@ describe("warden: messages", () => {
     const v = checkMessage({ bytes: new TextEncoder().encode("Sign in to pump.fun\nnonce: 1234"), origin: "https://pump.fun" });
     expect(v.level).toBe("explain");
     expect(v.sentence).toBe('pump.fun asks you to sign a message. It says: "Sign in to pump.fun\nnonce: 1234"');
+  });
+});
+
+describe("warden: the daemon's memory file", () => {
+  const REAL = F.owner.publicKey.toBase58();
+  const DECOY = F.stranger.toBase58();
+  const send = (m: OwnerMemory, to: PublicKey) => m.recordConfirmedSend({ destinations: [to.toBase58()], lamports: SOL, solDest: to.toBase58(), programs: [], at: NOW });
+  const dir = () => mkdtempSync(join(tmpdir(), "warden-"));
+
+  it("keeps the history of a wallet that did not sign since the daemon started", () => {
+    const file = join(dir(), "warden-memory.json");
+    // first run: both wallets pay someone
+    const a = openMemoryFile(file);
+    send(a.of(REAL).memory, F.friend);
+    send(a.of(DECOY).memory, F.usdc);
+    a.of(DECOY).save();
+    // second run: only the decoy signs, and saves
+    const b = openMemoryFile(file);
+    send(b.of(DECOY).memory, F.friend);
+    b.of(DECOY).save();
+    // third run: the real wallet still knows who it paid
+    const c = openMemoryFile(file);
+    expect(c.of(REAL).memory.lookup(F.friend.toBase58())?.timesPaid).toBe(1);
+    expect(c.of(DECOY).memory.lookup(F.friend.toBase58())?.timesPaid).toBe(1);
+    expect(c.of(DECOY).memory.lookup(F.usdc.toBase58())?.timesPaid).toBe(1);
+    // and one wallet's history never answers for the other
+    expect(c.of(REAL).memory.lookup(F.usdc.toBase58())).toBeUndefined();
+  });
+
+  it("writes the file whole, readable by its owner only, and leaves nothing beside it", () => {
+    const d = dir();
+    const file = join(d, "warden-memory.json");
+    const m = openMemoryFile(file);
+    send(m.of(REAL).memory, F.friend);
+    m.of(REAL).save();
+    expect(readdirSync(d)).toEqual(["warden-memory.json"]);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(Object.keys(JSON.parse(readFileSync(file, "utf8")))).toEqual([REAL]);
+  });
+
+  it("starts empty from a file it cannot read, and says so", () => {
+    const file = join(dir(), "warden-memory.json");
+    writeFileSync(file, "{ not json");
+    let said = "";
+    const m = openMemoryFile(file, (e) => { said = e; });
+    expect(said).not.toBe("");
+    expect(m.of(REAL).memory.lookup(F.friend.toBase58())).toBeUndefined();
+    writeFileSync(file, "[1,2]");
+    said = "";
+    openMemoryFile(file, (e) => { said = e; });
+    expect(said).toBe("not an object");
   });
 });
