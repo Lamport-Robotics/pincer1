@@ -6,7 +6,7 @@
  * is what gets *explained* to the owner; the controller's result is what gets *enforced*. The two must
  * agree or the controller denies with `claims_mismatch`.
  */
-import { PublicKey, VersionedMessage, type MessageV0, type Message } from "@solana/web3.js";
+import { PublicKey, VersionedMessage, VersionedTransaction, type MessageV0, type Message } from "@solana/web3.js";
 import { ATA, COMPUTE_BUDGET, JUPITER_V6, LOOKUP_TABLE, MEMO, SYSTEM, TOKEN, TOKEN_2022, U64_MAX } from "./known.js";
 
 export interface TokenMove {
@@ -37,7 +37,7 @@ export interface ParsedInstruction {
 }
 
 export interface ParsedTx {
-  version: "legacy" | 0;
+  version: "legacy" | 0 | 1;
   feePayer: string;
   signers: string[];
   accounts: string[]; // static keys (+ resolved lookups for v0 when provided)
@@ -202,11 +202,11 @@ export function checkSignMessage(bytes: Uint8Array, ownKey: Uint8Array | null, o
   return { ok: true, shape, text, ...(appDomain ? { appDomain } : {}) };
 }
 
-/** True when a legacy or v0 message names the Privacy Rings pool or registry among its static keys (firmware: solmsg_touches_privacy_rings). */
+/** True when a message, in any wire format, names the Privacy Rings pool or registry among its keys (firmware, legacy and v0: solmsg_touches_privacy_rings). */
 export function touchesPrivacyRings(bytes: Uint8Array): boolean {
   try {
-    const m = VersionedMessage.deserialize(bytes);
-    return m.staticAccountKeys.some((k) => PRIVACY_RINGS_PROGRAMS.includes(k.toBase58()));
+    const keys = bytes.length > 0 && bytes[0] === 0x81 ? decodeV1Message(bytes).staticKeys : VersionedMessage.deserialize(bytes).staticAccountKeys.map((k) => k.toBase58());
+    return keys.some((k) => PRIVACY_RINGS_PROGRAMS.includes(k));
   } catch {
     return false;
   }
@@ -214,6 +214,7 @@ export function touchesPrivacyRings(bytes: Uint8Array): boolean {
 
 /** True when the bytes deserialize as a Solana message (used to refuse disguised `signMessage` payloads). */
 export function looksLikeMessage(bytes: Uint8Array): boolean {
+  if (bytes.length > 0 && bytes[0] === 0x81) { try { decodeV1Message(bytes); return true; } catch { return false; } }
   try {
     const m = VersionedMessage.deserialize(bytes);
     return m.staticAccountKeys.length > 0 && m.compiledInstructions.length > 0;
@@ -222,19 +223,129 @@ export function looksLikeMessage(bytes: Uint8Array): boolean {
   }
 }
 
-export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): ParsedTx {
+/** A message in whichever wire format, reduced to what the reader below needs. */
+interface DecodedMessage {
+  version: "legacy" | 0 | 1;
+  staticKeys: string[];
+  numRequiredSignatures: number;
+  lookups: { accountKey: string; writableIndexes: number[]; readonlyIndexes: number[] }[];
+  instructions: { programIdIndex: number; accountKeyIndexes: number[]; data: Uint8Array }[];
+  /** Version 1 carries its fee and limits in the header, not in ComputeBudget instructions. */
+  v1?: { priorityLamports: bigint; computeUnitLimit: number | null };
+}
+
+function decodeLegacyOrV0(bytes: Uint8Array): DecodedMessage {
   const msg = VersionedMessage.deserialize(bytes);
+  return {
+    version: msg.version,
+    staticKeys: msg.staticAccountKeys.map((k) => k.toBase58()),
+    numRequiredSignatures: msg.header.numRequiredSignatures,
+    lookups: msg.version === 0 ? (msg as MessageV0).addressTableLookups.map((l) => ({ accountKey: l.accountKey.toBase58(), writableIndexes: [...l.writableIndexes], readonlyIndexes: [...l.readonlyIndexes] })) : [],
+    instructions: msg.compiledInstructions.map((ci) => ({ programIdIndex: ci.programIdIndex, accountKeyIndexes: [...ci.accountKeyIndexes], data: ci.data })),
+  };
+}
+
+/** The largest version 1 transaction (SIMD-0385). A message is that minus at least one signature. */
+export const V1_MAX_TRANSACTION_BYTES = 4096;
+
+/**
+ * Decodes a Solana version 1 transaction message (SIMD-0385): the bytes that are signed, which on the wire
+ * come BEFORE the signatures. Layout: 0x81, the three header bytes, a u32 config mask, the blockhash, the
+ * instruction and address counts, the addresses, four bytes per set mask bit, a four-byte header per
+ * instruction, then each instruction's account indexes and data. No lookup tables. Every sanitization rule of
+ * the proposal is applied, and anything left over is an error: a reader that guesses is worse than none.
+ */
+export function decodeV1Message(bytes: Uint8Array): DecodedMessage {
+  const bad = (why: string): never => { throw new Error(`version 1 message: ${why}`); };
+  if (bytes.length > V1_MAX_TRANSACTION_BYTES - 64) bad("too long");
+  let o = 0;
+  const need = (n: number) => { if (o + n > bytes.length) bad("truncated"); };
+  const u8 = () => { need(1); return bytes[o++]!; };
+  if (u8() !== 0x81) bad("not version 1");
+  const numSigs = u8(), roSigned = u8(), roUnsigned = u8();
+  if (numSigs < 1 || numSigs > 12) bad("signature count");
+  if (roSigned >= numSigs) bad("read-only signer count");
+  need(4);
+  const mask = (bytes[o]! | (bytes[o + 1]! << 8) | (bytes[o + 2]! << 16) | (bytes[o + 3]! << 24)) >>> 0;
+  o += 4;
+  if (mask & ~0x1f) bad("unknown config bits");
+  if (((mask & 1) !== 0) !== ((mask & 2) !== 0)) bad("half a priority fee");
+  need(32); o += 32; // lifetime specifier (recent blockhash)
+  const numIx = u8(), numAddr = u8();
+  if (numIx > 64) bad("too many instructions");
+  if (numAddr > 64 || numAddr < numSigs + roUnsigned) bad("address count");
+  need(32 * numAddr);
+  const staticKeys: string[] = [];
+  for (let i = 0; i < numAddr; i++) { staticKeys.push(new PublicKey(bytes.subarray(o, o + 32)).toBase58()); o += 32; }
+  if (new Set(staticKeys).size !== staticKeys.length) bad("duplicate address");
+  const word = () => { need(4); const v = (bytes[o]! | (bytes[o + 1]! << 8) | (bytes[o + 2]! << 16) | (bytes[o + 3]! << 24)) >>> 0; o += 4; return v; };
+  let priorityLamports = 0n;
+  let computeUnitLimit: number | null = null;
+  if (mask & 1) { const lo = word(), hi = word(); priorityLamports = (BigInt(hi) << 32n) | BigInt(lo); }
+  if (mask & 4) computeUnitLimit = word();
+  if (mask & 8) word(); // loaded accounts data size limit
+  if (mask & 16) { const heap = word(); if (heap % 1024 !== 0 || heap < 32 * 1024 || heap > 256 * 1024) bad("heap size"); }
+  const headers: { programIdIndex: number; nAcc: number; nData: number }[] = [];
+  for (let i = 0; i < numIx; i++) { need(4); headers.push({ programIdIndex: bytes[o]!, nAcc: bytes[o + 1]!, nData: bytes[o + 2]! | (bytes[o + 3]! << 8) }); o += 4; }
+  const instructions: DecodedMessage["instructions"] = [];
+  for (const h of headers) {
+    if (h.programIdIndex >= numAddr) bad("program index");
+    need(h.nAcc + h.nData);
+    const accountKeyIndexes = [...bytes.subarray(o, o + h.nAcc)]; o += h.nAcc;
+    if (accountKeyIndexes.some((i) => i >= numAddr)) bad("account index");
+    const data = bytes.subarray(o, o + h.nData); o += h.nData;
+    instructions.push({ programIdIndex: h.programIdIndex, accountKeyIndexes, data });
+  }
+  if (o !== bytes.length) bad("trailing bytes");
+  return { version: 1, staticKeys, numRequiredSignatures: numSigs, lookups: [], instructions, v1: { priorityLamports, computeUnitLimit } };
+}
+
+/**
+ * Reads a serialized Solana message in any wire format the controller parses: legacy, v0 and version 1
+ * (firmware: solmsg_parse). Throws on anything else.
+ */
+export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): ParsedTx {
+  return readDecoded(bytes.length > 0 && bytes[0] === 0x81 ? decodeV1Message(bytes) : decodeLegacyOrV0(bytes), opts);
+}
+/** The same function under the name Warden uses. */
+export const parseAnyMessage = parseMessage;
+
+/**
+ * Splits a serialized transaction into the message that is signed and where each signature goes. Legacy and v0
+ * put the signatures first; version 1 puts them after the message.
+ */
+export function splitTransaction(txBytes: Uint8Array): { messageBytes: Uint8Array; version1: boolean } {
+  if (txBytes.length > 0 && txBytes[0] === 0x81) {
+    const numSigs = txBytes[1] ?? 0;
+    if (numSigs < 1 || txBytes.length <= 64 * numSigs) throw new Error("version 1 transaction: too short for its signatures");
+    return { messageBytes: txBytes.subarray(0, txBytes.length - 64 * numSigs), version1: true };
+  }
+  return { messageBytes: VersionedTransaction.deserialize(txBytes).message.serialize(), version1: false };
+}
+
+/** Puts `owner`'s signature into its slot of a version 1 transaction (the i-th signature belongs to the i-th address). */
+export function addV1Signature(txBytes: Uint8Array, owner: string, sig: Uint8Array): Uint8Array {
+  const { messageBytes } = splitTransaction(txBytes);
+  const m = decodeV1Message(messageBytes);
+  const i = m.staticKeys.slice(0, m.numRequiredSignatures).indexOf(owner);
+  if (i < 0) throw new Error("version 1 transaction: the wallet is not one of its signers");
+  if (sig.length !== 64) throw new Error("signature must be 64 bytes");
+  const out = Uint8Array.from(txBytes);
+  out.set(sig, messageBytes.length + 64 * i);
+  return out;
+}
+
+function readDecoded(msg: DecodedMessage, opts: ParseOptions): ParsedTx {
   const version = msg.version;
-  const staticKeys = msg.staticAccountKeys.map((k) => k.toBase58());
+  const staticKeys = msg.staticKeys;
   let accounts = [...staticKeys];
   let unresolvedLookups = false;
 
   if (version === 0) {
-    const v0 = msg as MessageV0;
     const writable: string[] = [];
     const readonly: string[] = [];
-    for (const l of v0.addressTableLookups) {
-      const table = opts.lookupTables?.[l.accountKey.toBase58()];
+    for (const l of msg.lookups) {
+      const table = opts.lookupTables?.[l.accountKey];
       if (!table) {
         unresolvedLookups = true;
         writable.push(...l.writableIndexes.map(() => "?"));
@@ -247,8 +358,8 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
     accounts = [...staticKeys, ...writable, ...readonly];
   }
 
-  const header = msg.header;
-  const feePayer = staticKeys[0];
+  const header = { numRequiredSignatures: msg.numRequiredSignatures };
+  const feePayer = staticKeys[0]!;
   const owner = opts.owner ?? feePayer;
   const signers = staticKeys.slice(0, header.numRequiredSignatures);
   // an inflow is only an inflow when it lands in the owner's own account: a transfer into a stranger's token
@@ -263,8 +374,8 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
 
   // the controller cannot resolve lookup tables (solmsg.c): any instruction that reaches past the static keys is
   // flagged there, resolved here or not, and must be declared
-  const touchesLookups = msg.compiledInstructions.some((ci) => ci.programIdIndex >= staticKeys.length || ci.accountKeyIndexes.some((i) => i >= staticKeys.length));
-  const instructions: ParsedInstruction[] = msg.compiledInstructions.map((ci, index) => ({
+  const touchesLookups = msg.instructions.some((ci) => ci.programIdIndex >= staticKeys.length || ci.accountKeyIndexes.some((i) => i >= staticKeys.length));
+  const instructions: ParsedInstruction[] = msg.instructions.map((ci, index) => ({
     index,
     program: accounts[ci.programIdIndex] ?? "?",
     accounts: ci.accountKeyIndexes.map((i) => accounts[i] ?? "?"),
@@ -479,6 +590,8 @@ export function parseMessage(bytes: Uint8Array, opts: ParseOptions = {}): Parsed
   let limit = cuLimit ?? DEFAULT_CU_PER_IX * BigInt(Math.max(0, instructions.length - budgetIxs));
   if (limit > MAX_CU) limit = MAX_CU;
   out.priorityLamports = limit > 0n ? (limit * cuPrice + 999_999n) / 1_000_000n : 0n;
+  // version 1: the priority fee is a flat lamport amount in the header, and ComputeBudget instructions are ignored
+  if (msg.v1) out.priorityLamports = msg.v1.priorityLamports;
   out.feeLamports = BASE_FEE_PER_SIG * BigInt(header.numRequiredSignatures) + out.priorityLamports;
   return out;
 }

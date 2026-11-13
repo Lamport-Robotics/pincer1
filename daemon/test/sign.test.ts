@@ -167,6 +167,23 @@ describe("signing pipeline", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("signs a version 1 transaction: read from its own layout, and the signature goes after the message", async () => {
+    const { robot, signer } = harness();
+    const message = F.v1Message([F.transfer(F.stranger, 0.5)], { priorityLamports: 20_000n, cuLimit: 200_000 });
+    const txBytes = Uint8Array.from([...message, ...new Uint8Array(64)]); // unsigned: an empty signature slot after the message
+    const r = await signer.sign({ txBytes, origin: "https://pump.fun", source: "extension" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.parsed.version).toBe(1);
+    expect(r.parsed.feeLamports).toBe(25_000n);
+    expect(robot.spoken[0]).toMatch(/^From pump.fun: Sends 0.5 SOL to .* Touch me to sign\.$/);
+    expect(r.signedTx).toHaveLength(txBytes.length);
+    expect(Buffer.from(r.signedTx.subarray(0, message.length)).equals(Buffer.from(message))).toBe(true);
+    expect(nacl.sign.detached.verify(message, r.signedTx.subarray(message.length), F.owner.publicKey.toBytes())).toBe(true);
+    // the same bytes offered as a "message" are refused: a transaction is never signed blind
+    expect(await signer.signMessage(message, "https://pump.fun")).toEqual({ ok: false, reason: "blocked" });
+  });
+
   it("signMessage signs only what can be read: never a version 1 transaction, a raw hash, or a spaceless string", async () => {
     const { sim, robot, signer } = harness();
     const none = { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] };

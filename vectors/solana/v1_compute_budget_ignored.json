@@ -1,0 +1,27 @@
+{
+ "chain": "solana",
+ "kind": "tx",
+ "name": "v1_compute_budget_ignored",
+ "notes": "version 1 with ComputeBudget instructions inside: they configure nothing there, so the fee is the base fee alone",
+ "source": {
+  "constructed": "constructed from SIMD-0385 (transaction v1): 0x81, header, config mask, blockhash, counts, addresses, config values, instruction headers, payloads"
+ },
+ "bytes": "gQEAAgAAAACBLtZnZzzVxXK6LVCvKA5nWpF89qcMYzqoVIyq866G+wME6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0ixmvn4zLHpFMzK9nQp/fbBV9cXvGgatpm2Ys5+2gQxHOgMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmzpAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAUAAgAJAAMCDAACwFwVAAMAypo7AAAAAAABAgAAAADh9QUAAAAA",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "version": 1,
+  "signers": 1,
+  "token_out": [],
+  "durable_nonce": false,
+  "warnings": [],
+  "lamport_recipients": 1,
+  "controller": "accept",
+  "dest": "7v54NWdBtkjuAFJrLGsS2SXnuk8nKam81mZJeeYxVFi9",
+  "lamports_out": "100000000",
+  "programs": [
+   "ComputeBudget111111111111111111111111111111",
+   "11111111111111111111111111111111"
+  ],
+  "fee_lamports": "5000"
+ }
+}

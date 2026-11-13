@@ -1303,6 +1303,8 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
     if (r->sign.len > CONSENT_INH_MSG_MAX) { send_denied(r->id, "policy"); return; }
     if (solmsg_parse(r->sign.bytes, r->sign.len, msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
     if (solmsg_touches_privacy_rings(msg)) { send_denied(r->id, "policy"); return; }
+    /* the stored transaction is assembled signatures-first; a version 1 transaction puts them after the message */
+    if (msg->version == SOLMSG_VERSION_1) { send_denied(r->id, "policy"); return; }
     if (msg->num_required_signatures > CONSENT_INH_MAX_SIGNERS) { send_denied(r->id, "policy"); return; }
     solmsg_analyze(msg, owner, parsed);
     v = policy_check(parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */

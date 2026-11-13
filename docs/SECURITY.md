@@ -56,8 +56,8 @@ key is kept safe by the controller + chip, which require a physical touch and an
 8. **Router allowlists live on the controller.** The routers that may be called for swaps are a built-in set
    plus owner additions made with the PIN; a list supplied by the main computer is informational only.
 9. **`signMessage` cannot be a disguised transaction, and is never signed unread.** The controller refuses
-   a "message" that parses as a transaction, and any payload that starts like a versioned transaction
-   message (version 1 included, which its transaction parser does not read yet). It signs only plain text
+   a "message" that parses as a transaction (legacy, v0 or version 1), and any payload that starts like a
+   versioned transaction message of a version it does not read. It signs only plain text
    that its display shows in full, or a Solana off-chain message naming the wallet's own key; a raw hash, a
    32-byte payload and a long string with no space are refused. The same holds for EVM and Bitcoin
    messages. For text that passes, the protection is the owner reading it (PROTOCOL §1, `sign`).

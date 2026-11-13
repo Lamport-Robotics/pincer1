@@ -54,6 +54,77 @@ static bool rd_skip(rd_t *r, size_t n, const uint8_t **start)
     return true;
 }
 
+static bool rd_u32le(rd_t *r, uint32_t *v)
+{
+    if (r->pos + 4 > r->len) return false;
+    *v = (uint32_t)r->p[r->pos] | ((uint32_t)r->p[r->pos + 1] << 8) | ((uint32_t)r->p[r->pos + 2] << 16) | ((uint32_t)r->p[r->pos + 3] << 24);
+    r->pos += 4;
+    return true;
+}
+
+/* Version 1 (SIMD-0385), the bytes that are signed:
+ *   0x81 | signatures, read-only signed, read-only unsigned | config mask u32 | blockhash[32] |
+ *   instruction count | address count | addresses | 4 bytes per set mask bit |
+ *   per instruction: program index, account count, data length u16 | per instruction: account indexes, data
+ * No lookup tables. Every sanitization rule of the proposal is applied here: a transaction the cluster would
+ * reject is not something to put on the display. */
+static int parse_v1(const uint8_t *bytes, size_t len, solmsg_t *out)
+{
+    rd_t r = {bytes, len, 1};
+    uint32_t mask, w;
+    uint8_t nix, nk, i;
+    const uint8_t *headers;
+    if (len > SOLMSG_V1_MAX_BYTES) return SOLMSG_E_SHORT;
+    out->version = SOLMSG_VERSION_1;
+    if (!rd_u8(&r, &out->num_required_signatures) || !rd_u8(&r, &out->num_readonly_signed) || !rd_u8(&r, &out->num_readonly_unsigned)) return SOLMSG_E_SHORT;
+    if (out->num_required_signatures == 0 || out->num_required_signatures > 12) return SOLMSG_E_HEADER;
+    if (out->num_readonly_signed >= out->num_required_signatures) return SOLMSG_E_HEADER; /* the fee payer is writable */
+    if (!rd_u32le(&r, &mask)) return SOLMSG_E_SHORT;
+    if (mask & ~0x1fu) return SOLMSG_E_HEADER;                 /* a setting this parser does not know */
+    if (((mask & 1u) != 0) != ((mask & 2u) != 0)) return SOLMSG_E_HEADER; /* the fee takes both bits */
+    if (!rd_skip(&r, 32, &out->recent_blockhash)) return SOLMSG_E_SHORT;
+    if (!rd_u8(&r, &nix) || !rd_u8(&r, &nk)) return SOLMSG_E_SHORT;
+    if (nix > 64 || nk > 64) return SOLMSG_E_TOOMANY;
+    if (nix > SOLMSG_MAX_IX) return SOLMSG_E_TOOMANY;
+    if (nk == 0 || (uint32_t)out->num_required_signatures + out->num_readonly_unsigned > nk) return SOLMSG_E_HEADER;
+    out->n_static_keys = nk;
+    if (!rd_skip(&r, (size_t)nk * 32, &out->static_keys)) return SOLMSG_E_SHORT;
+    for (i = 1; i < nk; i++) {
+        uint8_t j;
+        for (j = 0; j < i; j++)
+            if (memcmp(out->static_keys + 32 * (size_t)i, out->static_keys + 32 * (size_t)j, 32) == 0) return SOLMSG_E_HEADER;
+    }
+    if (mask & 1u) {
+        uint32_t lo, hi;
+        if (!rd_u32le(&r, &lo) || !rd_u32le(&r, &hi)) return SOLMSG_E_SHORT;
+        out->v1_priority_lamports = ((uint64_t)hi << 32) | lo;
+    }
+    if (mask & 4u) { if (!rd_u32le(&r, &out->v1_compute_unit_limit)) return SOLMSG_E_SHORT; }
+    if (mask & 8u) { if (!rd_u32le(&r, &w)) return SOLMSG_E_SHORT; } /* loaded accounts data size limit */
+    if (mask & 16u) {
+        if (!rd_u32le(&r, &w)) return SOLMSG_E_SHORT;
+        if (w % 1024u != 0 || w < 32u * 1024u || w > 256u * 1024u) return SOLMSG_E_HEADER; /* heap size */
+    }
+    out->n_ix = nix;
+    if (!rd_skip(&r, (size_t)nix * 4, &headers)) return SOLMSG_E_SHORT;
+    for (i = 0; i < nix; i++) {
+        solmsg_ix_t *ix = &out->ix[i];
+        ix->program_index = headers[4 * (size_t)i];
+        ix->n_accounts = headers[4 * (size_t)i + 1];
+        ix->data_len = (uint16_t)(headers[4 * (size_t)i + 2] | ((uint16_t)headers[4 * (size_t)i + 3] << 8));
+        if (!rd_skip(&r, ix->n_accounts, &ix->account_indexes)) return SOLMSG_E_SHORT;
+        if (!rd_skip(&r, ix->data_len, &ix->data)) return SOLMSG_E_SHORT;
+    }
+    if (r.pos != r.len) return SOLMSG_E_TRAILING;
+    for (i = 0; i < nix; i++) {
+        const solmsg_ix_t *ix = &out->ix[i];
+        uint8_t a;
+        if (ix->program_index >= nk) return SOLMSG_E_INDEX;
+        for (a = 0; a < ix->n_accounts; a++) if (ix->account_indexes[a] >= nk) return SOLMSG_E_INDEX;
+    }
+    return SOLMSG_OK;
+}
+
 int solmsg_parse(const uint8_t *bytes, size_t len, solmsg_t *out)
 {
     rd_t r = {bytes, len, 0};
@@ -61,7 +132,9 @@ int solmsg_parse(const uint8_t *bytes, size_t len, solmsg_t *out)
     uint16_t nk, nix, i;
     uint32_t total_accounts;
     memset(out, 0, sizeof *out);
-    if (len == 0 || len > SOLMSG_MAX_BYTES) return SOLMSG_E_SHORT;
+    if (len == 0) return SOLMSG_E_SHORT;
+    if (bytes[0] == 0x81) return parse_v1(bytes, len, out);
+    if (len > SOLMSG_MAX_BYTES) return SOLMSG_E_SHORT;
     if (!rd_u8(&r, &b)) return SOLMSG_E_SHORT;
     if (b & 0x80) {
         if ((b & 0x7f) != 0) return SOLMSG_E_VERSION;
@@ -676,6 +749,8 @@ void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t
         if (limit > SOLMSG_MAX_CU) limit = SOLMSG_MAX_CU;
         if (limit && cu_price > UINT64_MAX / limit) priority = UINT64_MAX;
         else priority = limit ? (limit * cu_price + 999999u) / 1000000u : 0;
+        /* version 1: a flat amount in the header; ComputeBudget instructions configure nothing there */
+        if (m->version == SOLMSG_VERSION_1) priority = m->v1_priority_lamports;
         s->priority_lamports = priority;
         s->fee_lamports = u64_sat_add((uint64_t)SOLMSG_BASE_FEE_PER_SIG * m->num_required_signatures, priority);
     }

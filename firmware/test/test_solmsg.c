@@ -500,7 +500,8 @@ static void test_malformed(void)
     mb_ix(&m, 2, accts, 2, d, ix_sys_transfer(d, 1));
     CHECK_EQ(solmsg_parse(m.buf, m.len - 1, &p), SOLMSG_E_SHORT);     /* truncated */
     m.buf[m.len] = 0; CHECK_EQ(solmsg_parse(m.buf, m.len + 1, &p), SOLMSG_E_TRAILING);
-    m.buf[0] = 0x81; CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_E_VERSION); /* v1 */
+    m.buf[0] = 0x82; CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_E_VERSION); /* a version this parser does not know */
+    m.buf[0] = 0x81; CHECK(solmsg_parse(m.buf, m.len, &p) != SOLMSG_OK);        /* version 1 has another layout: these bytes are not one */
     m.buf[0] = 0x00; CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_E_HEADER);  /* no signers */
     m.buf[0] = 0x04; CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_E_HEADER);  /* more signers than keys */
     m.buf[0] = 0x01;
@@ -643,10 +644,104 @@ static void test_touches_privacy_rings(void)
     CHECK(!solmsg_touches_privacy_rings(&p));
 }
 
+/* A version 1 message (SIMD-0385) with one System transfer: 0x81, header, mask, blockhash, counts, three
+ * addresses, config values, one instruction header, its account indexes and data. Returns the length. */
+static size_t build_v1_transfer(uint8_t *b, uint32_t mask, uint64_t priority, uint32_t cu_limit, uint64_t lamports, const uint8_t *third_key)
+{
+    size_t o = 0;
+    uint8_t data[64];
+    size_t dl = ix_sys_transfer(data, lamports);
+    b[o++] = 0x81; b[o++] = 1; b[o++] = 0; b[o++] = 1;
+    b[o++] = (uint8_t)mask; b[o++] = (uint8_t)(mask >> 8); b[o++] = (uint8_t)(mask >> 16); b[o++] = (uint8_t)(mask >> 24);
+    memset(b + o, 0xbb, 32); o += 32;
+    b[o++] = 1; b[o++] = 3;
+    memcpy(b + o, OWNER, 32); o += 32; memcpy(b + o, DEST, 32); o += 32; memcpy(b + o, third_key, 32); o += 32;
+    if (mask & 1u) { for (int i = 0; i < 4; i++) b[o++] = (uint8_t)(priority >> (8 * i)); }
+    if (mask & 2u) { for (int i = 4; i < 8; i++) b[o++] = (uint8_t)(priority >> (8 * i)); }
+    if (mask & 4u) { for (int i = 0; i < 4; i++) b[o++] = (uint8_t)(cu_limit >> (8 * i)); }
+    if (mask & 8u) { b[o++] = 0; b[o++] = 0; b[o++] = 0; b[o++] = 4; }
+    if (mask & 16u) { b[o++] = 0; b[o++] = 0x80; b[o++] = 0; b[o++] = 0; } /* 32 KiB heap */
+    b[o++] = 2; b[o++] = 2; b[o++] = (uint8_t)dl; b[o++] = (uint8_t)(dl >> 8);
+    b[o++] = 0; b[o++] = 1;
+    memcpy(b + o, data, dl); o += dl;
+    return o;
+}
+
+/* version 1: read like any other transaction, with its fee from the header, and refused when malformed */
+static void test_v1_message(void)
+{
+    static uint8_t b[512], c[512];
+    static solmsg_t p; /* large: keep it off the stack */
+    solmsg_summary_t s;
+    solmsg_signmsg_t sm;
+    uint8_t pool[32];
+    size_t n = build_v1_transfer(b, 0x1f, 20000, 200000, SOL / 2, SOLMSG_SYSTEM_PROGRAM);
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_OK);
+    CHECK_EQ(p.version, SOLMSG_VERSION_1);
+    CHECK_EQ(p.num_required_signatures, 1); CHECK_EQ(p.n_static_keys, 3); CHECK_EQ(p.n_ix, 1);
+    CHECK_EQ(p.n_lookup_tables, 0);
+    CHECK_U64(p.v1_priority_lamports, 20000); CHECK_EQ((int)p.v1_compute_unit_limit, 200000);
+    CHECK_EQ(p.ix[0].program_index, 2); CHECK_EQ(p.ix[0].n_accounts, 2); CHECK_EQ(p.ix[0].data_len, 12);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK(s.fee_payer_is_owner);
+    CHECK_U64(s.lamports_out, SOL / 2);
+    CHECK(s.has_dest); CHECK_MEM(s.dest, DEST, 32);
+    CHECK_U64(s.priority_lamports, 20000);
+    CHECK_U64(s.fee_lamports, 25000);
+    CHECK_EQ(s.dangerous, 0);
+    /* it is a transaction, so it can never be signed as a message: twice refused */
+    CHECK(solmsg_looks_like_message(b, n));
+    CHECK(!solmsg_signmsg_check(b, n, OWNER, OTHER, &sm));
+    /* no config at all: no priority fee */
+    n = build_v1_transfer(b, 0, 0, 0, SOL, SOLMSG_SYSTEM_PROGRAM);
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.priority_lamports, 0); CHECK_U64(s.fee_lamports, 5000); CHECK_U64(s.lamports_out, SOL);
+    /* a fee the size of a transfer is on the summary for policy and the display to act on */
+    n = build_v1_transfer(b, 3, 2 * SOL, 0, 1000, SOLMSG_SYSTEM_PROGRAM);
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_OK);
+    solmsg_analyze(&p, OWNER, &s);
+    CHECK_U64(s.priority_lamports, 2 * SOL);
+    /* a Privacy Rings call in version 1 framing is recognised the same way */
+    CHECK(pubkey_from_b58("ring1GaLCuJnkUMVkX2JeZLTTX17wKsV4fZmPVzXANW", pool));
+    n = build_v1_transfer(b, 0, 0, 0, 1000, pool);
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_OK);
+    CHECK(solmsg_touches_privacy_rings(&p));
+    /* malformed: each rule of the format */
+    n = build_v1_transfer(b, 0x1f, 20000, 200000, SOL / 2, SOLMSG_SYSTEM_PROGRAM);
+#define BAD(code, stmt) do { memcpy(c, b, n); size_t m = n; stmt; CHECK_EQ(solmsg_parse(c, m, &p), code); CHECK(!solmsg_looks_like_message(c, m)); } while (0)
+    BAD(SOLMSG_E_HEADER, c[4] = 0x3f);                       /* a config bit this parser does not know */
+    BAD(SOLMSG_E_HEADER, c[1] = 0);                          /* no signer */
+    BAD(SOLMSG_E_HEADER, c[1] = 13);                         /* more signatures than a transaction may carry */
+    BAD(SOLMSG_E_HEADER, c[2] = 1);                          /* a read-only fee payer */
+    BAD(SOLMSG_E_HEADER, c[3] = 3);                          /* more read-only accounts than there are */
+    BAD(SOLMSG_E_HEADER, memcpy(c + 42 + 32, c + 42, 32));   /* the same address twice */
+    BAD(SOLMSG_E_TRAILING, c[m++] = 0);
+    BAD(SOLMSG_E_SHORT, m--);
+    BAD(SOLMSG_E_INDEX, c[n - 13] = 3);                      /* an account index past the address list */
+    BAD(SOLMSG_E_INDEX, c[n - 18] = 9);                      /* a program index past the address list */
+    BAD(SOLMSG_E_TOOMANY, c[40] = 65);                       /* more instructions than the format allows */
+    BAD(SOLMSG_E_TOOMANY, c[41] = 65);                       /* more addresses than the format allows */
+#undef BAD
+    /* half a priority fee (one of its two bits) */
+    n = build_v1_transfer(b, 1, 20000, 0, 1000, SOLMSG_SYSTEM_PROGRAM);
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_E_HEADER);
+    /* a heap size outside the allowed range */
+    n = build_v1_transfer(b, 16, 0, 0, 1000, SOLMSG_SYSTEM_PROGRAM);
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_OK);
+    b[42 + 96 + 1] = 0x10; /* 4 KiB */
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_E_HEADER);
+    /* 0x82 and above are other versions: still refused */
+    n = build_v1_transfer(b, 0, 0, 0, 1000, SOLMSG_SYSTEM_PROGRAM);
+    b[0] = 0x82;
+    CHECK_EQ(solmsg_parse(b, n, &p), SOLMSG_E_VERSION);
+}
+
 int main(void)
 {
     init_keys();
     RUN(test_ring_key_derivation);
+    RUN(test_v1_message);
     RUN(test_signmsg_check);
     RUN(test_touches_privacy_rings);
     RUN(test_legacy_transfer_half_sol);

@@ -4,7 +4,7 @@
  * reaches it through the same door as EVM and Bitcoin.
  */
 import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
-import { claimsFor, controllerLimits, parseMessage, type ParsedTx } from "../../tx/parse.js";
+import { claimsFor, controllerLimits, parseMessage, splitTransaction, addV1Signature, type ParsedTx } from "../../tx/parse.js";
 import { explain, fmtSol, type Explanation } from "../../tx/explain.js";
 import { assess, type RiskVerdict } from "../../risk/filter.js";
 import { Intel, type AddressIntel } from "../../risk/intel.js";
@@ -55,9 +55,9 @@ export class SolanaAdapter implements ChainAdapter<SolanaParsed> {
   }
 
   async parse(bytes: Uint8Array, ctx: ParseContext): Promise<SolanaParsed> {
-    const tx = VersionedTransaction.deserialize(bytes);
-    const messageBytes = tx.message.serialize();
-    const tables = await this.lookupTables(bytes);
+    // version 1 has no lookup tables and a different wire layout (signatures after the message)
+    const { messageBytes, version1 } = splitTransaction(bytes);
+    const tables = version1 ? {} : await this.lookupTables(bytes);
     const p = parseMessage(messageBytes, { owner: ctx.owner, lookupTables: tables });
     const counterparties = new Set<string>();
     if (p.dest) counterparties.add(p.dest);
@@ -95,6 +95,7 @@ export class SolanaAdapter implements ChainAdapter<SolanaParsed> {
   claims(parsed: SolanaParsed): SolanaClaims { return claimsFor(parsed.tx, this.routers); }
 
   async assemble(unsignedBytes: Uint8Array, sig: Uint8Array, _parsed: SolanaParsed, owner: string): Promise<Uint8Array> {
+    if (unsignedBytes.length > 0 && unsignedBytes[0] === 0x81) return addV1Signature(unsignedBytes, owner, sig);
     const tx = VersionedTransaction.deserialize(unsignedBytes);
     tx.addSignature(new PublicKey(owner), sig);
     return tx.serialize();
