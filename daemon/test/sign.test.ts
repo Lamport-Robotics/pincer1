@@ -3,13 +3,13 @@
  * takes, minus hardware and RPC (intel is seeded, lookup tables are not needed for legacy txs).
  */
 import { describe, it, expect, beforeEach } from "vitest";
-import { Connection, VersionedTransaction } from "@solana/web3.js";
+import { Connection, PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import { SimController } from "../src/controller/sim.js";
 import { MockRobot } from "../src/presence/client.js";
 import { Signer } from "../src/sign.js";
 import { Intel } from "../src/risk/intel.js";
-import { claimsFor, parseMessage } from "../src/tx/parse.js";
+import { claimsFor, parseMessage, touchesPrivacyRings, PRIVACY_RINGS_PROGRAMS } from "../src/tx/parse.js";
 import type { Config } from "../src/config.js";
 import * as F from "./fixtures.js";
 
@@ -165,6 +165,58 @@ describe("signing pipeline", () => {
     expect(await sim.sign("msg", msg, { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] })).toEqual({ ok: false, reason: "policy" });
     const r = await sim.sign("msg", new TextEncoder().encode("Sign in to pump.fun"), { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] });
     expect(r.ok).toBe(true);
+  });
+
+  it("signMessage signs only what can be read: never a version 1 transaction, a raw hash, or a spaceless string", async () => {
+    const { sim, robot, signer } = harness();
+    const none = { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] };
+    // a version 1 transaction message starts 0x81; the legacy/v0 parser does not read it, so it is not "a transaction" to looksLikeMessage
+    const v1 = new Uint8Array(200).fill(0x61); v1[0] = 0x81; v1[9] = 0x20;
+    const digest = new Uint8Array(32).map((_, i) => (i * 29 + 3) & 255);
+    const hex = new TextEncoder().encode("ab".repeat(40));
+    for (const bytes of [v1, digest, hex]) {
+      expect(await sim.sign("msg", bytes, none)).toEqual({ ok: false, reason: "policy" }); // the controller, on its own
+      robot.spoken.length = 0;
+      expect(await signer.signMessage(bytes, "https://drainer.example")).toEqual({ ok: false, reason: "blocked" });
+      expect(robot.spoken).toHaveLength(1);
+      expect(robot.spoken[0]).toMatch(/^I'm not signing this\. drainer\.example sent a message I can't show you in full/);
+    }
+    // a raw 32-byte hash is refused for an EVM personal_sign too
+    expect(await sim.sign("evm_msg", digest, {})).toEqual({ ok: false, reason: "policy" });
+    // a multi-line sign-in text is still signed
+    robot.spoken.length = 0;
+    const ok = await signer.signMessage(new TextEncoder().encode("Sign in to pump.fun\nnonce: 1234"), "https://pump.fun");
+    expect(ok.ok).toBe(true);
+  });
+
+  it("refuses a transaction that calls the Privacy Rings pool or registry, even declared as an unknown program", async () => {
+    const { sim } = harness();
+    for (const id of PRIVACY_RINGS_PROGRAMS) {
+      const tx = new Transaction({ feePayer: F.owner.publicKey, recentBlockhash: PublicKey.default.toBase58() })
+        .add(new TransactionInstruction({ programId: new PublicKey(id), keys: [{ pubkey: F.owner.publicKey, isSigner: true, isWritable: true }], data: Buffer.from([15]) }));
+      const bytes = tx.serializeMessage();
+      expect(touchesPrivacyRings(bytes)).toBe(true);
+      expect(await sim.sign("tx", bytes, { lamports_out: "0", fee_lamports: "5000", token_out: [], dest: "", programs: [id], dangerous: ["unknown_program"] })).toEqual({ ok: false, reason: "policy" });
+    }
+  });
+
+  it("signMessage never signs the Privacy Rings key-derivation message, and says who asked", async () => {
+    const { sim, robot, signer } = harness();
+    const none = { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] };
+    const bare = new TextEncoder().encode("TSPP/derive/v1");
+    const enveloped = new Uint8Array([0xff, ...new TextEncoder().encode("solana offchain"), 0, 0, 14, 0, ...bare]);
+    // the controller refuses on its own, whatever the daemon does
+    expect(await sim.sign("msg", bare, none)).toEqual({ ok: false, reason: "policy" });
+    expect(await sim.sign("msg", enveloped, none)).toEqual({ ok: false, reason: "policy" });
+    // the daemon blocks it before asking for a touch and names the site
+    const r = await signer.signMessage(enveloped, "https://drainer.example");
+    expect(r).toEqual({ ok: false, reason: "blocked" });
+    expect(robot.spoken).toHaveLength(1);
+    expect(robot.spoken[0]).toMatch(/^I'm not signing this\. drainer\.example asked for the signature that unlocks your private balance keys/);
+    expect(robot.spoken[0]).not.toMatch(/Touch me/);
+    // an ordinary message is still asked about and signed
+    const ok = await signer.signMessage(new TextEncoder().encode("Sign in to pump.fun"), "https://pump.fun");
+    expect(ok.ok).toBe(true);
   });
 
   it("an allowance lets agent trades through without a touch, within its limits", async () => {

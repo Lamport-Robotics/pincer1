@@ -13,7 +13,7 @@ import { secp256k1 } from "@noble/curves/secp256k1";
 import { getAddress, hashMessage, keccak256, type Hex } from "viem";
 import { publicKeyToAddress } from "viem/accounts";
 import * as bitcoin from "bitcoinjs-lib";
-import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage } from "../tx/parse.js";
+import { CONTROLLER_CORE_PROGRAMS, parseMessage, looksLikeMessage, isRingKeyDerivation, checkSignMessage, bareTextOk, touchesPrivacyRings, ED25519_MSG_MAX } from "../tx/parse.js";
 import { controllerEvmDangers, looksLikeEvmTx, parseEvmTx } from "../chains/evm/parse.js";
 import { parseTypedData, typedDataDigest } from "../chains/evm/message.js";
 import { netOf, parsePsbt, type BtcNetwork } from "../chains/bitcoin/psbt.js";
@@ -291,11 +291,19 @@ export class SimController implements ControllerClient {
     let lastDest: string | null = null;
     let needTouch = true;
 
+    // the secure element signs in one command: what it cannot take is refused before the owner is asked
+    if (bytes.length === 0 || bytes.length > ED25519_MSG_MAX) return { ok: false, reason: "policy" };
     if (kind === "msg") {
       if (looksLikeMessage(bytes)) return { ok: false, reason: "policy" };
+      if (isRingKeyDerivation(bytes)) return { ok: false, reason: "policy" }; // firmware: solmsg_is_ring_key_derivation
+      // only text the display shows whole, or an off-chain message for this key (firmware: solmsg_signmsg_check)
+      const other = (this.duressActive ? this.real : this.decoy).sol.publicKey;
+      if (!checkSignMessage(bytes, kp.publicKey, other).ok) return { ok: false, reason: "policy" };
     } else {
       let parsed;
       try { parsed = parseMessage(bytes, { owner }); } catch { return { ok: false, reason: "policy" }; }
+      // Privacy Rings calls are not parsed yet: refused whole, never shown as an unknown program
+      if (touchesPrivacyRings(bytes)) return { ok: false, reason: "policy" };
       // 1. owner must be the fee payer / a signer
       if (!parsed.signers.includes(owner)) return { ok: false, reason: "claims_mismatch" };
       // 2. lamports out ≤ claimed
@@ -399,6 +407,8 @@ export class SimController implements ControllerClient {
     } else {
       // a "message" must never be a transaction in disguise
       if (looksLikeEvmTx(bytes) || looksLikeMessage(bytes)) return { ok: false, reason: "policy" };
+      // text shown whole, never a raw hash (firmware: solmsg_bare_text_ok)
+      if (!bareTextOk(bytes)) return { ok: false, reason: "policy" };
       digest = hexBytes(hashMessage({ raw: bytes }));
     }
     const ok = await this.waitTouch(`m${Date.now()}`, "touch", ttlMs);

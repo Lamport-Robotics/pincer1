@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "text_non_ascii",
+ "notes": "the display face is ASCII only, so text it cannot draw is refused",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "U2lnbiBpbiB0byBleMOkbXBsZS5vcmcgbm93",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: not_text",
+  "ring_key_derivation": false
+ }
+}

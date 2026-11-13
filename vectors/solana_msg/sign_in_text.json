@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "sign_in_text",
+ "notes": "an ordinary sign-in message, which must still be signed",
+ "source": {
+  "constructed": "constructed: an ordinary sign-in text"
+ },
+ "bytes": "U2lnbiBpbiB0byBwdW1wLmZ1bgpub25jZTogMTIzNA==",
+ "owner": "Harmonic8SoAfZixJqUxxdSeyWzr6q7XFjuiXS5Z2zPg",
+ "expect": {
+  "controller": "sign after touch",
+  "ring_key_derivation": false
+ }
+}

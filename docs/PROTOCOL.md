@@ -167,8 +167,40 @@ reply, event or `hello` field ever says whether one exists.
 ```
 
 `kind` is `tx` (a serialized Solana *message*, legacy or v0; the controller parses it) or `msg`
-(an arbitrary byte string for `signMessage`; the controller refuses anything that parses as a transaction
-message, so a message can never be a disguised transaction).
+(`signMessage`: a raw Ed25519 signature by the wallet key over the bytes).
+
+A `msg` is signed only when the display can show all of it. The controller accepts, in this order of checks
+(`solmsg_signmsg_check`, vectors in `vectors/solana_msg/`), and answers `denied:policy` to everything else
+before any touch is asked for:
+
+- **Size.** Not empty, and at most `SIGNER_ED25519_MSG_MAX` bytes (860, provisional until measured on the
+  chip: the SE050 signs Ed25519 in one command). The same bound applies to `tx`.
+- **Never a transaction.** Anything that parses as a transaction of a supported chain is refused, and so is
+  any payload whose first byte is `0x80` or above unless it is an off-chain message. That covers every
+  versioned Solana message, including version 1 (first byte `0x81`), which the `tx` parser does not read yet.
+- **Never a key or a key seed.** Refused: the text `TSPP/derive/` or the bytes of SHA-256(`TSPP/derive/v1`)
+  (the Privacy Rings key-derivation message, whose signature is the wallet's privacy keys), any other use of
+  the `TSPP/` and `zolana/` namespaces, and either slot's public key anywhere but an envelope's signer field.
+- **Shape.** One of: bare text; an off-chain message with header version 0 (application domain, format 0 or
+  1, length prefix) or version 1. An off-chain message must name exactly one signer, the active key.
+- **Text** means every byte is `0x20`..`0x7e` or a line feed. Bare text of exactly 32 bytes is refused (the
+  length of a digest), and text of 32 bytes or more must contain a space, so a hash, a hex or base58 string
+  and compact JSON are refused.
+- **Sign-in.** A text whose first line ends `wants you to sign in with your Solana account:` must name the
+  active key's address on its second line.
+
+The screen shows every character, 21 per row, a line feed starting a new row, with the application domain of
+a version 0 off-chain message in full; a text that does not fit eight pages is refused. `evm_msg` without
+typed data and `btc_msg` use the same text rule and the same screen.
+
+What this does not do: for text that passes, the protection is the owner reading it. Order formats that sign
+a hex string or compact JSON are refused by design.
+
+Until the controller parses Privacy Rings instructions itself, a `tx` (and an `inheritance_set` transaction)
+whose account keys include the pool `ring1GaLCuJnkUMVkX2JeZLTTX17wKsV4fZmPVzXANW` or the registry
+`regy3WAeRXMYuMYxr5iK3Bf9Arr3PcxGxyzAddbiqDQ` is refused with `denied:policy`; it is never shown as an unknown
+program. A transaction that calls a program the controller cannot read shows `amount not shown` in place of
+`no SOL leaves`.
 
 Controller-side checks before touch is even requested:
 

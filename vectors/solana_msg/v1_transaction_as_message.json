@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "v1_transaction_as_message",
+ "notes": "a real Solana version 1 transaction message (a Privacy Rings transfer). The legacy/v0 parser does not read it, so it must be refused as a message by its first byte",
+ "source": {
+  "constructed": "fetched: mainnet transaction tYyMJHfW1Dq4TRwzMi5c56Kfo5GwmwdfjoNd17Q4L4FwwEJDdeYRNakq1UX8vaGWjxMG4HEMsazV2HKjtTm4yTA, the signed message bytes, read 2026-11-12"
+ },
+ "bytes": "gQEAAgwAAABFRLiNRL4rDh5hjao9YbD+AykefJGoCdCk4hUCAFgaeAEFRcmZt5i2+RiC2tnf955/PrySSQiCf65vrorpxtsUGGhYBtAT/bCs/tgDblxqOC0IVuBTHTYXiO70DW6vDfseUVq3UymuRbG4540ai4ly+DzymrYTo/MPR0tiB2TBjfdxAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMvLV4rmElgTLur2rBIcCkK4ii6E+xHn4tW6Cv0ScxY9DdBgAAAAAEBAdmAgACBAMCAQAQ//////////8Ee1/EaTtiNDiicqnS3MvPBu1H0ohbSZBTXbInEVmoJlmPQt3wOyt5QxrNfrJ0mruoAAAAAg75JlUbXaNvOvYQrpZx918s/FoNp+FifrmgDhfcHaxkAQABWQABVAAAAAME4SVtgsmk90OAd0m2kMm0N4HlxrMI+rDbfe1FUgaQCRU3oyRcIPXbEWly6K1a2q2GUiYUSj1FzL0rf1c1YvCxo07GPmbXrWcXZF3dfeCjaySmVhVRO/jLwdPH+AEjeUjxooKFGMHG4wzzrJIHagJO4nwyAOksp4UE7xWRRw9Wg866uTwMumUKdG14yEai1s7s05nbAVkAAVQAAAADBNn6th2XHwpSntsHWeTlak8urqz4ypbdNX3MwDcphv8WrB1r/2gn1RRescIcOVarF2RbUMBNkpf3DXN64OHzlogkEshpK/uynJeNAFKIuX8g4RoAKfLMf8brcrOZstoo2X8ZDL1b5bseadmTGAT4Vnk2FBMAAAECAx3A5/thUJcdnbJoR7sCNYKclPG34UXgqWQsnQ1CYRTwIrwAV2hKSez3sGOFWLbvSfzO5rXf5siQH+fVAy5YFy4EXSvgLpGcNHhhGGru6UboIMwOVZYU8Fw0TaUQSQQ6biYD0IuYNOKqMowdzOafj7njom2+7xuU34wq9hBERZHvJVGknJIyWN0lc8Ebiay0nSsfn4jMN8i4m4vHEjMXceQehVjQfEWoNdTiiSOu0/hzdSk0XY1ClyuhWaEthLh2JAEfaFAU65wzfnIjgnVxYIjr86fNRlkyHqFb/AFmSUdNTAABzgACAA==",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: transaction",
+  "ring_key_derivation": false
+ }
+}

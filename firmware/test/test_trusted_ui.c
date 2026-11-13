@@ -156,23 +156,76 @@ static void test_solana_screens(void)
     { int i; s.n_token_out = 8; for (i = 0; i < 8; i++) { s.token_out[i].has_mint = true; s.token_out[i].has_dest = true; s.token_out[i].amount = (uint64_t)i; } }
     tui_build_sign(&r, &d);
     CHECK(!d.truncated); CHECK(d.n_pages >= 4 && d.n_pages <= TUI_MAX_PAGES);
-    /* a message: length and preview, never interpreted */
+    /* a message: every character, in order, never summarised and never cut */
     {
         static const uint8_t msg[] = "Sign in to example.org nonce 42";
+        static const uint8_t lines[] = "example.org wants you\nto sign in\n\nNonce: 1";
+        static const uint8_t full[] = "123456789012345678901\nnext";
+        static const uint8_t app[32] = {1, 2, 3};
+        static uint8_t big[1200];
         memset(&r, 0, sizeof r);
         r.kind = TUI_SIGN_SOL_MSG; r.msg = msg; r.msg_len = sizeof msg - 1;
         tui_build_sign(&r, &d);
+        CHECK(!d.truncated);
         CHECK_STR(line(&d, 0, 0), "SOLANA " DOT " MESSAGE");
-        CHECK_STR(line(&d, 0, 1), "31 bytes");
-        CHECK_STR(line(&d, 0, 2), "text:");
-        CHECK_STR(line(&d, 0, 3), "Sign in to example.or");
-        CHECK_STR(line(&d, 0, 4), "g nonce 42");
+        CHECK_STR(line(&d, 0, 1), "Sign in to example.or");
+        CHECK_STR(line(&d, 0, 2), "g nonce 42");
+        CHECK_EQ(d.p[0].n_lines, 3);
+        /* line breaks start rows, an empty line is an empty row */
+        r.msg = lines; r.msg_len = sizeof lines - 1;
+        tui_build_sign(&r, &d);
+        CHECK_STR(line(&d, 0, 1), "example.org wants you"); CHECK_STR(line(&d, 0, 2), "to sign in");
+        CHECK_STR(line(&d, 0, 3), ""); CHECK_STR(line(&d, 0, 4), "Nonce: 1");
+        /* a full row followed by a line break is one row, not two */
+        r.msg = full; r.msg_len = sizeof full - 1;
+        tui_build_sign(&r, &d);
+        CHECK_STR(line(&d, 0, 1), "123456789012345678901"); CHECK_STR(line(&d, 0, 2), "next");
+        /* long text pages; nothing is dropped: the rows put back together are the message */
+        memset(big, 'a', sizeof big);
+        { size_t i; for (i = 20; i < sizeof big; i += 21) big[i] = ' '; }
+        r.msg = big; r.msg_len = 21 * 40;
+        tui_build_sign(&r, &d);
+        CHECK(!d.truncated); CHECK(d.n_pages >= 7);
         {
-            static const uint8_t bin[] = {0x01, 0x02, 0xff, 0x10, 0xaa, 0xbb, 0xcc, 0xdd, 0xee};
-            r.msg = bin; r.msg_len = sizeof bin;
-            tui_build_sign(&r, &d);
-            CHECK_STR(line(&d, 0, 2), "hex 0102ff10aabbccdd" ELL);
+            int p, i; size_t o = 0; bool same = true;
+            for (p = 0; p < d.n_pages; p++)
+                for (i = (p == 0 ? 1 : 0); i < d.p[p].n_lines; i++) {
+                    size_t l = strlen(d.p[p].l[i].text);
+                    if (o + l > r.msg_len || memcmp(d.p[p].l[i].text, big + o, l) != 0) same = false;
+                    o += l;
+                }
+            CHECK(same); CHECK_EQ((int)o, (int)r.msg_len);
         }
+        /* what does not fit eight pages is not signable, and neither is a byte the face cannot draw */
+        r.msg_len = sizeof big;
+        tui_build_sign(&r, &d);
+        CHECK(d.truncated);
+        {
+            static const uint8_t bin[] = {'h', 'i', 0x01, 0x02, 0xff};
+            static const uint8_t tab[] = "a\tb";
+            r.msg = bin; r.msg_len = sizeof bin; tui_build_sign(&r, &d); CHECK(d.truncated);
+            r.msg = tab; r.msg_len = sizeof tab - 1; tui_build_sign(&r, &d); CHECK(d.truncated);
+            r.msg = msg; r.msg_len = 0; tui_build_sign(&r, &d); CHECK(d.truncated);
+        }
+        /* an off-chain message says so, and names its application domain in full */
+        r.msg = msg; r.msg_len = sizeof msg - 1; r.msg_env = 2;
+        tui_build_sign(&r, &d);
+        CHECK_STR(line(&d, 0, 0), "OFF-CHAIN MESSAGE v1"); CHECK_STR(line(&d, 0, 1), "Sign in to example.or");
+        r.msg_env = 1; r.msg_app = app;
+        tui_build_sign(&r, &d);
+        CHECK_STR(line(&d, 0, 0), "OFF-CHAIN MESSAGE v0"); CHECK_STR(line(&d, 0, 1), "app");
+        {
+            char b58[48]; size_t l;
+            CHECK(pubkey_to_b58(app, b58, sizeof b58) > 0);
+            l = strlen(b58);
+            CHECK(strncmp(line(&d, 0, 2), b58, 21) == 0); CHECK(l > 21); CHECK(!d.truncated);
+            CHECK(has_line(&d, "Sign in to example.or"));
+        }
+        /* the other chains' messages are shown the same way */
+        memset(&r, 0, sizeof r);
+        r.kind = TUI_SIGN_EVM_MSG; r.msg = lines; r.msg_len = sizeof lines - 1;
+        tui_build_sign(&r, &d);
+        CHECK_STR(line(&d, 0, 0), "EVM " DOT " MESSAGE"); CHECK_STR(line(&d, 0, 1), "example.org wants you"); CHECK(has_line(&d, "Nonce: 1"));
     }
     /* inheritance: same parse + arrangement, arming needs a long touch */
     memset(&s, 0, sizeof s);

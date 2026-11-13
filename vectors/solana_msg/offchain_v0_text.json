@@ -1,0 +1,16 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "offchain_v0_text",
+ "notes": "off-chain message v0, format 1, one signer (the wallet), zero application domain",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "/3NvbGFuYSBvZmZjaGFpbgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEB6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iwiAFNpZ24gaW4gdG8gZXhhbXBsZS5vcmcKbm9uY2U6IDEyMzQ=",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "sign after touch",
+  "ring_key_derivation": false,
+  "shown": "Sign in to example.org\nnonce: 1234"
+ }
+}

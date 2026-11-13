@@ -84,6 +84,7 @@ int signer_sign(uint8_t slot, const uint8_t *msg, size_t len, uint8_t sig[64])
 {
     if (slot >= SIGNER_SLOTS || !g_present[slot]) return -1;
     if (!may_sign(slot)) return -1; /* same contract as the chip: no session, no signature */
+    if (len > SIGNER_ED25519_MSG_MAX) return -1; /* same bound as the chip's single command */
     ed25519_sign(sig, msg, len, g_pub[slot], g_priv[slot]);
     return 0;
 }

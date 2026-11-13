@@ -453,6 +453,7 @@ int signer_sign(uint8_t slot, const uint8_t *msg, size_t len, uint8_t sig[64])
     size_t sigLen = 64;
     smStatus_t st;
     if (!g_open || !g_scp.open || !g_user_open || slot >= SIGNER_SLOTS || !g_present[slot]) return -1;
+    if (len > SIGNER_ED25519_MSG_MAX) return -1;
     st = Se05x_API_EdDSASign(&g_user, SLOT_OBJ_ID[slot], kSE05x_EDSignatureAlgo_ED25519PURE_SHA_512, msg, len, sig,
                              &sigLen);
     if (st != SM_OK || sigLen != 64) return -1;

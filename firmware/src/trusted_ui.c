@@ -264,7 +264,8 @@ static void build_sol_tx(const tui_sign_t *r, tui_doc_t *doc, const char *head)
         if (s->has_dest) { tui_short_b58(s->dest, sh, sizeof sh); tui_addf(doc, TUI_TEXT, "to %s", sh); }
         if (s->multi_dest) add_danger(doc, "MULTIPLE RECIPIENTS");
     } else if (s->n_token_out == 0) {
-        tui_add(doc, TUI_TEXT, "no SOL leaves");
+        /* "nothing leaves" is only true of programs the controller reads: one it cannot read moves what it likes */
+        tui_add(doc, TUI_TEXT, (r->sol_dangerous & (SOLMSG_DANGER_UNKNOWN_PROGRAM | SOLMSG_DANGER_LOOKUP_TABLE)) ? "amount not shown" : "no SOL leaves");
     }
     if (s->priority_lamports > 0) {
         /* a prioritisation fee is SOL spent without a transfer: always on the screen, loud past 0.01 SOL */
@@ -372,27 +373,27 @@ static void build_btc(const tui_sign_t *r, tui_doc_t *doc)
     if (p->n_non_change > 1) tui_addf(doc, TUI_TEXT, "%u outputs leave", (unsigned)p->n_non_change);
 }
 
-static void add_msg_preview(tui_doc_t *doc, const uint8_t *msg, size_t len)
+/* Every character of a message, in order: 21 cells per row, a line break starts a new row, nothing is cut and
+ * nothing is summarised. What does not fit the document, or a byte the face cannot draw, makes the document
+ * truncated, and a truncated document is never signed: the owner consents to what was on the screen. */
+static void add_msg_text(tui_doc_t *doc, const uint8_t *msg, size_t len)
 {
-    size_t i, printable = 0;
-    char line[24];
-    tui_addf(doc, TUI_TEXT, "%u bytes", (unsigned)len);
-    for (i = 0; i < len; i++) if (msg[i] >= 0x20 && msg[i] < 0x7f) printable++;
-    if (len > 0 && printable == len) {
-        size_t o = 0;
-        tui_add(doc, TUI_TEXT, "text:");
-        for (i = 0; i < len && i < 2 * DISPLAY_COLS; i++) {
-            line[o++] = (char)msg[i];
-            if (o == DISPLAY_COLS || i + 1 == len) { line[o] = 0; tui_add(doc, TUI_TEXT, line); o = 0; }
+    char line[DISPLAY_COLS + 1];
+    size_t o = 0, i;
+    bool wrapped = false; /* the row just ended because it was full, so a line break right after adds no row */
+    if (!msg || len == 0) { doc->truncated = true; return; }
+    for (i = 0; i < len && !doc->truncated; i++) {
+        if (msg[i] == '\n') {
+            if (!(wrapped && o == 0)) { line[o] = 0; tui_add(doc, TUI_TEXT, line); }
+            o = 0; wrapped = false;
+            continue;
         }
-        if (len > 2 * DISPLAY_COLS) tui_add(doc, TUI_TEXT, ELL);
-    } else {
-        static const char HEX[] = "0123456789abcdef";
-        size_t o = 0;
-        for (i = 0; i < len && i < 8; i++) { line[o++] = HEX[msg[i] >> 4]; line[o++] = HEX[msg[i] & 15]; }
-        line[o] = 0;
-        tui_addf(doc, TUI_TEXT, "hex %s%s", line, len > 8 ? ELL : "");
+        if (msg[i] < 0x20 || msg[i] > 0x7e) { doc->truncated = true; return; }
+        line[o++] = (char)msg[i];
+        wrapped = false;
+        if (o == DISPLAY_COLS) { line[o] = 0; tui_add(doc, TUI_TEXT, line); o = 0; wrapped = true; }
     }
+    if (o > 0) { line[o] = 0; tui_add(doc, TUI_TEXT, line); }
 }
 
 /* The whole 32-byte digest, 8 bytes per line: it is what gets signed, so no digit is hidden. */
@@ -423,15 +424,22 @@ void tui_build_sign(const tui_sign_t *r, tui_doc_t *doc)
         if (r->inh_heir) { tui_short_b58(r->inh_heir, sh, sizeof sh); tui_addf(doc, TUI_TEXT, "heir %s", sh); }
         break;
     case TUI_SIGN_SOL_MSG:
-        tui_add(doc, TUI_HEAD, "SOLANA " DOT " MESSAGE");
-        add_msg_preview(doc, r->msg, r->msg_len);
+        tui_add(doc, TUI_HEAD, r->msg_env == 1 ? "OFF-CHAIN MESSAGE v0" : r->msg_env == 2 ? "OFF-CHAIN MESSAGE v1" : "SOLANA " DOT " MESSAGE");
+        if (r->msg_env == 1 && r->msg_app) {
+            /* who the message says it is for: shown whole, since a look-alike domain is the point of faking one */
+            char app[48];
+            tui_add(doc, TUI_TEXT, "app");
+            if (pubkey_to_b58(r->msg_app, app, sizeof app) > 0) tui_add_wrap(doc, TUI_TEXT, app);
+            else doc->truncated = true;
+        }
+        add_msg_text(doc, r->msg, r->msg_len);
         break;
     case TUI_SIGN_EVM_TX:
         build_evm_tx(r, doc);
         break;
     case TUI_SIGN_EVM_MSG:
         tui_add(doc, TUI_HEAD, "EVM " DOT " MESSAGE");
-        add_msg_preview(doc, r->msg, r->msg_len);
+        add_msg_text(doc, r->msg, r->msg_len);
         break;
     case TUI_SIGN_EVM_TYPED:
         tui_add(doc, TUI_HEAD, "EVM " DOT " TYPED DATA");
@@ -462,7 +470,7 @@ void tui_build_sign(const tui_sign_t *r, tui_doc_t *doc)
     case TUI_SIGN_BTC_MSG:
         tui_add(doc, TUI_HEAD, "BITCOIN " DOT " MESSAGE");
         tui_add(doc, TUI_TEXT, "BIP-322 simple");
-        add_msg_preview(doc, r->msg, r->msg_len);
+        add_msg_text(doc, r->msg, r->msg_len);
         break;
     }
 }

@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "sign_in_other_account",
+ "notes": "a sign-in text that names another account",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "ZXhhbXBsZS5vcmcgd2FudHMgeW91IHRvIHNpZ24gaW4gd2l0aCB5b3VyIFNvbGFuYSBhY2NvdW50OgpKMnhjY1J0dUc0M2RyRVNMWXpuSGhMaFFrTFRkZmVwY0tZYmlROUJzSlZhZgoKTm9uY2U6IDE=",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: sign_in_account",
+  "ring_key_derivation": false
+ }
+}

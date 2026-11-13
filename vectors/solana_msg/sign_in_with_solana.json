@@ -1,0 +1,16 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "sign_in_with_solana",
+ "notes": "a standard multi-line sign-in text naming the wallet's own account: every line is shown",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "ZXhhbXBsZS5vcmcgd2FudHMgeW91IHRvIHNpZ24gaW4gd2l0aCB5b3VyIFNvbGFuYSBhY2NvdW50OgpHbWFEcnBwQkM3UDVBUktWOGczZGppd1A4OXZ6MWpMSzIzVjJHQmp1QUVHQgoKU2lnbiBpbiB0byB0aGUgZXhhbXBsZSBhcHAuCgpVUkk6IGh0dHBzOi8vZXhhbXBsZS5vcmcvbG9naW4KVmVyc2lvbjogMQpDaGFpbiBJRDogbWFpbm5ldApOb25jZTogOGYzYTkxYzIKSXNzdWVkIEF0OiAyMDI2LTExLTEyVDIwOjAwOjAwWg==",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "sign after touch",
+  "ring_key_derivation": false,
+  "shown": "example.org wants you to sign in with your Solana account:\nGmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB\n\nSign in to the example app.\n\nURI: https://example.org/login\nVersion: 1\nChain ID: mainnet\nNonce: 8f3a91c2\nIssued At: 2026-11-12T20:00:00Z"
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "first_byte_high_then_text",
+ "notes": "any first byte of 0x80 or above that is not an off-chain message is a versioned transaction prefix",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "gFNpZ24gaW4gdG8gZXhhbXBsZS5vcmc=",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: transaction",
+  "ring_key_derivation": false
+ }
+}

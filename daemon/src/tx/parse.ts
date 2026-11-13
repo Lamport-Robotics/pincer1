@@ -80,6 +80,138 @@ export interface ParseOptions {
   lookupTables?: Record<string, string[]>;
 }
 
+const RING_DERIVE_TAG = new TextEncoder().encode("TSPP/derive/");
+/** SHA-256("TSPP/derive/v1"): the application domain of the off-chain envelope the keys are derived from. */
+const RING_DERIVE_DOMAIN_V1 = Uint8Array.from(Buffer.from("1d32a88533af12d35e5ac6fce817a4cb810bcc4115386b14a78e8b2ef09d864c", "hex"));
+function contains(bytes: Uint8Array, needle: Uint8Array): boolean {
+  const n = needle.length;
+  outer: for (let i = 0; i + n <= bytes.length; i++) {
+    for (let j = 0; j < n; j++) if (bytes[i + j] !== needle[j]) continue outer;
+    return true;
+  }
+  return false;
+}
+/**
+ * True when the bytes are, or contain, a Privacy Rings key-derivation message: the text `TSPP/derive/` of any
+ * version, raw or inside any off-chain envelope, or the application domain the canonical envelope carries.
+ * The signature over it is deterministic and every privacy key of the
+ * wallet is derived from it, so `signMessage` must never produce it. The controller refuses the same bytes.
+ */
+export function isRingKeyDerivation(bytes: Uint8Array): boolean {
+  return contains(bytes, RING_DERIVE_TAG) || contains(bytes, RING_DERIVE_DOMAIN_V1);
+}
+
+/** The longest message the secure element signs in one command (firmware: SIGNER_ED25519_MSG_MAX; provisional). */
+export const ED25519_MSG_MAX = 860;
+/** Privacy Rings pool and registry. Until the controller parses their instructions, it refuses any transaction naming them. */
+export const PRIVACY_RINGS_PROGRAMS: readonly string[] = ["ring1GaLCuJnkUMVkX2JeZLTTX17wKsV4fZmPVzXANW", "regy3WAeRXMYuMYxr5iK3Bf9Arr3PcxGxyzAddbiqDQ"];
+const OFFCHAIN_DOMAIN = Uint8Array.from([0xff, ...Buffer.from("solana offchain")]);
+const NS_TSPP = Uint8Array.from(Buffer.from("TSPP/"));
+const NS_ZOLANA = Uint8Array.from(Buffer.from("zolana/"));
+const SIGN_IN_TAIL = " wants you to sign in with your Solana account:";
+
+function isText(b: Uint8Array, allowNewline: boolean): boolean {
+  for (const c of b) {
+    if (c === 0x0a) { if (!allowNewline) return false; continue; }
+    if (c < 0x20 || c > 0x7e) return false;
+  }
+  return true;
+}
+function startsWith(b: Uint8Array, prefix: Uint8Array): boolean {
+  if (b.length < prefix.length) return false;
+  for (let i = 0; i < prefix.length; i++) if (b[i] !== prefix[i]) return false;
+  return true;
+}
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && startsWith(a, b);
+}
+
+/**
+ * The bare-text rule of the controller (firmware: solmsg_bare_text_ok): every byte 0x20..0x7e or a line feed,
+ * not exactly 32 bytes, and with a space once it is 32 bytes or longer. A digest, a hex, base58 or base64
+ * string and compact JSON all fail it. Also used for EIP-191 and BIP-322 messages.
+ */
+export function bareTextOk(bytes: Uint8Array): boolean {
+  if (bytes.length === 0 || bytes.length === 32) return false;
+  if (!isText(bytes, true)) return false;
+  return bytes.length < 32 || bytes.includes(0x20);
+}
+
+export type SignMessageCheck =
+  | { ok: true; shape: "text" | "offchain_v0" | "offchain_v1"; text: Uint8Array; appDomain?: Uint8Array }
+  | { ok: false };
+
+/**
+ * What `signMessage` may sign, as the controller decides it (firmware: solmsg_signmsg_check; shared vectors in
+ * vectors/solana_msg). Bare text, or a Solana off-chain message (header version 0 or 1) with exactly one
+ * signer, the wallet's own key, and a text body. Refused: any other payload starting at 0x80 or above (every
+ * versioned transaction message, version 1 included), the Privacy Rings key namespaces, a wallet key outside
+ * the envelope's signer field, a sign-in text naming another account.
+ * `ownKey` null skips the checks that need the key (used before the controller is asked, where only "can this
+ * be read at all" matters).
+ */
+export function checkSignMessage(bytes: Uint8Array, ownKey: Uint8Array | null, otherKey?: Uint8Array | null): SignMessageCheck {
+  const no: SignMessageCheck = { ok: false };
+  if (bytes.length === 0) return no;
+  if (isRingKeyDerivation(bytes) || contains(bytes, NS_TSPP) || contains(bytes, NS_ZOLANA)) return no;
+  let shape: "text" | "offchain_v0" | "offchain_v1" = "text";
+  let text = bytes;
+  let appDomain: Uint8Array | undefined;
+  let signerAt = -1;
+  if (startsWith(bytes, OFFCHAIN_DOMAIN)) {
+    if (bytes.length < 18) return no;
+    if (bytes[16] === 0) {
+      if (bytes.length <= 85 || bytes.length > 1232) return no;
+      if (bytes[49]! > 1 || bytes[50] !== 1) return no;
+      signerAt = 51;
+      const bodyLen = bytes[83]! | (bytes[84]! << 8);
+      if (bodyLen === 0 || bodyLen !== bytes.length - 85) return no;
+      shape = "offchain_v0";
+      text = bytes.subarray(85);
+      const app = bytes.subarray(17, 49);
+      if (app.some((b) => b !== 0)) appDomain = app;
+      if (!isText(text, bytes[49] === 1)) return no;
+    } else if (bytes[16] === 1) {
+      if (bytes.length <= 50 || bytes[17] !== 1) return no;
+      signerAt = 18;
+      shape = "offchain_v1";
+      text = bytes.subarray(50);
+      if (!isText(text, true)) return no;
+    } else return no;
+    if (ownKey && !sameBytes(bytes.subarray(signerAt, signerAt + 32), ownKey)) return no;
+  } else {
+    if (bytes[0]! >= 0x80) return no;
+    if (!bareTextOk(bytes)) return no;
+  }
+  for (let i = 0; i + 32 <= bytes.length; i++) {
+    if (i === signerAt) continue;
+    const w = bytes.subarray(i, i + 32);
+    if ((ownKey && sameBytes(w, ownKey)) || (otherKey && sameBytes(w, otherKey))) return no;
+  }
+  if (ownKey) {
+    const s = Buffer.from(text).toString("latin1");
+    const eol = s.indexOf("\n");
+    const first = eol < 0 ? s : s.slice(0, eol);
+    if (first.endsWith(SIGN_IN_TAIL)) {
+      if (eol < 0) return no;
+      const e2 = s.indexOf("\n", eol + 1);
+      const second = e2 < 0 ? s.slice(eol + 1) : s.slice(eol + 1, e2);
+      if (second !== new PublicKey(ownKey).toBase58()) return no;
+    }
+  }
+  return { ok: true, shape, text, ...(appDomain ? { appDomain } : {}) };
+}
+
+/** True when a legacy or v0 message names the Privacy Rings pool or registry among its static keys (firmware: solmsg_touches_privacy_rings). */
+export function touchesPrivacyRings(bytes: Uint8Array): boolean {
+  try {
+    const m = VersionedMessage.deserialize(bytes);
+    return m.staticAccountKeys.some((k) => PRIVACY_RINGS_PROGRAMS.includes(k.toBase58()));
+  } catch {
+    return false;
+  }
+}
+
 /** True when the bytes deserialize as a Solana message (used to refuse disguised `signMessage` payloads). */
 export function looksLikeMessage(bytes: Uint8Array): boolean {
   try {

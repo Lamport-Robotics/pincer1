@@ -162,6 +162,6 @@ export function assessTypedData(td: TypedData, ctx: { intel?: Record<string, Cha
 export function assessPersonalMessage(message: Uint8Array, looksLikeTx: boolean): RiskVerdict {
   if (looksLikeTx) return { level: "block", reasons: ["the \"message\" is really a transaction. Not signing it blind."] };
   const text = new TextDecoder().decode(message);
-  if (/^0x[0-9a-fA-F]{64}$/.test(text.trim()) || message.length === 32) return { level: "high", reasons: ["it asks me to sign a raw hash I cannot read. That is how approvals get smuggled."] };
+  if (/^0x[0-9a-fA-F]{64}$/.test(text.trim()) || message.length === 32) return { level: "block", reasons: ["it asks me to sign a raw hash I cannot read. That is how approvals get smuggled."] };
   return { level: "low", reasons: ["nothing unusual."] };
 }

@@ -9,7 +9,7 @@
  * gates, in the same order for Solana, EVM and Bitcoin.
  */
 import { Connection } from "@solana/web3.js";
-import { type ParsedTx } from "./tx/parse.js";
+import { type ParsedTx, isRingKeyDerivation, checkSignMessage, ED25519_MSG_MAX } from "./tx/parse.js";
 import { type Explanation } from "./tx/explain.js";
 import { type RiskVerdict } from "./risk/filter.js";
 import { Intel } from "./risk/intel.js";
@@ -245,8 +245,26 @@ export class Signer {
   }
 
   async signMessage(message: Uint8Array, origin?: string): Promise<{ ok: true; signature: Uint8Array } | { ok: false; reason: string }> {
+    // Scam filter: the message every Privacy Rings key of this wallet is derived from. Its signature is the keys,
+    // for good, so no site gets it through signMessage, and the owner is told who asked. Blocked before the owner
+    // is asked for anything; the controller refuses the same bytes on its own.
+    if (isRingKeyDerivation(message)) {
+      const who = origin ? siteHost(origin) : "Someone";
+      log.warn("blocked", { chain: "solana", origin, why: "ring key derivation through signMessage" });
+      await this.robot.say(`I'm not signing this. ${who} asked for the signature that unlocks your private balance keys. A message request must never get that.`);
+      return { ok: false, reason: "blocked" };
+    }
+    // The controller signs only what its display can show whole: plain text, or an off-chain message for this
+    // wallet. A transaction in any format, a raw hash, a long string with no space: it refuses those on its own,
+    // so the owner is not asked to touch for something that will not be signed.
+    const readable = message.length <= ED25519_MSG_MAX ? checkSignMessage(message, null) : ({ ok: false } as const);
+    if (!readable.ok) {
+      log.warn("blocked", { chain: "solana", origin, why: "signMessage payload is not readable text" });
+      await this.robot.say(`I'm not signing this. ${origin ? siteHost(origin) : "Someone"} sent a message I can't show you in full, and I only sign what you can read.`);
+      return { ok: false, reason: "blocked" };
+    }
     if (!this.robot.ownerPresent()) { await this.robot.say("Someone wants me to sign a message, but I can't see you."); return { ok: false, reason: "owner_not_present" }; }
-    const text = quoteUntrusted(new TextDecoder().decode(message));
+    const text = quoteUntrusted(Buffer.from(readable.text).toString("latin1"));
     await this.robot.say(`${origin ? siteHost(origin) + " asks me to sign a message." : "Someone asks me to sign a message."} The site says: "${text}". Touch me to sign.`);
     const res = await this.controller.sign("msg", message, { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] }, this.touchTtlMs);
     if (!res.ok) { await this.robot.say(res.reason === "timeout" ? "No touch. Not signed." : "Not signing that."); return { ok: false, reason: res.reason }; }

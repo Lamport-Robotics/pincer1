@@ -109,6 +109,48 @@ int solmsg_parse(const uint8_t *bytes, size_t len, solmsg_t *out);
 void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t *s);
 /* True when the bytes are a well-formed legacy/v0 message (used to refuse disguised signMessage payloads). */
 bool solmsg_looks_like_message(const uint8_t *bytes, size_t len);
+
+/* True when the bytes are, or contain, a Privacy Rings key-derivation message: the text "TSPP/derive/" of any
+ * version, raw or inside any off-chain envelope, or the application domain the canonical envelope carries
+ * (SHA-256 of "TSPP/derive/v1"). The signature over that message is deterministic and every privacy
+ * key of the wallet is derived from it, so signMessage must never produce it: one touch on an innocent-looking
+ * request would hand over the viewing and nullifier keys for good. */
+bool solmsg_is_ring_key_derivation(const uint8_t *bytes, size_t len);
+
+/* ---- what signMessage may sign ----
+ * A message signature is a raw Ed25519 signature by the wallet key over the given bytes, so anything the
+ * owner cannot read in full on the display is something they cannot consent to. The controller signs only:
+ *   - bare text: every byte 0x20..0x7e or '\n', not exactly 32 bytes, and with a space once it is 32 bytes
+ *     or longer (a digest, a hex, base58 or base64 string and compact JSON all fail this);
+ *   - a Solana off-chain message, header version 0 (application domain, format 0 or 1, length prefix) or
+ *     version 1, with exactly one signer that is the active key and a body that is such text.
+ * It refuses every payload whose first byte is 0x80 or above and is not an off-chain message (every versioned
+ * transaction message, including version 1 which the parser above does not read), anything that names the
+ * Privacy Rings key namespaces, and anything that carries one of the wallet's own public keys outside the
+ * envelope's signer field. solmsg_looks_like_message() stays a separate, earlier check. */
+typedef enum {
+    SOLMSG_SIGNMSG_TEXT = 0,    /* bare text */
+    SOLMSG_SIGNMSG_OFFCHAIN_V0, /* "\xffsolana offchain", header version 0 */
+    SOLMSG_SIGNMSG_OFFCHAIN_V1, /* "\xffsolana offchain", header version 1 */
+} solmsg_signmsg_shape_t;
+
+typedef struct {
+    solmsg_signmsg_shape_t shape;
+    const uint8_t *text;       /* the text to show, inside `bytes` */
+    size_t text_len;
+    const uint8_t *app_domain; /* version 0 only: the 32-byte application domain when it is not all zero */
+} solmsg_signmsg_t;
+
+/* `own_key` is the active slot's key; `other_key` (may be NULL) is the other slot's. Returns false to refuse. */
+bool solmsg_signmsg_check(const uint8_t *bytes, size_t len, const uint8_t own_key[32], const uint8_t *other_key,
+                          solmsg_signmsg_t *out);
+/* The bare-text rule alone, for the message kinds of other chains (EIP-191 personal_sign, BIP-322). */
+bool solmsg_bare_text_ok(const uint8_t *bytes, size_t len);
+/* True when the message names the Privacy Rings pool or registry program among its static account keys.
+ * Until the controller parses those instructions itself, such a transaction is refused in every framing:
+ * shown as an unknown program it could deposit public funds into another wallet's private balance, write a
+ * permanent registry record, or spend the private balance. */
+bool solmsg_touches_privacy_rings(const solmsg_t *m);
 /* Durable-nonce transaction: the FIRST instruction is System `AdvanceNonceAccount` (tag 4) on static
  * accounts. Fills `nonce_account` (its first account) when non-NULL. */
 bool solmsg_starts_with_advance_nonce(const solmsg_t *m, uint8_t nonce_account[32]);

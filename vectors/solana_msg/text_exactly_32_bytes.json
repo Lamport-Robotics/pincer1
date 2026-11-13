@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "text_exactly_32_bytes",
+ "notes": "text of exactly 32 bytes: a digest can be ground into printable characters, so the length itself is refused",
+ "source": {
+  "constructed": "constructed for the signMessage rule (docs/PROTOCOL.md, sign kind msg)"
+ },
+ "bytes": "YWJjZGVmZ2hpamtsbW5vcCBxcnN0dXZ3eHl6MDEyMzQ=",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "controller": "refuse: digest_length",
+  "ring_key_derivation": false
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "chain": "solana",
+ "kind": "msg",
+ "name": "ring_derive_in_text",
+ "notes": "the payload buried in an innocent-looking sign-in text",
+ "source": {
+  "constructed": "constructed, not fetched: Helius Private Wallet integration docs (https://www.helius.dev/docs/privacy/integration/wallet.md), opened 2026-11-12"
+ },
+ "bytes": "U2lnbiBpbiB0byBleGFtcGxlLnh5egpub25jZTogODEKVFNQUC9kZXJpdmUvdjE=",
+ "owner": "Harmonic8SoAfZixJqUxxdSeyWzr6q7XFjuiXS5Z2zPg",
+ "expect": {
+  "controller": "refuse: ring_key_derivation",
+  "ring_key_derivation": true
+ }
+}

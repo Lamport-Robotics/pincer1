@@ -25,6 +25,11 @@ bool signer_keys_from_otp(void);
  * a copy outside the secure element (software signer: see signer_soft.c caveats). */
 int signer_import(uint8_t slot, const uint8_t priv[32], uint8_t pubkey[32]);
 int signer_pubkey(uint8_t slot, uint8_t pubkey[32]);
+/* The longest message signer_sign() takes. The SE05x signs pure Ed25519 only when the whole message travels in
+ * one command (SE05X_MAX_BUF_SIZE_CMD 892 on the SE050, minus the SCP03 and session framing). Provisional:
+ * the figure has not been measured on a chip yet; the software signer enforces the same bound so the bench and
+ * the tests behave like the product. Every sign path checks it BEFORE the owner is asked to touch. */
+#define SIGNER_ED25519_MSG_MAX 860u
 int signer_sign(uint8_t slot, const uint8_t *msg, size_t len, uint8_t sig[64]);
 bool signer_slot_present(uint8_t slot);
 /* Proves the key policy at boot: a signature asked WITHOUT the PIN session must be refused by the back-end.

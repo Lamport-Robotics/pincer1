@@ -517,9 +517,138 @@ static void test_malformed(void)
     CHECK(solmsg_looks_like_message(m.buf, m.len));
 }
 
+/* signMessage must never sign the message the Privacy Rings keys are derived from, however it is wrapped */
+static void test_ring_key_derivation(void)
+{
+#define RING(s) solmsg_is_ring_key_derivation((const uint8_t *)(s), sizeof(s) - 1)
+    CHECK(RING("TSPP/derive/v1"));
+    CHECK(RING("TSPP/derive/v2"));                                  /* a later version of the same derivation */
+    CHECK(RING("TSPP/derive/"));
+    CHECK(RING("Sign in to example.xyz\nnonce: 81\nTSPP/derive/v1")); /* buried in an innocent-looking text */
+    CHECK(RING("\xffsolana offchain\x00\x00\x0e\x00TSPP/derive/v1"));  /* inside an off-chain envelope */
+    CHECK(RING("\x00\x00TSPP/derive/v1\x00\x00"));                   /* binary on both sides */
+    CHECK(RING("TSPP/deriveTSPP/derive/v1"));                       /* a false start right before it */
+    /* the canonical envelope's application domain, SHA-256("TSPP/derive/v1"), with some other payload behind it */
+    CHECK(RING("\xffsolana offchain\x00" "\x1d\x32\xa8\x85\x33\xaf\x12\xd3\x5e\x5a\xc6\xfc\xe8\x17\xa4\xcb\x81\x0b\xcc\x41\x15\x38\x6b\x14\xa7\x8e\x8b\x2e\xf0\x9d\x86\x4c" "\x00\x01" "pubkeypubkeypubkeypubkeypubkey32" "\x02\x00" "hi"));
+    CHECK(!RING("Sign in to pump.fun\nnonce: 1234"));
+    CHECK(!RING("TSPP/derive"));                                    /* one byte short of the tag */
+    CHECK(!RING("tspp/derive/v1"));                                 /* other bytes give another signature: not the key message */
+    CHECK(!RING("TSPP/deriv/e/v1"));
+    CHECK(!RING(""));
+    CHECK(!solmsg_is_ring_key_derivation(NULL, 0));
+    CHECK(!solmsg_is_ring_key_derivation((const uint8_t *)"TSPP/derive/v1", 11)); /* the length is honoured */
+#undef RING
+}
+
+/* signMessage signs text the display shows whole, or an off-chain message for this key, and nothing else */
+static void test_signmsg_check(void)
+{
+    solmsg_signmsg_t sm;
+    uint8_t buf[256], v1tx[64];
+    size_t n;
+#define OK(s) solmsg_signmsg_check((const uint8_t *)(s), sizeof(s) - 1, OWNER, OTHER, &sm)
+    /* bare text */
+    CHECK(OK("Sign in to pump.fun\nnonce: 1234"));
+    CHECK_EQ(sm.shape, SOLMSG_SIGNMSG_TEXT); CHECK_EQ((int)sm.text_len, 31); CHECK(sm.app_domain == NULL);
+    CHECK(OK("hi"));
+    CHECK(OK("Sign in to example.org nonce 42"));    /* 31 bytes */
+    CHECK(!OK("abcdefghijklmnop qrstuvwxyz01234"));  /* exactly 32 bytes: the length of a digest */
+    CHECK(OK("Sign in to example.org nonce 4242"));  /* 33 bytes, with spaces */
+    CHECK(!OK("0123456789abcdef0123456789abcdef0"));  /* 33 characters and no space: a hash in text clothing */
+    CHECK(!OK("{\"type\":\"withdraw\",\"amount\":\"1000000\",\"to\":\"x\"}")); /* compact JSON */
+    CHECK(!OK("tab\there")); CHECK(!OK("cr\r\nlf")); CHECK(!OK("del\x7f")); CHECK(!OK("caf\xc3\xa9 au lait"));
+    CHECK(!OK(""));
+    CHECK(!solmsg_signmsg_check(NULL, 0, OWNER, NULL, &sm));
+    CHECK(!solmsg_signmsg_check((const uint8_t *)"a\0b", 3, OWNER, NULL, &sm));
+    /* key namespaces of Privacy Rings, wherever they sit */
+    CHECK(!OK("TSPP/derive/v1")); CHECK(!OK("please sign TSPP/decrypt/v1 for me")); CHECK(!OK("zolana/intent/v1 hello there"));
+    /* a versioned transaction message: the parser does not read version 1, the first byte gives it away */
+    memset(v1tx, 'a', sizeof v1tx); v1tx[0] = 0x81; v1tx[10] = ' ';
+    CHECK(!solmsg_looks_like_message(v1tx, sizeof v1tx));
+    CHECK(!solmsg_signmsg_check(v1tx, sizeof v1tx, OWNER, OTHER, &sm));
+    v1tx[0] = 0x80; CHECK(!solmsg_signmsg_check(v1tx, sizeof v1tx, OWNER, OTHER, &sm));
+    v1tx[0] = 0xfe; CHECK(!solmsg_signmsg_check(v1tx, sizeof v1tx, OWNER, OTHER, &sm));
+    /* a sign-in text must name the signer's own account */
+    {
+        char addr[48], t[200];
+        CHECK(pubkey_to_b58(OWNER, addr, sizeof addr) > 0);
+        snprintf(t, sizeof t, "example.org wants you to sign in with your Solana account:\n%s\n\nNonce: 1", addr);
+        CHECK(solmsg_signmsg_check((const uint8_t *)t, strlen(t), OWNER, OTHER, &sm));
+        CHECK(!solmsg_signmsg_check((const uint8_t *)t, strlen(t), DEST, NULL, &sm)); /* signed by another key */
+        snprintf(t, sizeof t, "example.org wants you to sign in with your Solana account:");
+        CHECK(!solmsg_signmsg_check((const uint8_t *)t, strlen(t), OWNER, OTHER, &sm));
+    }
+    /* off-chain message, header version 0: domain, 0, application domain, format, 1 signer, length, body */
+#define V0(fmt, cnt, signer, body) (n = 0, memcpy(buf, "\xffsolana offchain", 16), n = 16, buf[n++] = 0, memset(buf + n, 0, 32), n += 32, \
+        buf[n++] = (fmt), buf[n++] = (cnt), memcpy(buf + n, (signer), 32), n += 32, buf[n++] = (uint8_t)(sizeof(body) - 1), buf[n++] = 0, \
+        memcpy(buf + n, (body), sizeof(body) - 1), n += sizeof(body) - 1, solmsg_signmsg_check(buf, n, OWNER, OTHER, &sm))
+    CHECK(V0(1, 1, OWNER, "Sign in to example.org\nnonce: 1"));
+    CHECK_EQ(sm.shape, SOLMSG_SIGNMSG_OFFCHAIN_V0); CHECK_EQ((int)sm.text_len, 31); CHECK(sm.text == buf + 85); CHECK(sm.app_domain == NULL);
+    CHECK(V0(0, 1, OWNER, "Sign in to example.org"));
+    CHECK(!V0(0, 1, OWNER, "Sign in to example.org\nnonce: 1")); /* format 0 has no line breaks */
+    CHECK(!V0(2, 1, OWNER, "Sign in to example.org"));           /* extended UTF-8: not shown */
+    CHECK(!V0(1, 1, DEST, "Sign in to example.org"));            /* someone else's message */
+    CHECK(!V0(1, 2, OWNER, "Sign in to example.org"));           /* a second signer the owner never sees */
+    CHECK(!V0(1, 1, OWNER, "caf\xc3\xa9"));
+    CHECK(V0(1, 1, OWNER, "Sign in to example.org")); buf[17] = 0x42;
+    CHECK(solmsg_signmsg_check(buf, n, OWNER, OTHER, &sm)); CHECK(sm.app_domain == buf + 17); /* a named application: shown */
+    buf[83]++; CHECK(!solmsg_signmsg_check(buf, n, OWNER, OTHER, &sm));        /* length says more than there is */
+    buf[83]--; CHECK(!solmsg_signmsg_check(buf, n - 1, OWNER, OTHER, &sm));    /* and less */
+    CHECK(!solmsg_signmsg_check(buf, 85, OWNER, OTHER, &sm));                  /* header only */
+    CHECK(!solmsg_signmsg_check(buf, 16, OWNER, OTHER, &sm));                  /* the bare signing domain */
+    /* header version 1: domain, 1, 1 signer, content */
+#define V1(cnt, signer, body) (memcpy(buf, "\xffsolana offchain", 16), buf[16] = 1, buf[17] = (cnt), memcpy(buf + 18, (signer), 32), \
+        memcpy(buf + 50, (body), sizeof(body) - 1), n = 50 + sizeof(body) - 1, solmsg_signmsg_check(buf, n, OWNER, OTHER, &sm))
+    CHECK(V1(1, OWNER, "Sign in to example.org\nnonce: 1"));
+    CHECK_EQ(sm.shape, SOLMSG_SIGNMSG_OFFCHAIN_V1); CHECK(sm.text == buf + 50); CHECK_EQ((int)sm.text_len, 31);
+    CHECK(!V1(1, DEST, "Sign in to example.org"));
+    CHECK(!V1(2, OWNER, "Sign in to example.org"));
+    CHECK(!V1(1, OWNER, ""));
+    CHECK(!V1(1, OWNER, "TSPP/derive/v1"));
+    CHECK(V1(1, OWNER, "x")); buf[16] = 2; CHECK(!solmsg_signmsg_check(buf, n, OWNER, OTHER, &sm)); /* a later header version */
+    /* the other chains' message kinds use the bare-text rule */
+#define T(s) solmsg_bare_text_ok((const uint8_t *)(s), sizeof(s) - 1)
+    CHECK(T("example.org wants you to sign in with your Ethereum account:\n0x1111111111111111111111111111111111111111\n\nURI: https://example.org"));
+    CHECK(!T("0x6fe39bfe9ff8a903ed3fbc056c33b1fd8c35d7281e92501964d50541b86e2d01")); /* a hash as hex text */
+    CHECK(!T("\x6f\xe3\x9b\xfe\x9f\xf8\xa9\x03\xed\x3f\xbc\x05\x6c\x33\xb1\xfd\x8c\x35\xd7\x28\x1e\x92\x50\x19\x64\xd5\x05\x41\xb8\x6e\x2d\x01")); /* a raw hash */
+    CHECK(!T("abcdefghijklmnop qrstuvwxyz01234"));
+#undef T
+#undef V1
+#undef V0
+#undef OK
+}
+
+/* until the controller parses Privacy Rings instructions, a transaction that calls them is refused whole */
+static void test_touches_privacy_rings(void)
+{
+    mb_t m;
+    uint8_t keys[3][32], data[64], accts[2] = {0, 1};
+    solmsg_t p;
+    static const char *ids[2] = { "ring1GaLCuJnkUMVkX2JeZLTTX17wKsV4fZmPVzXANW", "regy3WAeRXMYuMYxr5iK3Bf9Arr3PcxGxyzAddbiqDQ" };
+    for (int i = 0; i < 2; i++) {
+        memcpy(keys[0], OWNER, 32); memcpy(keys[1], DEST, 32);
+        CHECK(pubkey_from_b58(ids[i], keys[2]));
+        mb_begin(&m, -1, 1, 0, 1, keys, 3);
+        mb_n_ix(&m, 1);
+        data[0] = 15;
+        mb_ix(&m, 2, accts, 2, data, 1);
+        CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK); /* the old framing parses: it must not reach the unknown-program screen */
+        CHECK(solmsg_touches_privacy_rings(&p));
+    }
+    memcpy(keys[2], SOLMSG_SYSTEM_PROGRAM, 32);
+    mb_begin(&m, -1, 1, 0, 1, keys, 3);
+    mb_n_ix(&m, 1);
+    mb_ix(&m, 2, accts, 2, data, ix_sys_transfer(data, SOL / 2));
+    CHECK_EQ(solmsg_parse(m.buf, m.len, &p), SOLMSG_OK);
+    CHECK(!solmsg_touches_privacy_rings(&p));
+}
+
 int main(void)
 {
     init_keys();
+    RUN(test_ring_key_derivation);
+    RUN(test_signmsg_check);
+    RUN(test_touches_privacy_rings);
     RUN(test_legacy_transfer_half_sol);
     RUN(test_two_transfers);
     RUN(test_nonce_and_unknown_system_ixs);
