@@ -166,7 +166,7 @@ reply, event or `hello` field ever says whether one exists.
    | {"t":"denied","id":"s7","reason":"timeout"|"claims_mismatch"|"over_daily_limit"|"locked"|"policy"|"user"}
 ```
 
-`kind` is `tx` (a serialized Solana *message*, legacy or v0; the controller parses it) or `msg`
+`kind` is `tx` (a serialized Solana *message*: legacy, v0 or version 1; the controller parses it) or `msg`
 (`signMessage`: a raw Ed25519 signature by the wallet key over the bytes).
 
 A `msg` is signed only when the display can show all of it. The controller accepts, in this order of checks
@@ -177,7 +177,13 @@ before any touch is asked for:
   chip: the SE050 signs Ed25519 in one command). The same bound applies to `tx`.
 - **Never a transaction.** Anything that parses as a transaction of a supported chain is refused, and so is
   any payload whose first byte is `0x80` or above unless it is an off-chain message. That covers every
-  versioned Solana message, including version 1 (first byte `0x81`), which the `tx` parser does not read yet.
+  versioned Solana message, including version 1 (first byte `0x81`), whichever versions the parser reads.
+
+A version 1 message (SIMD-0385) is parsed with every sanitization rule of the format: at most 12 signatures and
+64 addresses, a writable fee payer, no duplicate address, no unknown config bit, exact length. Its priority
+fee is the flat lamport amount in the header; ComputeBudget instructions inside it set nothing. It has no
+lookup tables. `inheritance_set` refuses version 1, because the stored transaction is assembled
+signatures-first.
 - **Never a key or a key seed.** Refused: the text `TSPP/derive/` or the bytes of SHA-256(`TSPP/derive/v1`)
   (the Privacy Rings key-derivation message, whose signature is the wallet's privacy keys), any other use of
   the `TSPP/` and `zolana/` namespaces, and either slot's public key anywhere but an envelope's signer field.

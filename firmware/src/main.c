@@ -1150,7 +1150,7 @@ static void handle_sign(const proto_req_t *r, uint32_t now)
         /* nor the message every Privacy Rings key of this wallet is derived from */
         if (solmsg_is_ring_key_derivation(r->sign.bytes, r->sign.len)) { send_denied(r->id, "policy"); return; }
         /* and only what the display can show whole: plain text, or an off-chain message for this key. This is
-         * also what refuses a version 1 transaction message, which solmsg_parse does not read (solmsg.h). */
+         * also what refuses a transaction message of a version solmsg_parse does not read yet (solmsg.h). */
         if (!solmsg_signmsg_check(r->sign.bytes, r->sign.len, owner, other_slot_pubkey(), &sm)) { send_denied(r->id, "policy"); return; }
         res = consent_begin_sign(&g_consent, r->id, 0, NULL, 0, false, r->sign.ttl_ms, now, &act, &why);
         break;
@@ -1303,6 +1303,8 @@ static void handle_inheritance_set(const proto_req_t *r, uint32_t now)
     if (r->sign.len > CONSENT_INH_MSG_MAX) { send_denied(r->id, "policy"); return; }
     if (solmsg_parse(r->sign.bytes, r->sign.len, msg) != SOLMSG_OK) { send_denied(r->id, "policy"); return; }
     if (solmsg_touches_privacy_rings(msg)) { send_denied(r->id, "policy"); return; }
+    /* the stored transaction is assembled signatures-first; a version 1 transaction puts them after the message */
+    if (msg->version == SOLMSG_VERSION_1) { send_denied(r->id, "policy"); return; }
     if (msg->num_required_signatures > CONSENT_INH_MAX_SIGNERS) { send_denied(r->id, "policy"); return; }
     solmsg_analyze(msg, owner, parsed);
     v = policy_check(parsed, &r->sign.claims, &g_consent.p.routers, &eff_danger); /* checks 1-4 */

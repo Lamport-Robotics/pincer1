@@ -5,7 +5,7 @@ Real mainnet transactions and what a person must see before signing them. One JS
 parsers), so the two sides are held to the same numbers.
 
 ```
-solana/      system and token transfers, a jupiter route, a durable-nonce transaction, programs the controller does not know
+solana/      system and token transfers, a jupiter route, a durable-nonce transaction, programs the controller does not know, and three constructed version 1 messages (fee in the header, empty config, ComputeBudget ignored)
 solana_msg/  signMessage payloads. Never signed: the Privacy Rings key-derivation message (enveloped, bare, buried in a text), a real version 1 transaction message, raw digests, spaceless strings, text the display cannot draw, off-chain messages for another key. Signed: sign-in texts and off-chain messages (v0, v1) for the wallet's key, with the text the screen must show
 evm/         ether transfers (legacy and type 2), erc-20 transfer / approve / transferFrom, a uniswap call, a contract creation, setApprovalForAll
 bitcoin/     p2wpkh spends rebuilt as unsigned psbts: change, several inputs, a fee past the limit, no change; a psbt v2 that must be refused

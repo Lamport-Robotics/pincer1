@@ -10,6 +10,7 @@
  "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
  "expect": {
   "controller": "refuse: transaction",
-  "ring_key_derivation": false
+  "ring_key_derivation": false,
+  "parses_as_transaction": true
  }
 }

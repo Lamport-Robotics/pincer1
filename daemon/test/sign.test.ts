@@ -8,6 +8,7 @@ import nacl from "tweetnacl";
 import { SimController } from "../src/controller/sim.js";
 import { MockRobot } from "../src/presence/client.js";
 import { Signer } from "../src/sign.js";
+import { OwnerMemory } from "../src/warden/index.js";
 import { Intel } from "../src/risk/intel.js";
 import { claimsFor, parseMessage, touchesPrivacyRings, PRIVACY_RINGS_PROGRAMS } from "../src/tx/parse.js";
 import type { Config } from "../src/config.js";
@@ -167,6 +168,53 @@ describe("signing pipeline", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("signs a version 1 transaction: read from its own layout, and the signature goes after the message", async () => {
+    const { robot, signer } = harness();
+    const message = F.v1Message([F.transfer(F.stranger, 0.5)], { priorityLamports: 20_000n, cuLimit: 200_000 });
+    const txBytes = Uint8Array.from([...message, ...new Uint8Array(64)]); // unsigned: an empty signature slot after the message
+    const r = await signer.sign({ txBytes, origin: "https://pump.fun", source: "extension" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.parsed.version).toBe(1);
+    expect(r.parsed.feeLamports).toBe(25_000n);
+    expect(robot.spoken[0]).toMatch(/^From pump.fun: Sends 0.5 SOL to .* Touch me to sign\.$/);
+    expect(r.signedTx).toHaveLength(txBytes.length);
+    expect(Buffer.from(r.signedTx.subarray(0, message.length)).equals(Buffer.from(message))).toBe(true);
+    expect(nacl.sign.detached.verify(message, r.signedTx.subarray(message.length), F.owner.publicKey.toBytes())).toBe(true);
+    // the same bytes offered as a "message" are refused: a transaction is never signed blind
+    expect(await signer.signMessage(message, "https://pump.fun")).toEqual({ ok: false, reason: "blocked" });
+  });
+
+  it("Warden: remembers who the owner paid, says so, and blocks a look-alike of that address", async () => {
+    const { sim, robot, signer } = harness();
+    const memories = new Map<string, OwnerMemory>();
+    let saves = 0;
+    signer.warden = (who) => { if (!memories.has(who)) memories.set(who, new OwnerMemory()); return { memory: memories.get(who)!, save: () => { saves++; } }; };
+    // first payment: told it is new, signed after the touch, and only then remembered
+    const first = await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 0.5)]), origin: "https://pump.fun", source: "extension" });
+    expect(first.ok).toBe(true);
+    expect(robot.spoken[0]).toMatch(/Sends 0\.5 SOL to .*You've never paid .* Touch me to sign\.$/);
+    expect(memories.get(sim.publicKey)!.lookup(F.stranger.toBase58())!.timesPaid).toBe(1);
+    expect(saves).toBe(1);
+    // second payment: the history is part of what the owner hears
+    robot.spoken.length = 0;
+    await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 0.2)]), source: "extension" });
+    expect(robot.spoken[0]).toMatch(/You've paid .* 1 time before\. Touch me to sign\.$/);
+    // an address that shares the first and last four characters with it is refused without a touch
+    const n = BigInt("0x" + Buffer.from(F.stranger.toBytes()).toString("hex")) + 707281n * (1n << 80n);
+    const fake = new PublicKey(Buffer.from(n.toString(16).padStart(64, "0"), "hex"));
+    robot.spoken.length = 0;
+    const poisoned = await signer.sign({ txBytes: F.legacy([F.transfer(fake, 0.2)]), source: "extension" });
+    expect(poisoned).toMatchObject({ ok: false, reason: "blocked" });
+    expect(robot.spoken[0]).toMatch(/^I'm not signing this\. the destination .* looks like an address you have paid 2 times, but it is a different address\. This is address poisoning\./);
+    expect(memories.get(sim.publicKey)!.lookup(fake.toBase58())).toBeUndefined();
+    // a denied or untouched request teaches nothing, and neither does the overnight agent
+    const before = JSON.stringify(memories.get(sim.publicKey)!.toJSON());
+    await signer.sign({ txBytes: F.legacy([F.transfer(F.strangerUsdc, 0.1)]), source: "agent" });
+    expect(memories.get(sim.publicKey)!.lookup(F.strangerUsdc.toBase58())).toBeUndefined();
+    expect(JSON.stringify(memories.get(sim.publicKey)!.toJSON())).toBe(before);
+  });
+
   it("signMessage signs only what can be read: never a version 1 transaction, a raw hash, or a spaceless string", async () => {
     const { sim, robot, signer } = harness();
     const none = { lamports_out: "0", token_out: [], dest: "", programs: [], dangerous: [] };
@@ -198,6 +246,27 @@ describe("signing pipeline", () => {
       expect(touchesPrivacyRings(bytes)).toBe(true);
       expect(await sim.sign("tx", bytes, { lamports_out: "0", fee_lamports: "5000", token_out: [], dest: "", programs: [id], dangerous: ["unknown_program"] })).toEqual({ ok: false, reason: "policy" });
     }
+  });
+
+  it("says why, before any touch, when the controller would refuse on its own: too long for the chip, or Privacy Rings", async () => {
+    // a transfer with a long memo: a well-formed, harmless transaction of more than 860 bytes
+    const { sim, robot, signer } = harness({ autoTouch: false });
+    const events: string[] = []; sim.onEvent((e) => events.push(e.ev));
+    const memo = new TransactionInstruction({ programId: new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"), keys: [], data: Buffer.from("x".repeat(800)) });
+    const long = F.legacy([F.transfer(F.friend, 0.1), memo]);
+    expect(F.messageOf(long).length).toBeGreaterThan(860);
+    const r = await signer.sign({ txBytes: long, origin: "https://pump.fun", source: "extension" });
+    expect(r).toMatchObject({ ok: false, reason: "blocked" });
+    expect(robot.spoken).toHaveLength(1);
+    expect(robot.spoken[0]).toMatch(/^I'm not signing this\. this transaction is \d+ bytes and my secure chip signs 860 at most\./);
+    expect(events).toEqual([]); // the controller was never asked
+
+    const rings = harness({ autoTouch: false });
+    const tx = new Transaction({ feePayer: F.owner.publicKey, recentBlockhash: F.BLOCKHASH })
+      .add(new TransactionInstruction({ programId: new PublicKey(PRIVACY_RINGS_PROGRAMS[0]!), keys: [{ pubkey: F.owner.publicKey, isSigner: true, isWritable: true }], data: Buffer.from([15]) }));
+    const r2 = await rings.signer.sign({ txBytes: new Uint8Array(tx.serialize({ requireAllSignatures: false, verifySignatures: false })), origin: "https://pump.fun", source: "extension" });
+    expect(r2).toMatchObject({ ok: false, reason: "blocked" });
+    expect(rings.robot.spoken).toEqual(["I'm not signing this. it calls Privacy Rings, and I can't show on my screen what that would do yet."]);
   });
 
   it("signMessage never signs the Privacy Rings key-derivation message, and says who asked", async () => {

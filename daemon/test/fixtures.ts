@@ -35,3 +35,29 @@ export { TOKEN_PROGRAM_ID, PublicKey, AddressLookupTableAccount };
 export function messageOf(txBytes: Uint8Array): Uint8Array {
   return VersionedTransaction.deserialize(txBytes).message.serialize();
 }
+
+/**
+ * A version 1 message (SIMD-0385) for these instructions, signed by the owner alone: 0x81, header, config mask,
+ * blockhash, counts, addresses, config values, instruction headers, then each instruction's indexes and data.
+ */
+export function v1Message(ixs: TransactionInstruction[], cfg: { priorityLamports?: bigint; cuLimit?: number } = {}): Uint8Array {
+  const me = owner.publicKey.toBase58();
+  const writable = new Set<string>(), readonly = new Set<string>();
+  for (const ix of ixs) for (const k of ix.keys) if (k.pubkey.toBase58() !== me) (k.isWritable ? writable : readonly).add(k.pubkey.toBase58());
+  for (const ix of ixs) readonly.add(ix.programId.toBase58());
+  for (const w of writable) readonly.delete(w);
+  readonly.delete(me);
+  const keys = [me, ...writable, ...readonly];
+  const out: number[] = [0x81, 1, 0, readonly.size];
+  let mask = 0;
+  const values: number[] = [];
+  const le32 = (n: number) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  if (cfg.priorityLamports != null) { mask |= 3; values.push(...le32(Number(cfg.priorityLamports & 0xffffffffn)), ...le32(Number(cfg.priorityLamports >> 32n))); }
+  if (cfg.cuLimit != null) { mask |= 4; values.push(...le32(cfg.cuLimit)); }
+  out.push(...le32(mask), ...new PublicKey(BLOCKHASH).toBytes(), ixs.length, keys.length);
+  for (const k of keys) out.push(...new PublicKey(k).toBytes());
+  out.push(...values);
+  for (const ix of ixs) out.push(keys.indexOf(ix.programId.toBase58()), ix.keys.length, ix.data.length & 255, ix.data.length >> 8);
+  for (const ix of ixs) out.push(...ix.keys.map((k) => keys.indexOf(k.pubkey.toBase58())), ...ix.data);
+  return Uint8Array.from(out);
+}

@@ -7,7 +7,7 @@
  * configuration detail, not code.
  */
 import { verifyJupiterTx } from "../swap/verify.js";
-import { parseMessage } from "../tx/parse.js";
+import { parseMessage, ED25519_MSG_MAX } from "../tx/parse.js";
 import { Connection, VersionedTransaction } from "@solana/web3.js";
 import type { Signer } from "../sign.js";
 import type { ControllerClient } from "../controller/types.js";
@@ -113,7 +113,10 @@ export class Agent {
       // the bytes come from a web API: before the allowance can sign them without a touch they must be exactly
       // the swap that was quoted (router, direction, amounts, min-out, destination = the owner's own account)
       const tx = VersionedTransaction.deserialize(txBytes);
-      const parsed = parseMessage(tx.message.serialize(), { owner });
+      const messageBytes = tx.message.serialize();
+      // a route too long for the secure element is dropped here, quietly: the signer would refuse it out loud
+      if (messageBytes.length > ED25519_MSG_MAX) throw new Error(`route is ${messageBytes.length} bytes, over the ${ED25519_MSG_MAX} the secure chip signs`);
+      const parsed = parseMessage(messageBytes, { owner });
       verifyJupiterTx(parsed, BigInt(String(quote.otherAmountThreshold ?? quote.outAmount)), Number(quote.slippageBps ?? 0), amount);
       if (parsed.tokenOut.some((t) => t.dest && !this.ownAccounts.has(t.dest))) throw new Error("tokens would leave to an account that is not the owner's");
       const r = await this.signer.sign({ txBytes, source });

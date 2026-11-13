@@ -1,4 +1,4 @@
-/* Pincer1 - Solana serialized *message* parser (legacy + v0). PURE LOGIC, no hardware includes.
+/* Pincer1 - Solana serialized *message* parser (legacy, v0 and version 1). PURE LOGIC, no hardware includes.
  *
  * The controller cannot resolve address-lookup tables, so for v0 messages every instruction that
  * references a looked-up account (index >= number of static keys) is treated as `unknown` and is
@@ -16,6 +16,9 @@
 #define SOLMSG_MAX_TOKEN_OUT 8
 
 #define SOLMSG_VERSION_LEGACY 0xff
+#define SOLMSG_VERSION_1 1 /* SIMD-0385: first byte 0x81, no lookup tables, fee and limits in the header */
+/* A version 1 transaction is at most 4096 bytes and carries at least one 64-byte signature after the message. */
+#define SOLMSG_V1_MAX_BYTES (4096 - 64)
 
 typedef struct {
     uint8_t program_index;
@@ -27,7 +30,7 @@ typedef struct {
 } solmsg_ix_t;
 
 typedef struct {
-    uint8_t version; /* SOLMSG_VERSION_LEGACY or 0 */
+    uint8_t version; /* SOLMSG_VERSION_LEGACY, 0 or SOLMSG_VERSION_1 */
     uint8_t num_required_signatures;
     uint8_t num_readonly_signed;
     uint8_t num_readonly_unsigned;
@@ -38,6 +41,10 @@ typedef struct {
     solmsg_ix_t ix[SOLMSG_MAX_IX];
     uint8_t n_lookup_tables;
     uint16_t n_lookup_accounts; /* total writable + readonly loaded addresses */
+    /* version 1 only: the flat priority fee from the header (0 when its config bits are clear). ComputeBudget
+     * instructions set nothing in a version 1 transaction. */
+    uint64_t v1_priority_lamports;
+    uint32_t v1_compute_unit_limit;
 } solmsg_t;
 
 /* Dangerous-instruction flags, named exactly as `claims.dangerous[]` strings. */
@@ -107,7 +114,7 @@ enum {
 int solmsg_parse(const uint8_t *bytes, size_t len, solmsg_t *out);
 /* Computes what leaves `owner` and which programs are touched. */
 void solmsg_analyze(const solmsg_t *m, const uint8_t owner[32], solmsg_summary_t *s);
-/* True when the bytes are a well-formed legacy/v0 message (used to refuse disguised signMessage payloads). */
+/* True when the bytes are a well-formed legacy, v0 or version 1 message (used to refuse disguised signMessage payloads). */
 bool solmsg_looks_like_message(const uint8_t *bytes, size_t len);
 
 /* True when the bytes are, or contain, a Privacy Rings key-derivation message: the text "TSPP/derive/" of any
@@ -125,7 +132,7 @@ bool solmsg_is_ring_key_derivation(const uint8_t *bytes, size_t len);
  *   - a Solana off-chain message, header version 0 (application domain, format 0 or 1, length prefix) or
  *     version 1, with exactly one signer that is the active key and a body that is such text.
  * It refuses every payload whose first byte is 0x80 or above and is not an off-chain message (every versioned
- * transaction message, including version 1 which the parser above does not read), anything that names the
+ * transaction message, including any version the parser above does not read yet), anything that names the
  * Privacy Rings key namespaces, and anything that carries one of the wallet's own public keys outside the
  * envelope's signer field. solmsg_looks_like_message() stays a separate, earlier check. */
 typedef enum {

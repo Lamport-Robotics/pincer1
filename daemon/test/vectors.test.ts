@@ -46,7 +46,7 @@ describe("vectors: solana messages", () => {
   for (const v of load("solana_msg")) {
     it(v.name, async () => {
       const refuse = v.expect.controller.startsWith("refuse");
-      expect(looksLikeMessage(bytesOf(v))).toBe(false);
+      expect(looksLikeMessage(bytesOf(v))).toBe(v.expect.parses_as_transaction === true);
       expect(isRingKeyDerivation(bytesOf(v))).toBe(v.expect.ring_key_derivation);
       // the rule itself, with the vector's owner as the signing key: the same verdict as firmware/test/test_vectors.c
       const check = bytesOf(v).length <= ED25519_MSG_MAX ? checkSignMessage(bytesOf(v), new PublicKey(v.owner).toBytes()) : { ok: false as const };

@@ -1,5 +1,6 @@
 /* libFuzzer entry for the wire-facing parsers: Solana message, EVM RLP transaction, Bitcoin PSBT, the JSON
- * request line (which carries EIP-712 typed data) and the update image header. The first byte picks the
+ * request line (which carries EIP-712 typed data), the update image header and the signMessage rule (what
+ * `kind: msg` may sign, with its off-chain envelope reader). The first byte picks the
  * parser so one corpus covers all of them. Built with -DBUILD_FUZZERS=ON (clang); FUZZ_STANDALONE adds a
  * main() that replays files, for toolchains without libFuzzer. */
 #include <stdint.h>
@@ -17,6 +18,10 @@ static const uint8_t OWNER32[32] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x
                                      0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x12};
 static const uint8_t OWNER20[20] = {0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
                                      0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+/* a second key, for the slot that is not active */
+static const uint8_t OTHER32[32] = {0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                                           0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x21, 0x22,
+                                           0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c};
 static const uint8_t OWNER33[33] = {0x02, 0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac, 0x55, 0xa0,
                                      0x62, 0x95, 0xce, 0x87, 0x0b, 0x07, 0x02, 0x9b, 0xfc, 0xdb, 0x2d,
                                      0xce, 0x28, 0xd9, 0x59, 0xf2, 0x81, 0x5b, 0x16, 0xf8, 0x17, 0x98};
@@ -31,7 +36,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     static char line[PROTO_LINE_MAX];
     update_image_info_t info;
     if (size == 0) return 0;
-    switch (data[0] % 5) {
+    switch (data[0] % 6) {
     case 0:
         if (solmsg_parse(data + 1, size - 1, &msg) == SOLMSG_OK) solmsg_analyze(&msg, OWNER32, &sum);
         break;
@@ -47,9 +52,24 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         line[size - 1] = 0;
         proto_parse_request(line, &req);
         break;
-    default:
+    case 4:
         update_inspect_image(data + 1, size - 1, &info);
         break;
+    default: {
+        /* what main.c runs on a `kind: msg` request, in its order. The owner key is also tried as the other
+         * slot's, and the text the rule hands to the display must lie inside the request. */
+        solmsg_signmsg_t sm;
+        const uint8_t *p = data + 1;
+        size_t n = size - 1;
+        (void)solmsg_looks_like_message(p, n);
+        (void)solmsg_is_ring_key_derivation(p, n);
+        (void)solmsg_bare_text_ok(p, n);
+        if (solmsg_signmsg_check(p, n, OWNER32, NULL, &sm) || solmsg_signmsg_check(p, n, OTHER32, OWNER32, &sm)) {
+            if (sm.text < p || sm.text_len > n || (size_t)(sm.text - p) > n - sm.text_len) abort();
+            if (sm.app_domain && (sm.app_domain < p || (size_t)(sm.app_domain - p) + 32 > n)) abort();
+        }
+        break;
+    }
     }
     return 0;
 }

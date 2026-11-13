@@ -1,0 +1,26 @@
+{
+ "chain": "solana",
+ "kind": "tx",
+ "name": "v1_sol_transfer",
+ "notes": "a version 1 system transfer with a flat 20,000-lamport priority fee and a compute limit in the header",
+ "source": {
+  "constructed": "constructed from SIMD-0385 (transaction v1): 0x81, header, config mask, blockhash, counts, addresses, config values, instruction headers, payloads"
+ },
+ "bytes": "gQEAAQcAAACBLtZnZzzVxXK6LVCvKA5nWpF89qcMYzqoVIyq866G+wED6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0ixmvn4zLHpFMzK9nQp/fbBV9cXvGgatpm2Ys5+2gQxHOgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIE4AAAAAAABADQMAAgIMAAABAgAAAABlzR0AAAAA",
+ "owner": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+ "expect": {
+  "version": 1,
+  "signers": 1,
+  "token_out": [],
+  "durable_nonce": false,
+  "warnings": [],
+  "lamport_recipients": 1,
+  "controller": "accept",
+  "dest": "7v54NWdBtkjuAFJrLGsS2SXnuk8nKam81mZJeeYxVFi9",
+  "lamports_out": "500000000",
+  "programs": [
+   "11111111111111111111111111111111"
+  ],
+  "fee_lamports": "25000"
+ }
+}

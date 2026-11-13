@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Seed the fuzz corpus from vectors/: every payload behind the selector byte fuzz_parsers.c reads
-(0 Solana message, 1 EVM transaction, 2 PSBT, 3 a request line), so a short run starts inside the
-parsers rather than at their first length check.
+(0 Solana message, 1 EVM transaction, 2 PSBT, 3 a request line, 5 a signMessage payload), so a short run
+starts inside the parsers rather than at their first length check.
 
     python3 firmware/fuzz/seed_corpus.py vectors firmware/build-fuzz/corpus
 """
@@ -11,7 +11,7 @@ import json
 import os
 import sys
 
-SELECTOR = {"tx": 0, "evm_tx": 1, "btc_psbt": 2}
+SELECTOR = {"tx": 0, "evm_tx": 1, "btc_psbt": 2, "msg": 5}
 
 
 def line(req):

@@ -20,6 +20,7 @@ import { log } from "./config.js";
 import type { Settings } from "./settings.js";
 import type { ChainAdapter, ChainAddressIntel, ChainId, ChainParsed, ChainTokenMeta } from "./chains/types.js";
 import { SolanaAdapter, type SolanaParsed } from "./chains/solana/index.js";
+import { historyOf, recordConfirmed, type OwnerMemory } from "./warden/index.js";
 import { looksLikeEvmTx } from "./chains/evm/parse.js";
 import { assessPersonalMessage, assessTypedData, canonicalTypedDataJson, explainTypedData, parseTypedData, typedDataDigest, permitsOf } from "./chains/evm/message.js";
 
@@ -78,6 +79,14 @@ export class Signer {
   private adapters = new Map<ChainId, ChainAdapter<any>>();
   /** Every address the controller can sign for; defaults to Solana only (older firmware). */
   addresses: () => Addresses;
+  /**
+   * Warden's owner memory (main.ts sets it; absent in tests that do not need it). With it, a Solana request is
+   * also read against the owner's own history: a look-alike of an address they have paid is blocked, and what
+   * they are told says whether they have paid this address before. `save` persists it after a confirmed send.
+   * It is looked up by the signing address, so the decoy wallet has a history of its own and never speaks the
+   * real wallet's.
+   */
+  warden?: (owner: string) => { memory: OwnerMemory; save?: () => void };
 
   constructor(
     readonly cfg: Config,
@@ -153,8 +162,19 @@ export class Signer {
     } catch (e) {
       return { ok: false, reason: "parse_error", detail: String((e as Error).message ?? e) };
     }
-    const { parsed, explanation, risk, owner, adapter } = ex;
+    const { parsed, owner, adapter } = ex;
+    let { explanation, risk } = ex;
     const same = (a: string, b: string) => (req.chain === "evm" ? a.toLowerCase() === b.toLowerCase() : a === b);
+    // Warden: the owner's own history. Rules first (it can only make a verdict stricter), then one more sentence.
+    const solTx = req.chain === "solana" && this.warden ? (parsed as unknown as SolanaParsed).tx : null;
+    const warden = solTx && this.warden ? this.warden(owner) : null;
+    if (solTx && warden) {
+      const h = historyOf(solTx, warden.memory, req.labels ? { ...this.cfg.addressBook, ...req.labels } : this.cfg.addressBook);
+      const plain = risk.reasons.filter((r) => r !== "nothing unusual.");
+      if (h.poisoning) risk = { level: "block", reasons: [h.poisoning, ...plain] };
+      else if (h.unusual && h.unusualReason) risk = { level: risk.level === "block" ? "block" : h.newDest || risk.level === "high" ? "high" : "medium", reasons: risk.level === "low" ? [h.unusualReason] : [...plain, h.unusualReason] };
+      if (h.facts.length) explanation = { ...explanation, spoken: `${explanation.spoken} ${h.facts.slice(0, 2).join(" ")}`, lines: [...explanation.lines, ...h.facts.map((f) => f.charAt(0).toLowerCase() + f.slice(1).replace(/\.$/, ""))] };
+    }
     if (!parsed.signers.some((s) => same(s, owner))) return { ok: false, reason: "wrong_owner", detail: req.chain === "bitcoin" ? "none of the coins being spent are mine" : "this transaction is not for my key", parsed, explanation, risk };
 
     if (risk.level === "block") {
@@ -218,6 +238,11 @@ export class Signer {
       return { ok: false, reason: "assemble_error", detail: String((e as Error).message ?? e), parsed, explanation, risk };
     }
     if (req.source !== "agent") await this.robot.say("Signed.");
+    // Trust in an address grows only here: a send the owner was shown and touched for. The overnight agent's
+    // own trades are not the owner confirming anything, so they teach Warden nothing.
+    if (solTx && warden && req.source !== "agent") {
+      try { recordConfirmed(warden.memory, solTx, Math.floor(Date.now() / 1000)); warden.save?.(); } catch (e) { log.warn("warden memory not saved", { err: String((e as Error).message ?? e) }); }
+    }
     return { ok: true, signedTx, parsed, explanation, risk };
   }
 

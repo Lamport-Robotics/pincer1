@@ -4,7 +4,7 @@
  * reaches it through the same door as EVM and Bitcoin.
  */
 import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
-import { claimsFor, controllerLimits, parseMessage, type ParsedTx } from "../../tx/parse.js";
+import { claimsFor, controllerLimits, parseMessage, splitTransaction, addV1Signature, touchesPrivacyRings, ED25519_MSG_MAX, type ParsedTx } from "../../tx/parse.js";
 import { explain, fmtSol, type Explanation } from "../../tx/explain.js";
 import { assess, type RiskVerdict } from "../../risk/filter.js";
 import { Intel, type AddressIntel } from "../../risk/intel.js";
@@ -55,9 +55,9 @@ export class SolanaAdapter implements ChainAdapter<SolanaParsed> {
   }
 
   async parse(bytes: Uint8Array, ctx: ParseContext): Promise<SolanaParsed> {
-    const tx = VersionedTransaction.deserialize(bytes);
-    const messageBytes = tx.message.serialize();
-    const tables = await this.lookupTables(bytes);
+    // version 1 has no lookup tables and a different wire layout (signatures after the message)
+    const { messageBytes, version1 } = splitTransaction(bytes);
+    const tables = version1 ? {} : await this.lookupTables(bytes);
     const p = parseMessage(messageBytes, { owner: ctx.owner, lookupTables: tables });
     const counterparties = new Set<string>();
     if (p.dest) counterparties.add(p.dest);
@@ -88,13 +88,19 @@ export class SolanaAdapter implements ChainAdapter<SolanaParsed> {
     const intel: Record<string, AddressIntel> = {};
     for (const [k, v] of Object.entries(ctx.intel)) intel[k] = fromChainIntel(v);
     const verdict = assess({ tx: parsed.tx, owner: ctx.owner, ownerLamports: ctx.ownerBalance != null ? Number(ctx.ownerBalance) : undefined, intel, addressBook: ctx.addressBook, origin: ctx.origin, originAllowlist: ctx.originAllowlist, dailyLimitLamports: ctx.dailyLimit, knownPrograms: ctx.knownPrograms });
+    // What the controller refuses on its own is said here, with the reason, before the owner is asked to touch:
+    // from the controller it would come back as a bare "policy".
     const hard = controllerLimits(parsed.tx);
+    const size = parsed.messageBytes.length;
+    if (size > ED25519_MSG_MAX) hard.unshift(`this transaction is ${size} bytes and my secure chip signs ${ED25519_MSG_MAX} at most. A simpler route, or the same thing in two transactions, may fit.`);
+    if (touchesPrivacyRings(parsed.messageBytes)) hard.unshift("it calls Privacy Rings, and I can't show on my screen what that would do yet.");
     return hard.length ? { level: "block", reasons: [...hard, ...verdict.reasons] } : verdict;
   }
 
   claims(parsed: SolanaParsed): SolanaClaims { return claimsFor(parsed.tx, this.routers); }
 
   async assemble(unsignedBytes: Uint8Array, sig: Uint8Array, _parsed: SolanaParsed, owner: string): Promise<Uint8Array> {
+    if (unsignedBytes.length > 0 && unsignedBytes[0] === 0x81) return addV1Signature(unsignedBytes, owner, sig);
     const tx = VersionedTransaction.deserialize(unsignedBytes);
     tx.addSignature(new PublicKey(owner), sig);
     return tx.serialize();

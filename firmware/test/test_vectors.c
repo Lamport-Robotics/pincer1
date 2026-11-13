@@ -97,8 +97,8 @@ static void solana_msg_vector(const char *name, const cJSON *v)
     int n = decode_bytes(v, bytes, sizeof bytes);
     CHECK(n > 0);
     CHECK(pubkey_from_b58(str(v, "owner"), owner));
-    /* none of them is read as a transaction by the legacy/v0 parser: the version 1 one must be caught otherwise */
-    CHECK(!solmsg_looks_like_message(bytes, (size_t)n));
+    /* only the real version 1 message is a transaction; as a message it is refused twice over, by the parser and by its first byte */
+    CHECK_EQ(solmsg_looks_like_message(bytes, (size_t)n), cJSON_IsTrue(cJSON_GetObjectItem(e, "parses_as_transaction")));
     CHECK_EQ(solmsg_is_ring_key_derivation(bytes, (size_t)n), cJSON_IsTrue(cJSON_GetObjectItem(e, "ring_key_derivation")));
     /* what handle_sign does for kind msg: the size bound, then the shape */
     signs = (size_t)n <= SIGNER_ED25519_MSG_MAX && solmsg_signmsg_check(bytes, (size_t)n, owner, NULL, &sm);
@@ -329,7 +329,7 @@ int main(void)
     printf("- solana_msg\n");
     CHECK(walk("solana_msg", solana_msg_vector) >= 35);
     printf("- solana\n");
-    CHECK(walk("solana", solana_vector) >= 8);
+    CHECK(walk("solana", solana_vector) >= 11);
     printf("- evm\n");
     CHECK(walk("evm", evm_vector) >= 12);
     printf("- bitcoin\n");
