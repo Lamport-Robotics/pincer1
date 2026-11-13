@@ -8,6 +8,7 @@ import nacl from "tweetnacl";
 import { SimController } from "../src/controller/sim.js";
 import { MockRobot } from "../src/presence/client.js";
 import { Signer } from "../src/sign.js";
+import { OwnerMemory } from "../src/warden/index.js";
 import { Intel } from "../src/risk/intel.js";
 import { claimsFor, parseMessage, touchesPrivacyRings, PRIVACY_RINGS_PROGRAMS } from "../src/tx/parse.js";
 import type { Config } from "../src/config.js";
@@ -182,6 +183,36 @@ describe("signing pipeline", () => {
     expect(nacl.sign.detached.verify(message, r.signedTx.subarray(message.length), F.owner.publicKey.toBytes())).toBe(true);
     // the same bytes offered as a "message" are refused: a transaction is never signed blind
     expect(await signer.signMessage(message, "https://pump.fun")).toEqual({ ok: false, reason: "blocked" });
+  });
+
+  it("Warden: remembers who the owner paid, says so, and blocks a look-alike of that address", async () => {
+    const { sim, robot, signer } = harness();
+    const memories = new Map<string, OwnerMemory>();
+    let saves = 0;
+    signer.warden = (who) => { if (!memories.has(who)) memories.set(who, new OwnerMemory()); return { memory: memories.get(who)!, save: () => { saves++; } }; };
+    // first payment: told it is new, signed after the touch, and only then remembered
+    const first = await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 0.5)]), origin: "https://pump.fun", source: "extension" });
+    expect(first.ok).toBe(true);
+    expect(robot.spoken[0]).toMatch(/Sends 0\.5 SOL to .*You've never paid .* Touch me to sign\.$/);
+    expect(memories.get(sim.publicKey)!.lookup(F.stranger.toBase58())!.timesPaid).toBe(1);
+    expect(saves).toBe(1);
+    // second payment: the history is part of what the owner hears
+    robot.spoken.length = 0;
+    await signer.sign({ txBytes: F.legacy([F.transfer(F.stranger, 0.2)]), source: "extension" });
+    expect(robot.spoken[0]).toMatch(/You've paid .* 1 time before\. Touch me to sign\.$/);
+    // an address that shares the first and last four characters with it is refused without a touch
+    const n = BigInt("0x" + Buffer.from(F.stranger.toBytes()).toString("hex")) + 707281n * (1n << 80n);
+    const fake = new PublicKey(Buffer.from(n.toString(16).padStart(64, "0"), "hex"));
+    robot.spoken.length = 0;
+    const poisoned = await signer.sign({ txBytes: F.legacy([F.transfer(fake, 0.2)]), source: "extension" });
+    expect(poisoned).toMatchObject({ ok: false, reason: "blocked" });
+    expect(robot.spoken[0]).toMatch(/^I'm not signing this\. the destination .* looks like an address you have paid 2 times, but it is a different address\. This is address poisoning\./);
+    expect(memories.get(sim.publicKey)!.lookup(fake.toBase58())).toBeUndefined();
+    // a denied or untouched request teaches nothing, and neither does the overnight agent
+    const before = JSON.stringify(memories.get(sim.publicKey)!.toJSON());
+    await signer.sign({ txBytes: F.legacy([F.transfer(F.strangerUsdc, 0.1)]), source: "agent" });
+    expect(memories.get(sim.publicKey)!.lookup(F.strangerUsdc.toBase58())).toBeUndefined();
+    expect(JSON.stringify(memories.get(sim.publicKey)!.toJSON())).toBe(before);
   });
 
   it("signMessage signs only what can be read: never a version 1 transaction, a raw hash, or a spaceless string", async () => {

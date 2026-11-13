@@ -16,6 +16,7 @@ import type { ControllerClient } from "./controller/types.js";
 import { confirmFirmware } from "./firmware.js";
 import { MockRobot, RobotClient, type RobotLink } from "./presence/client.js";
 import { Signer } from "./sign.js";
+import { OwnerMemory } from "./warden/index.js";
 import { ApiServer } from "./api/server.js";
 import { Agent } from "./agent/index.js";
 import { SettingsStore } from "./settings.js";
@@ -104,6 +105,21 @@ async function main() {
   });
   const signer = new Signer(cfg, controller, robot, conn, owner, undefined, 60_000, () => settings.get());
   signer.addresses = addresses;
+  // Warden's owner memory: who the owner has paid, kept on this machine only (DATA_DIR/warden-memory.json, 0600)
+  {
+    const file = join(cfg.DATA_DIR, "warden-memory.json");
+    let stored: unknown = null;
+    try { if (existsSync(file)) stored = JSON.parse(readFileSync(file, "utf8")); } catch (e) { log.warn("warden memory unreadable, starting empty", { err: String((e as Error).message ?? e) }); }
+    // one history per signing address: the decoy wallet must never speak the real wallet's
+    const byOwner = new Map<string, OwnerMemory>();
+    const all = (stored && typeof stored === "object" ? stored : {}) as Record<string, unknown>;
+    const save = () => { mkdirSync(cfg.DATA_DIR, { recursive: true }); writeFileSync(file, JSON.stringify(Object.fromEntries([...byOwner].map(([k, m]) => [k, m.toJSON()]))), { mode: 0o600 }); };
+    signer.warden = (who) => {
+      let memory = byOwner.get(who);
+      if (!memory) { memory = OwnerMemory.from(all[who]); byOwner.set(who, memory); }
+      return { memory, save };
+    };
+  }
   // ── multi-chain: adapters are registered only when the controller has the key family ──
   const evm = new EvmAdapter({ rpcs: rpcsFromEnv(), intel: { etherscanKey: cfg.ETHERSCAN_API_KEY || undefined }, extraRouters: cfg.evmRouterAllowlist });
   const bitcoin = new BitcoinAdapter({ esplora: new Esplora(cfg.BTC_ESPLORA_URL, { maxFeeRate: cfg.BTC_MAX_FEE_RATE }), network: cfg.BTC_NETWORK, feeTargetBlocks: cfg.BTC_FEE_TARGET_BLOCKS });
