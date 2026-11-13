@@ -185,6 +185,30 @@ describe("warden: version 1 transactions", () => {
     expect(v.sentence).toMatch(/Privacy Rings/);
   });
 
+  it("for an advisory surface, says what a Privacy Rings call makes public and what it hides", () => {
+    const me = parseAnyMessage(realBytes).feePayer;
+    const transfer = checkTransaction({ bytes: realBytes, owner: me, memory: new OwnerMemory(), privacyRings: "explain" });
+    expect(transfer.level).toBe("explain");
+    expect(transfer.sentence).toMatch(/private Privacy Rings transfer\. The amount and asset are hidden/);
+    const pool = new PublicKey(PRIVACY_RINGS_PROGRAMS[0]!);
+    const ring = (data: number[]) => v1([new TransactionInstruction({ programId: pool, keys: [{ pubkey: F.owner.publicKey, isSigner: true, isWritable: true }], data: Buffer.from(data) })]);
+    const amount = [...new Uint8Array(new BigUint64Array([2_500_000_000n]).buffer)];
+    const deposit = (tag: PublicKey) => ring([15, 1, 0, 1, 0, ...tag.toBytes(), ...new Uint8Array(32).fill(9), ...amount, 0]);
+    const mine = checkTransaction({ bytes: deposit(F.owner.publicKey), owner: OWNER, memory: new OwnerMemory(), privacyRings: "explain" });
+    expect(mine).toMatchObject({ level: "explain", sentence: "Deposits 2.5 SOL into your Privacy Rings balance. The deposit and its amount are public." });
+    const theirs = checkTransaction({ bytes: deposit(F.stranger), owner: OWNER, memory: new OwnerMemory(), privacyRings: "explain" });
+    expect(theirs.level).toBe("confirm");
+    expect(theirs.sentence).toMatch(/into the Privacy Rings balance of .*, not yours/);
+    expect(theirs.confirm).toEqual({ kind: "last4", expect: F.stranger.toBase58().slice(-4) });
+    const withdraw = ring([16, ...new Uint8Array(57), 1, 1, ...amount, ...new Uint8Array(20)]);
+    expect(checkTransaction({ bytes: withdraw, owner: OWNER, memory: new OwnerMemory(), privacyRings: "explain" }).sentence).toBe("Withdraws 2.5 SOL from your Privacy Rings balance to a public address. The withdrawal and its amount are public.");
+    // a shape it does not know is never described as if it did
+    const odd = checkTransaction({ bytes: ring([17, 1, 2, 3]), owner: OWNER, memory: new OwnerMemory(), privacyRings: "explain" });
+    expect(odd).toMatchObject({ level: "confirm", confirm: { kind: "acknowledge", expect: "I understand" } });
+    // and the default stays a block, for a signer that must check what it signs
+    expect(checkTransaction({ bytes: deposit(F.owner.publicKey), owner: OWNER, memory: new OwnerMemory() }).level).toBe("block");
+  });
+
   it("reads a version 1 payment like any other, with its fee from the header", () => {
     const m = seeded();
     const bytes = v1([F.transfer(F.friend, 0.4)], { priorityLamports: 20_000n, cuLimit: 450_000 });

@@ -14,7 +14,8 @@
  *
  * Untrusted text (memos, site names) only ever appears quoted inside the sentence. It never reaches a rule.
  */
-import { parseAnyMessage, checkSignMessage, isRingKeyDerivation, touchesPrivacyRings, type ParsedTx, type ParseOptions } from "../tx/parse.js";
+import { PublicKey } from "@solana/web3.js";
+import { parseAnyMessage, checkSignMessage, isRingKeyDerivation, touchesPrivacyRings, PRIVACY_RINGS_PROGRAMS, type ParsedTx, type ParseOptions } from "../tx/parse.js";
 import { explain, short, fmtSol } from "../tx/explain.js";
 import { assess, originAllowed, type RiskLevel } from "../risk/filter.js";
 import type { AddressIntel } from "../risk/intel.js";
@@ -48,6 +49,12 @@ export interface TransactionInput {
   originAllowlist?: string[];
   lookupTables?: ParseOptions["lookupTables"];
   ownerTokenAccounts?: Set<string>;
+  /**
+   * What to do with a call to the Privacy Rings pool or registry. "block" (the default) is for a signer that
+   * must check everything it signs, such as Pincer1's controller, which cannot open a private amount yet.
+   * "explain" is for an advisory surface in front of another wallet: say what is public, say what is hidden.
+   */
+  privacyRings?: "block" | "explain";
 }
 
 export interface MessageInput {
@@ -105,6 +112,7 @@ export function checkTransaction(input: TransactionInput): WardenVerdict {
     };
   }
   if (touchesPrivacyRings(bytes)) {
+    if (input.privacyRings === "explain") return explainRing(parsed, owner);
     return {
       level: "block",
       sentence: "This calls the Privacy Rings pool or registry. I can't check a private amount yet, so I won't pass it on.",
@@ -144,6 +152,35 @@ export function checkTransaction(input: TransactionInput): WardenVerdict {
     verdict.confirm = target ? { kind: "last4", expect: last4(target) } : { kind: "acknowledge", expect: "I understand" };
   }
   return verdict;
+}
+
+/**
+ * A Privacy Rings call, said plainly: what is public is stated exactly, what is hidden is called hidden.
+ * Layouts (pool program, read from the source and from mainnet transactions):
+ *   deposit   data[0] = 15; one SOL entry is 78 bytes: 0f 01 00 01 00 | view tag[32] | owner hash[32] | amount u64 | 00
+ *   transact  data[0] = 16; public-leg count at 58; first leg: kind at 59 (1 = SOL out, 3 = token out), amount u64 at 60
+ * Anything that does not match these exactly is described only as a Privacy Rings call.
+ */
+function explainRing(parsed: ParsedTx, owner: string): WardenVerdict {
+  const POOL = PRIVACY_RINGS_PROGRAMS[0];
+  const calls = parsed.instructions.filter((i) => PRIVACY_RINGS_PROGRAMS.includes(i.program));
+  const others = parsed.instructions.filter((i) => !PRIVACY_RINGS_PROGRAMS.includes(i.program));
+  const u64at = (d: Uint8Array, o: number) => new DataView(d.buffer, d.byteOffset + o, 8).getBigUint64(0, true);
+  const only = calls.length === 1 && others.length === 0 && calls[0]!.program === POOL ? calls[0]!.data : null;
+  const base = { parsed, reasons: ["it calls Privacy Rings, where amounts between private wallets are hidden."] };
+  if (only && only[0] === 15 && only.length === 78 && only[1] === 1 && only[2] === 0 && only[3] === 1 && only[4] === 0) {
+    const tag = new PublicKey(only.subarray(5, 37)).toBase58();
+    const amount = fmtSol(u64at(only, 69));
+    if (tag === owner) return { ...base, level: "explain", sentence: `Deposits ${amount} into your Privacy Rings balance. The deposit and its amount are public.` };
+    return { ...base, level: "confirm", sentence: `Deposits ${amount} into the Privacy Rings balance of ${short(tag)}, not yours. The deposit and its amount are public.`, confirm: { kind: "last4", expect: last4(tag) }, reasons: ["it deposits your SOL into someone else's private balance."] };
+  }
+  if (only && only[0] === 16 && only.length > 68) {
+    const legs = only[58]!;
+    if (legs === 0) return { ...base, level: "explain", sentence: "A private Privacy Rings transfer. The amount and asset are hidden, so I can't tell you how much moves. Sender and recipient are public." };
+    if (legs === 1 && only[59] === 1) return { ...base, level: "explain", sentence: `Withdraws ${fmtSol(u64at(only, 60))} from your Privacy Rings balance to a public address. The withdrawal and its amount are public.` };
+    if (legs === 1 && only[59] === 3) return { ...base, level: "explain", sentence: "Withdraws tokens from your Privacy Rings balance to a public address. The withdrawal and its amount are public." };
+  }
+  return { ...base, level: "confirm", sentence: "This calls Privacy Rings in a way I can't read, so I can't tell you what it moves.", confirm: { kind: "acknowledge", expect: "I understand" } };
 }
 
 export interface History {
