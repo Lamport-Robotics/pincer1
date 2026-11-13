@@ -19,7 +19,7 @@
     "@noble/curves": "1.9.7",
     "@solana/spl-token": "0.4.9",
     "@solana/web3.js": "1.95.8",
-    "bitcoinjs-lib": "6.1.7",
+    "bitcoinjs-lib": "6.1.8",
     "bs58": "6.0.0",
     "qrcode": "1.5.4",
     "serialport": "12.0.0",
